@@ -48,6 +48,34 @@
     {
       "name": "Glitch_Recovery",
       "loop": false
+    },
+    {
+      "name": "Walk_Cycle",
+      "loop": true
+    },
+    {
+      "name": "Run_Cycle",
+      "loop": true
+    },
+    {
+      "name": "Look_Around",
+      "loop": true
+    },
+    {
+      "name": "Peek_Around",
+      "loop": false
+    },
+    {
+      "name": "Spin_In_Place",
+      "loop": false
+    },
+    {
+      "name": "Nervous_Glance",
+      "loop": false
+    },
+    {
+      "name": "Cheerful_Bounce",
+      "loop": false
     }
   ],
   "facialControls": [
@@ -62,5 +90,5 @@
   ],
   "sourceGenerator": "tools/build-model.mjs",
   "validation": "tools/validate-model.mjs",
-  "notes": "Unofficial fan-made recreation; geometry and animation clips are embedded in the GLB."
+  "notes": "Unofficial fan-made recreation. GLB contains 120 nodes, 24 meshes, 15 materials and 17 animation clips."
 }
