@@ -64,7 +64,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.overlay.OverlayService
-import com.khayom1.missminutes.system.AndroidActions
 import kotlinx.coroutines.launch
 
 private val TvaBackground = Color(0xFF160D09)

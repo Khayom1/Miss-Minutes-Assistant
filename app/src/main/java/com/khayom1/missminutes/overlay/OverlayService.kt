@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
-import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
 import com.khayom1.missminutes.CharacterScene
 import com.khayom1.missminutes.MainActivity
 import kotlinx.coroutines.delay
@@ -84,7 +84,7 @@ class OverlayService : LifecycleService() {
             runCatching { manager.updateViewLayout(frame, layout) }
         }
         val compose = ComposeView(this).apply {
-            ViewTreeLifecycleOwner.set(this, this@OverlayService)
+            setViewTreeLifecycleOwner(this@OverlayService)
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
                 OverlayCharacter(
