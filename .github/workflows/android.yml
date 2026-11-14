@@ -39,8 +39,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
-      - name: Regenerate character asset from source
-        run: node tools/build-model.mjs app/src/main/assets/models/miss-minutes.glb
+      - name: Stage the audited character asset for Android
+        run: mkdir -p app/src/main/assets/models && cp assets/models/miss-minutes.glb app/src/main/assets/models/miss-minutes.glb
       - name: Validate GLB and animation contract
         run: node tools/validate-model.mjs app/src/main/assets/models/miss-minutes.glb
       - name: Run tests and assemble APK
