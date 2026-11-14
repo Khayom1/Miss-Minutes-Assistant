@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.khayom1.missminutes.ui.CharacterScene as MissMinutesScene
 import io.github.sceneview.SceneView
 import io.github.sceneview.rememberCameraManipulator
 import io.github.sceneview.rememberEngine

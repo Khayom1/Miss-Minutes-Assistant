@@ -19,7 +19,6 @@ import android.service.notification.StatusBarNotification
 import android.provider.AlarmClock
 import android.util.Base64
 import android.view.accessibility.AccessibilityEvent
-import com.khayom1.missminutes.ai.DeepSeekClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray

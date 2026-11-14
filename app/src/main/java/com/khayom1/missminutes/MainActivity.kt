@@ -63,15 +63,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.khayom1.missminutes.ai.DeepSeekClient
-import com.khayom1.missminutes.ai.PersonalityEngine
-import com.khayom1.missminutes.data.MemoryDatabase
-import com.khayom1.missminutes.data.SecretStore
 import com.khayom1.missminutes.overlay.OverlayService
 import com.khayom1.missminutes.system.AndroidActions
-import com.khayom1.missminutes.ui.CharacterScene
-import com.khayom1.missminutes.ui.InitializationSequence
-import com.khayom1.missminutes.voice.RussianVoiceController
 import kotlinx.coroutines.launch
 
 private val TvaBackground = Color(0xFF160D09)
@@ -134,8 +127,9 @@ private fun MissMinutesRoot(activity: Activity) {
 
     LaunchedEffect(Unit) {
         memory.seedTvaArchive()
-        if (memory.buildPromptContext().contains("PERSONAL MEMORY:\n")) {
+        if (!prefs.getBoolean("owner_seeded", false)) {
             memory.savePersonalMemory("owner", "Мой новый Хранитель Времени — Хайём Абдурахмонов.")
+            prefs.edit().putBoolean("owner_seeded", true).apply()
         }
     }
 
