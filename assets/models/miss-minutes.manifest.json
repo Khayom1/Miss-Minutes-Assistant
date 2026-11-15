@@ -21,9 +21,23 @@
     "note": "These are the measured values from the CI validator for the exact runtime asset currently staged into the Android app."
   },
   "rig": {
-    "type": "Animated node-transform hierarchy",
-    "skinning": "Not present in the current Android runtime GLB; no glTF skin objects or JOINTS_0/WEIGHTS_0.",
-    "facialDeformation": "No morph targets. Facial states are not yet independently deformable."
+    "type": "Hierarchical node-transform animation rig",
+    "skinning": "No glTF skin objects, no JOINTS_0/WEIGHTS_0 and no skinned primitives in this Android runtime asset.",
+    "handStructure": "Four static finger segment meshes plus one thumb per hand; no independent finger-joint chains or ring-finger articulation.",
+    "facialControls": [
+      "Eye_R_CTRL",
+      "Eye_L_CTRL",
+      "Eye_R_Pupil_CTRL",
+      "Eye_L_Pupil_CTRL",
+      "Brow_R_CTRL",
+      "Brow_L_CTRL",
+      "Mouth_Smile_CTRL",
+      "Mouth_Talk_CTRL",
+      "Mouth_Surprise_CTRL",
+      "Mouth_Frown_CTRL"
+    ],
+    "facialDeformation": "Separate transform-controlled facial parts and expression nodes exist; no morph targets or vertex-level facial deformation.",
+    "clock": "Clock dial and tick marks exist; separate hour-hand and minute-hand geometry/control nodes are not present."
   },
   "animations": [
     {
@@ -96,8 +110,9 @@
     }
   ],
   "runtime": {
-    "behavior": "AI returns semantic mood/gaze/gesture/energy; Android maps that intent to one of the validated named clips.",
-    "limitations": "No live bone-pose solver, no morph-weight driver, no phoneme-level lip sync, no layered animation blending."
+    "behavior": "AI returns semantic mood/gaze/head tilt/body lean/gesture/energy/emphasis; Android resolves intent to a validated named clip, plays one-shot gestures once, returns to idle, and adjusts playback speed.",
+    "overlay": "Floating overlay observes the same SharedPreferences motion state as the main activity, including Talk_Loop while ElevenLabs audio is playing.",
+    "limitations": "This is AI-directed clip scheduling over node-transform animation. It is not yet a live bone-pose solver, layered skeletal animation system, morph-weight driver or phoneme-level lip-sync."
   },
   "voiceProfile": {
     "provider": "ElevenLabs",
@@ -114,10 +129,12 @@
   "releaseStatus": {
     "productionReady": false,
     "blockers": [
-      "Replace the current transform-only runtime GLB with the audited skinned source model after completing its missing rig controls.",
-      "Create and validate independent finger, eyebrow, eyelid, mouth, jaw, and clock-hand controls.",
-      "Implement runtime bone/morph driving and phoneme-timed speech synchronization.",
-      "Run Android build and device visual/performance tests."
+      "Replace the current transform-only Android GLB with the supplied advanced rig after repairing its missing controls and integrating it into the repository asset pipeline.",
+      "Add weighted, independently articulated ring fingers and verify all hand joints.",
+      "Add independent eyebrow controls and separate hour/minute clock hands to the advanced source model.",
+      "Add facial morph targets or a verified equivalent for blink, smile, jaw opening and phoneme shapes.",
+      "Implement runtime joint/morph driving and phoneme-timed speech synchronization.",
+      "Run Android visual and performance tests on the target device."
     ]
   }
 }
