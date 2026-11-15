@@ -210,10 +210,9 @@ private fun MissMinutesRoot(activity: Activity) {
             try {
                 val prompt = PersonalityEngine.buildSystemPrompt(memory.buildPromptContext(), assistantLanguage)
                 val motionPrompt = prompt + """
-
 ФОРМАТ ОТВЕТА: верни один JSON-объект без Markdown:
 {"reply":"полный ответ","mood":"neutral|happy|curious|surprised|angry|sad|sleepy|playful","gaze":"viewer|left|right|up|down|wander","head_tilt":0.0,"body_lean":0.0,"gesture":"none|open_hands|wave|point|shrug|hands_together|present","energy":0.0,"emphasis":0.0}
-Выбирай эмоциональное и физическое поведение самостоятельно из смысла разговора. Не называй анимационные клипы, скелетные кости или команды рендера. Значения head_tilt: -0.55..0.55 радиан; body_lean: -0.22..0.22; energy ва emphasis: 0..1.
+Самостоятельно выбери эмоциональное и физическое поведение из смысла диалога. Не называй клипы, анимации или кости. Ограничивай head_tilt: -0.55..0.55 радиан; body_lean: -0.22..0.22; energy и emphasis: 0..1.
 """
                 val rawTurn = DeepSeekClient.reply(key, motionPrompt, message)
                 val turn = MotionIntent.parse(rawTurn)
