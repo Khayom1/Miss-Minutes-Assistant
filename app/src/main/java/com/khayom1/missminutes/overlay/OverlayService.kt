@@ -49,6 +49,7 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import com.khayom1.missminutes.CharacterScene
+import com.khayom1.missminutes.MotionIntent
 import com.khayom1.missminutes.MainActivity
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -193,17 +194,17 @@ class OverlayService : LifecycleService() {
 @Composable
 private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
     var compact by remember { mutableStateOf(false) }
-    var clip by remember { mutableStateOf("Idle_Breathe") }
+    var motion by remember { mutableStateOf(MotionIntent.neutral()) }
 
     LaunchedEffect(compact) {
         if (!compact) {
             while (true) {
                 delay(26000)
-                clip = "Look_Around"
+                motion = MotionIntent.neutral().copy(mood = "curious", gaze = 0.2f)
                 delay(2200)
-                clip = "Blink"
+                motion = MotionIntent.neutral().copy(mood = "surprised")
                 delay(700)
-                clip = "Idle_Breathe"
+                motion = MotionIntent.neutral()
             }
         }
     }
@@ -236,7 +237,7 @@ private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
                         }
                     }
                 }
-                CharacterScene(Modifier.fillMaxWidth().height(205.dp), clip, modelScale = 0.78f)
+                CharacterScene(Modifier.fillMaxWidth().height(205.dp), motion = motion, modelScale = 0.78f)
                 Text("Так-так, я здесь!", color = Color(0xFFFFE8D2), fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
             }
         }
