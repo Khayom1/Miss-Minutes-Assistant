@@ -82,8 +82,8 @@ class AutonomousBehaviorEngineTest {
 
     @Test
     fun behaviorModePriorityIsExplicit() {
-        assertEquals(true, BehaviorMode.SPEAKING.priority > BehaviorMode.THINKING.priority)
-        assertEquals(true, BehaviorMode.INTERACTING.priority > BehaviorMode.SPEAKING.priority)
-        assertEquals(true, BehaviorMode.HIDDEN.priority > BehaviorMode.INTERACTING.priority)
+        assertEquals(true, BehaviorMode.SPEAKING.priority > BehaviorMode.INTERACTING.priority)
+        assertEquals(true, BehaviorMode.INTERACTING.priority > BehaviorMode.THINKING.priority)
+        assertEquals(true, BehaviorMode.HIDDEN.priority > BehaviorMode.SPEAKING.priority)
     }
 }
