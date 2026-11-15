@@ -9,8 +9,18 @@ class MotionIntentTest {
         assertEquals("Hello", result.reply)
         assertEquals("happy", result.mood)
         assertEquals(-0.65f, result.gaze)
+        assertEquals(0f, result.gazeVertical)
         assertEquals("wave", result.gesture)
         assertEquals(0.2f, result.headTilt)
+    }
+
+    @Test fun parsesVerticalGazeDirections() {
+        val up = MotionIntent.parse("""{"reply":"look up","gaze":"up"}""")
+        val down = MotionIntent.parse("""{"reply":"look down","gaze":"down"}""")
+        assertEquals(0f, up.gaze)
+        assertEquals(0.35f, up.gazeVertical)
+        assertEquals(0f, down.gaze)
+        assertEquals(-0.25f, down.gazeVertical)
     }
 
     @Test fun clampsNumericParameters() {

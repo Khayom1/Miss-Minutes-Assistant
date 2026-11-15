@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,13 +29,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.sceneview.SceneView
-import io.github.sceneview.math.Position
-import io.github.sceneview.math.Rotation
 import io.github.sceneview.rememberCameraManipulator
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberModelLoader
 import kotlinx.coroutines.delay
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Converts the AI's semantic intent to a clip supported by the currently shipped
@@ -85,7 +86,9 @@ fun CharacterScene(
 ) {
     val resolvedBehaviorMode = behaviorMode ?: if (motion.gesture == "talk") BehaviorMode.SPEAKING else BehaviorMode.IDLE
     var activeAnimation by remember { mutableStateOf(motion.animationName()) }
-    var pose by remember { mutableStateOf(ProceduralPose(0f, 0f, 0f, 0f)) }
+    val latestMotion = rememberUpdatedState(motion)
+    val latestAnimation = rememberUpdatedState(activeAnimation)
+    val rigControllerRef = remember { AtomicReference<ProceduralRigController?>(null) }
 
     LaunchedEffect(motion, resolvedBehaviorMode) {
         val selected = when (resolvedBehaviorMode) {
@@ -134,8 +137,7 @@ fun CharacterScene(
                 }
             }
 
-            pose = ProceduralMotionEngine.sample(now, motion)
-            delay(33L)
+            delay(100L)
         }
     }
 
@@ -145,7 +147,11 @@ fun CharacterScene(
         modifier = modifier,
         engine = engine,
         modelLoader = modelLoader,
-        cameraManipulator = rememberCameraManipulator()
+        cameraManipulator = rememberCameraManipulator(),
+        onFrame = { frameTimeNanos ->
+            val elapsedMillis = (frameTimeNanos / 1_000_000L) % 60_000L
+            rigControllerRef.get()?.apply(elapsedMillis, latestMotion.value, latestAnimation.value)
+        }
     ) {
         val instance = rememberModelInstance(modelLoader, "models/miss-minutes.glb")
         instance?.let {
@@ -156,13 +162,11 @@ fun CharacterScene(
                 animationName = activeAnimation,
                 animationLoop = isLoopingCharacterAnimation(activeAnimation),
                 animationSpeed = motion.animationSpeed(),
-                position = Position(y = pose.liftMeters),
-                rotation = Rotation(
-                    x = pose.pitchDegrees,
-                    y = pose.yawDegrees,
-                    z = pose.rollDegrees
-                )
+                apply = { rigControllerRef.set(ProceduralRigController(this)) }
             )
+            DisposableEffect(it) {
+                onDispose { rigControllerRef.set(null) }
+            }
         }
     }
 }

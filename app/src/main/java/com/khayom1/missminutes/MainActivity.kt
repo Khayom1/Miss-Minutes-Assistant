@@ -112,6 +112,7 @@ private fun persistCharacterMotion(preferences: SharedPreferences, motion: Motio
     preferences.edit()
         .putString("mm_motion_mood", motion.mood)
         .putFloat("mm_motion_gaze", motion.gaze)
+        .putFloat("mm_motion_gaze_vertical", motion.gazeVertical)
         .putFloat("mm_motion_head_tilt", motion.headTilt)
         .putFloat("mm_motion_body_lean", motion.bodyLean)
         .putString("mm_motion_gesture", motion.gesture)

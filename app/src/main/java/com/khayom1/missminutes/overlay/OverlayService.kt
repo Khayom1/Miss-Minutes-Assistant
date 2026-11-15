@@ -242,6 +242,7 @@ private fun readStoredMotion(preferences: android.content.SharedPreferences): Mo
     MotionIntent.neutral().copy(
         mood = preferences.getString("mm_motion_mood", "neutral") ?: "neutral",
         gaze = preferences.getFloat("mm_motion_gaze", 0f),
+        gazeVertical = preferences.getFloat("mm_motion_gaze_vertical", 0f),
         headTilt = preferences.getFloat("mm_motion_head_tilt", 0f),
         bodyLean = preferences.getFloat("mm_motion_body_lean", 0f),
         gesture = preferences.getString("mm_motion_gesture", "none") ?: "none",

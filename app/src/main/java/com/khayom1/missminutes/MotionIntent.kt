@@ -9,7 +9,8 @@ data class MotionIntent(
     val bodyLean: Float,
     val gesture: String,
     val energy: Float,
-    val emphasis: Float
+    val emphasis: Float,
+    val gazeVertical: Float = 0f
 ) {
     companion object {
         private val moods = setOf("neutral", "happy", "curious", "surprised", "angry", "sad", "sleepy", "playful")
@@ -37,12 +38,17 @@ data class MotionIntent(
                 val json = raw.substring(first, last + 1)
                 val mood = jsonString(json, "mood")?.lowercase()?.takeIf { it in moods } ?: "neutral"
                 val gesture = jsonString(json, "gesture")?.lowercase()?.takeIf { it in gestures } ?: "none"
-                val gaze = when (jsonString(json, "gaze")?.lowercase()) {
+                val gazeDirection = jsonString(json, "gaze")?.lowercase()
+                val gaze = when (gazeDirection) {
                     "left" -> -0.65f
                     "right" -> 0.65f
+                    "wander" -> 0.2f
+                    else -> 0f
+                }
+                val gazeVertical = when (gazeDirection) {
                     "up" -> 0.35f
                     "down" -> -0.25f
-                    "wander" -> 0.2f
+                    "wander" -> 0.12f
                     else -> 0f
                 }
                 val reply = jsonString(json, "reply")?.trim().orEmpty().ifBlank { fallbackReply }
@@ -54,7 +60,8 @@ data class MotionIntent(
                     bodyLean = jsonNumber(json, "body_lean", 0.0).toFloat().coerceIn(-0.22f, 0.22f),
                     gesture = gesture,
                     energy = jsonNumber(json, "energy", 0.35).toFloat().coerceIn(0f, 1f),
-                    emphasis = jsonNumber(json, "emphasis", 0.25).toFloat().coerceIn(0f, 1f)
+                    emphasis = jsonNumber(json, "emphasis", 0.25).toFloat().coerceIn(0f, 1f),
+                    gazeVertical = gazeVertical
                 )
             }
             val value = fallbackReply.lowercase()
