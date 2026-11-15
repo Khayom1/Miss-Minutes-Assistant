@@ -53,6 +53,7 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import com.khayom1.missminutes.CharacterScene
 import com.khayom1.missminutes.MotionIntent
 import com.khayom1.missminutes.MainActivity
+import com.khayom1.missminutes.clampOverlayCoordinates
 import kotlin.math.abs
 
 class OverlayService : LifecycleService() {
