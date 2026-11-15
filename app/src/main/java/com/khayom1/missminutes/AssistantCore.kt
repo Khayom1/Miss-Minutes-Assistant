@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyStore
@@ -207,32 +208,83 @@ object DeepSeekClient {
     }
 }
 
-class LocalizedVoiceController(context: Context, private val language: String, private val onRecognized: (String) -> Unit) :
-    TextToSpeech.OnInitListener, RecognitionListener {
-    private val tts = TextToSpeech(context.applicationContext, this)
+class LocalizedVoiceController(
+    context: Context,
+    private val language: String,
+    private val onRecognized: (String) -> Unit
+) : RecognitionListener {
+    private val appContext = context.applicationContext
     private val recognizer = if (SpeechRecognizer.isRecognitionAvailable(context)) {
         SpeechRecognizer.createSpeechRecognizer(context)
     } else null
-    private var ready = false
+    private var player: android.media.MediaPlayer? = null
 
     init { recognizer?.setRecognitionListener(this) }
 
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val result = tts.setLanguage(Locale.forLanguageTag(if (language == "ru") "ru-RU" else "en-US"))
-            ready = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
-            tts.setSpeechRate(1.06f)
-            tts.setPitch(1.10f)
-            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) = Unit
-                override fun onDone(utteranceId: String?) = Unit
-                override fun onError(utteranceId: String?) = Unit
-            })
+    suspend fun speak(text: String, apiKey: String, onPlaybackState: (Boolean) -> Unit) {
+        require(apiKey.isNotBlank()) { "ElevenLabs API Key не задан" }
+        if (text.isBlank()) return
+        val audioFile = withContext(Dispatchers.IO) {
+            val endpoint = URL("https://api.elevenlabs.io/v1/text-to-speech/$VOICE_ID?output_format=mp3_44100_128")
+            val connection = endpoint.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 60000
+            connection.doOutput = true
+            connection.setRequestProperty("xi-api-key", apiKey)
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty("Accept", "audio/mpeg")
+            try {
+                val payload = JSONObject()
+                    .put("text", text.take(MAX_TEXT_LENGTH))
+                    .put("model_id", "eleven_multilingual_v2")
+                    .put("voice_settings", JSONObject()
+                        .put("stability", 0.48)
+                        .put("similarity_boost", 0.82)
+                        .put("style", 0.25)
+                        .put("use_speaker_boost", true))
+                connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                val status = connection.responseCode
+                if (status !in 200..299) {
+                    val detail = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                    val message = runCatching {
+                        val json = JSONObject(detail)
+                        json.optJSONObject("detail")?.optString("message").orEmpty().ifBlank {
+                            json.optString("message")
+                        }
+                    }.getOrNull().orEmpty()
+                    throw IllegalStateException("ElevenLabs HTTP $status" + if (message.isBlank()) "" else ": $message")
+                }
+                val bytes = connection.inputStream.use { it.readBytes() }
+                if (bytes.isEmpty()) throw IllegalStateException("ElevenLabs аудиои холӣ баргардонд")
+                File(appContext.cacheDir, "miss-minutes-speech.mp3").apply { writeBytes(bytes) }
+            } finally {
+                connection.disconnect()
+            }
         }
-    }
-
-    fun speak(text: String) {
-        if (ready && text.isNotBlank()) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "miss-minutes-response")
+        withContext(Dispatchers.Main) {
+            player?.runCatching { stop() }
+            player?.release()
+            val next = android.media.MediaPlayer()
+            player = next
+            next.setOnCompletionListener { completed ->
+                onPlaybackState(false)
+                completed.release()
+                if (player === completed) player = null
+            }
+            next.setOnErrorListener { failed, _, _ ->
+                onPlaybackState(false)
+                failed.release()
+                if (player === failed) player = null
+                true
+            }
+            next.setDataSource(audioFile.absolutePath)
+            next.setOnPreparedListener { prepared ->
+                onPlaybackState(true)
+                prepared.start()
+            }
+            next.prepareAsync()
+        }
     }
 
     fun listen() {
@@ -263,8 +315,15 @@ class LocalizedVoiceController(context: Context, private val language: String, p
     fun release() {
         runCatching { recognizer?.cancel() }
         recognizer?.destroy()
-        tts.stop()
-        tts.shutdown()
+        player?.runCatching { stop() }
+        player?.release()
+        player = null
+    }
+
+    companion object {
+        const val VOICE_ID = "3ooIiYiDLwKz4dFFc7WM"
+        const val VOICE_NAME = "Miss minutes"
+        private const val MAX_TEXT_LENGTH = 4000
     }
 }
 

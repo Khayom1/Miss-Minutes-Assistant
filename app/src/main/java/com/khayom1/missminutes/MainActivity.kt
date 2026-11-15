@@ -119,6 +119,7 @@ private fun MissMinutesRoot(activity: Activity) {
     var firstRun by remember { mutableStateOf(!prefs.getBoolean("initialization_complete", false)) }
     var showSettings by remember { mutableStateOf(false) }
     var apiKeyDraft by remember { mutableStateOf(secrets.read("deepseek_api_key").orEmpty()) }
+    var elevenLabsKeyDraft by remember { mutableStateOf(secrets.read("elevenlabs_api_key").orEmpty()) }
     var input by remember { mutableStateOf("") }
     var selectedAnimation by remember { mutableStateOf("Idle_Breathe") }
     var isThinking by remember { mutableStateOf(false) }
@@ -133,6 +134,25 @@ private fun MissMinutesRoot(activity: Activity) {
 
     val voice = remember(activity, assistantLanguage) { LocalizedVoiceController(activity, assistantLanguage) { recognizedText = it } }
     DisposableEffect(voice) { onDispose { voice.release() } }
+
+    fun speak(text: String) {
+        val elevenLabsKey = secrets.read("elevenlabs_api_key")
+        if (elevenLabsKey.isNullOrBlank()) {
+            status = "ELEVENLABS / API KEY REQUIRED"
+            return
+        }
+        scope.launch {
+            try {
+                voice.speak(text, elevenLabsKey) { isPlaying ->
+                    selectedAnimation = if (isPlaying) "Talk_Loop" else "Idle_Breathe"
+                }
+            } catch (error: Exception) {
+                selectedAnimation = "Idle_Breathe"
+                status = "ELEVENLABS / ERROR"
+                messages.add(ChatLine("assistant", "ElevenLabs: " + (error.message ?: "unknown error")))
+            }
+        }
+    }
 
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) voice.listen() else status = "MICROPHONE / PERMISSION DENIED"
@@ -160,7 +180,7 @@ private fun MissMinutesRoot(activity: Activity) {
         if (localAction != null) {
             messages.add(ChatLine("assistant", localAction))
             memory.saveConversation("assistant", localAction)
-            voice.speak(localAction)
+            speak(localAction)
             return
         }
 
@@ -172,7 +192,7 @@ private fun MissMinutesRoot(activity: Activity) {
                 "Так-так, вот что происходит в твоём цифровом королевстве:\n" + notifications
             }
             messages.add(ChatLine("assistant", response))
-            voice.speak(response)
+            speak(response)
             return
         }
 
@@ -180,7 +200,7 @@ private fun MissMinutesRoot(activity: Activity) {
         if (key.isNullOrBlank()) {
             val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь DeepSeek API Key. И не вздумай записывать его на табличке у входа в TVA!"
             messages.add(ChatLine("assistant", response))
-            voice.speak(response)
+            speak(response)
             return
         }
 
@@ -193,7 +213,7 @@ private fun MissMinutesRoot(activity: Activity) {
                 messages.add(ChatLine("assistant", response))
                 memory.saveConversation("assistant", response)
                 selectedAnimation = "Talk_Loop"
-                voice.speak(response)
+                speak(response)
                 status = "TVA SYSTEM / STABLE"
             } catch (error: Exception) {
                 val response = "Так, минутку! Канал связи с DeepSeek временно схлопнулся: " +
@@ -258,7 +278,7 @@ private fun MissMinutesRoot(activity: Activity) {
                     android.content.pm.PackageManager.PERMISSION_GRANTED
                 ) voice.listen() else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
             },
-            onSpeak = { text -> voice.speak(text) },
+            onSpeak = { text -> speak(text) },
             onNotificationSettings = { activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
             onAccessibilitySettings = { activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         )
@@ -268,8 +288,11 @@ private fun MissMinutesRoot(activity: Activity) {
         SettingsDialog(
             apiKey = apiKeyDraft,
             onApiKeyChange = { apiKeyDraft = it },
+            elevenLabsApiKey = elevenLabsKeyDraft,
+            onElevenLabsApiKeyChange = { elevenLabsKeyDraft = it },
             onSave = {
                 secrets.save("deepseek_api_key", apiKeyDraft.trim())
+                secrets.save("elevenlabs_api_key", elevenLabsKeyDraft.trim())
                 showSettings = false
                 status = if (apiKeyDraft.isBlank()) "API KEY / EMPTY" else "API KEY / STORED SECURELY"
             },
@@ -418,7 +441,7 @@ private fun Dashboard(
             }
         }
         Text(
-            "DeepSeek API оплачивается по условиям аккаунта провайдера. Ключ хранится в Android Keystore; без ключа доступны 3D-персонаж и локальные функции.",
+            "ElevenLabs озвучивает ответы Мисс Минутс; воспроизведение синхронизировано с Talk_Loop в 3D-модели. Ключ ElevenLabs хранится в Android Keystore и не включается в GitHub.",
             color = Color(0xFF9C806A),
             fontSize = 10.sp,
             lineHeight = 14.sp
@@ -431,6 +454,8 @@ private fun Dashboard(
 private fun SettingsDialog(
     apiKey: String,
     onApiKeyChange: (String) -> Unit,
+    elevenLabsApiKey: String,
+    onElevenLabsApiKeyChange: (String) -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit,
     onNotificationSettings: () -> Unit,
@@ -441,6 +466,20 @@ private fun SettingsDialog(
         title = { Text("TVA / НАСТРОЙКИ") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("ElevenLabs API Key", color = TvaOrange, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = elevenLabsApiKey,
+                    onValueChange = onElevenLabsApiKeyChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    placeholder = { Text("ElevenLabs API Key") }
+                )
+                Text(
+                    "Voice: ${LocalizedVoiceController.VOICE_NAME} · ${LocalizedVoiceController.VOICE_ID}. " +
+                        "Русский и English — multilingual v2. Ключ хранится в Android Keystore.",
+                    fontSize = 11.sp
+                )
                 Text("DeepSeek API Key", color = TvaOrange, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = apiKey,

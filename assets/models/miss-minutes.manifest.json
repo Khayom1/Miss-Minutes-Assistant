@@ -90,5 +90,17 @@
   ],
   "sourceGenerator": "tools/build-model.mjs",
   "validation": "tools/validate-model.mjs",
-  "notes": "Unofficial fan-made recreation. GLB contains 120 nodes, 24 meshes, 15 materials and 17 animation clips."
+  "notes": "Unofficial fan-made recreation. GLB contains 120 nodes, 24 meshes, 15 materials and 17 animation clips.",
+  "voiceProfile": {
+    "provider": "ElevenLabs",
+    "name": "Miss minutes",
+    "voiceId": "3ooIiYiDLwKz4dFFc7WM",
+    "model": "eleven_multilingual_v2",
+    "languages": [
+      "en",
+      "ru"
+    ],
+    "playback": "The Android app drives Talk_Loop while speech is playing and returns the character to Idle_Breathe when playback completes.",
+    "apiKeyStorage": "Android Keystore; credentials are never committed."
+  }
 }
