@@ -12,8 +12,6 @@ import android.security.keystore.KeyProperties
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.provider.AlarmClock
@@ -218,6 +216,7 @@ class LocalizedVoiceController(
         SpeechRecognizer.createSpeechRecognizer(context)
     } else null
     private var player: android.media.MediaPlayer? = null
+    private var currentAudioFile: File? = null
 
     init { recognizer?.setRecognitionListener(this) }
 
@@ -257,24 +256,30 @@ class LocalizedVoiceController(
                 }
                 val bytes = connection.inputStream.use { it.readBytes() }
                 if (bytes.isEmpty()) throw IllegalStateException("ElevenLabs аудиои холӣ баргардонд")
-                File(appContext.cacheDir, "miss-minutes-speech.mp3").apply { writeBytes(bytes) }
+                File.createTempFile("miss-minutes-", ".mp3", appContext.cacheDir).apply { writeBytes(bytes) }
             } finally {
                 connection.disconnect()
             }
         }
         withContext(Dispatchers.Main) {
-            player?.runCatching { stop() }
+            runCatching { player?.stop() }
             player?.release()
+            currentAudioFile?.delete()
+            currentAudioFile = audioFile
             val next = android.media.MediaPlayer()
             player = next
             next.setOnCompletionListener { completed ->
                 onPlaybackState(false)
                 completed.release()
+                currentAudioFile?.delete()
+                currentAudioFile = null
                 if (player === completed) player = null
             }
             next.setOnErrorListener { failed, _, _ ->
                 onPlaybackState(false)
                 failed.release()
+                currentAudioFile?.delete()
+                currentAudioFile = null
                 if (player === failed) player = null
                 true
             }
@@ -315,9 +320,11 @@ class LocalizedVoiceController(
     fun release() {
         runCatching { recognizer?.cancel() }
         recognizer?.destroy()
-        player?.runCatching { stop() }
+        runCatching { player?.stop() }
         player?.release()
         player = null
+        currentAudioFile?.delete()
+        currentAudioFile = null
     }
 
     companion object {
