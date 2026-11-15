@@ -6,14 +6,14 @@ This file records verified implementation state. It is deliberately separate fro
 
 - Android app uses SceneView 4.18.0 to load the packaged GLB.
 - The current runtime GLB passes its structural/animation validator: 120 nodes, 24 mesh definitions, 15 materials, 24,680 triangles, 17 animation clips and 61 animation channels.
-- AI response parsing produces bounded semantic mood, gaze, head tilt, body lean, gesture, energy and emphasis values.
+- AI response parsing uses `JSONObject` and produces bounded semantic mood, gaze, head tilt, body lean, gesture, energy and emphasis values; regression tests cover escaped quotes, Unicode, malformed JSON and numeric bounds.
 - The Android renderer maps semantic mood/gesture to the runtime GLB's named clips, plays one-shot gestures once, returns to idle and adjusts playback speed from AI energy.
-- The floating overlay observes the same persisted AI motion and speech state as the main activity.
+- The floating overlay observes the same persisted AI motion, speech state and active behavior mode (LISTENING, THINKING, SPEAKING or IDLE) as the main activity.
 - ElevenLabs voice `Miss minutes` (`3ooIiYiDLwKz4dFFc7WM`) is configured with `eleven_multilingual_v2`; API key remains encrypted with Android Keystore.
 - Playback state selects `Talk_Loop` while speech is active.
 - Android 14+ speech recognition requests automatic Russian/English switching; actual recognizer support remains device-dependent.
 - Per-turn response language is selected from detected script (Cyrillic/Russian or Latin/English).
-- Autonomous idle scheduler and a bounded procedural root-motion layer have been added. They are not yet a complete skeletal/facial behavior engine.
+- Autonomous idle scheduling is gated by explicit behavior-state priority; listening/thinking/speaking modes are shared with the floating overlay. The procedural layer still does not constitute a complete skeletal/facial behavior engine.
 - Overlay coordinates are clamped and persisted in dp; four coordinate-boundary unit tests were added.
 
 ## Uploaded source-rig audit
@@ -35,7 +35,7 @@ The exact machine-readable audit is stored at `assets/models/source-rig-audit.js
 ## Not yet production complete
 
 ### P0 — Code audit and defect correction
-The repository has received targeted fixes and added tests, but the complete audit is not closed until all critical code paths, lifecycle behavior, permissions, network failures and Android runtime behavior have been verified. The latest CI attempt on `b6aac05` exposed one failing procedural-motion assertion; that failure is being corrected before the next green run.
+The repository has received targeted fixes and regression tests for semantic JSON parsing and interaction-state routing. CI run #45 passed on `922ac22`; run #46 passed on `83c68e8`, including `testDebugUnitTest`, `assembleDebug` and `lintDebug`. The complete audit remains open until all critical code paths, lifecycle behavior, permissions, network failures and Android runtime behavior have been verified.
 
 ### P1 — Final 3D model and optimization
 The supplied advanced GLB is structurally skinned and its weights/joint references validate, but it is not yet a final production model. The Blender source has not been opened and modified in Blender, and the advanced GLB is not yet staged as the Android runtime asset.
@@ -47,10 +47,10 @@ The supplied skeleton has 138 joints, but ring-finger chains, independent brows,
 The current runtime has AI-directed named-clip scheduling, autonomous idle clip scheduling and bounded root motion. It is not yet a complete live bone-pose solver, layered skeletal controller, facial-control driver or phoneme-synchronized lip-sync engine.
 
 ### P4 — Autonomous AI behavior engine
-The idle scheduler can trigger subtle actions while the character is idle. Context-aware planning, interrupt priorities, behavior memory, environmental perception and verified action execution are not yet complete.
+The idle scheduler can trigger subtle actions while the character is idle and suppress them during listening, thinking, speaking and interaction. Context-aware planning, durable behavior memory, environmental perception and verified autonomous action execution are not yet complete.
 
 ### Android release
-A debug APK has passed on an earlier commit, but the latest commit must pass CI again. Physical-device visual, FPS, memory and thermal checks on the target Android device remain outstanding. No production-signed release is claimed.
+Latest verified CI run #46 passed on `83c68e8`; the `Miss-Minutes-Assistant-debug` APK artifact was uploaded. Physical-device visual, FPS, memory and thermal checks on the target Samsung device remain outstanding. No production-signed release is claimed.
 
 ## Release acceptance criteria
 
