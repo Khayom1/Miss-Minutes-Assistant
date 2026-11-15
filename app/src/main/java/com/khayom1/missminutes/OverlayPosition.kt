@@ -7,7 +7,7 @@ internal data class OverlayPosition(val x: Int, val y: Int)
  * Keeps an overlay fully inside the available display bounds.
  * Negative and oversized dimensions are handled defensively.
  */
-internal fun clampOverlayPosition(
+internal fun clampOverlayCoordinates(
     x: Int,
     y: Int,
     screenWidth: Int,
