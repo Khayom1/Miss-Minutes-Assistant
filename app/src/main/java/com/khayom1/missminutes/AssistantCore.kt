@@ -455,9 +455,10 @@ class LocalizedVoiceController(
     override fun onBufferReceived(buffer: ByteArray?) = Unit
     override fun onEndOfSpeech() { onListeningChanged(true) }
     override fun onError(error: Int) {
+        val wasActive = recognitionActive
         recognitionActive = false
         onListeningChanged(false)
-        onRecognitionError(recognitionErrorMessage(error))
+        if (wasActive) onRecognitionError(recognitionErrorMessage(error))
     }
     override fun onPartialResults(partialResults: Bundle?) = Unit
     override fun onEvent(eventType: Int, params: Bundle?) = Unit

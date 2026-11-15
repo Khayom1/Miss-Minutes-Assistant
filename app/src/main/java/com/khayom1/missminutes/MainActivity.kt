@@ -229,7 +229,9 @@ private fun MissMinutesRoot(activity: Activity) {
         if (granted) voice.listen() else status = "MICROPHONE / PERMISSION DENIED"
     }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startOverlay(activity) else status = "OVERLAY / NOTIFICATION PERMISSION DENIED"
+        if (granted) {
+            status = if (startOverlay(activity)) "OVERLAY / STARTING" else "OVERLAY / START FAILED"
+        } else status = "OVERLAY / NOTIFICATION PERMISSION DENIED"
     }
 
     LaunchedEffect(Unit) {
@@ -369,11 +371,11 @@ private fun MissMinutesRoot(activity: Activity) {
                         ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) !=
                         android.content.pm.PackageManager.PERMISSION_GRANTED
                     ) {
+                        status = "OVERLAY / NOTIFICATION PERMISSION REQUIRED"
                         notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                     } else {
-                        startOverlay(activity)
+                        status = if (startOverlay(activity)) "OVERLAY / STARTING" else "OVERLAY / START FAILED"
                     }
-                    status = "OVERLAY / STARTING"
                 } else {
                     activity.startActivity(
                         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + activity.packageName))
@@ -428,10 +430,11 @@ private fun MissMinutesRoot(activity: Activity) {
     }
 }
 
-private fun startOverlay(activity: Activity) {
-    if (Settings.canDrawOverlays(activity)) {
+private fun startOverlay(activity: Activity): Boolean {
+    if (!Settings.canDrawOverlays(activity)) return false
+    return runCatching {
         ContextCompat.startForegroundService(activity, Intent(activity, OverlayService::class.java))
-    }
+    }.isSuccess
 }
 
 @Composable

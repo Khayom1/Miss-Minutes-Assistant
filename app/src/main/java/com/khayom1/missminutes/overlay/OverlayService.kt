@@ -66,8 +66,13 @@ class OverlayService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
-        createChannel()
-        startForeground(NOTIFICATION_ID, notification())
+        try {
+            createChannel()
+            startForeground(NOTIFICATION_ID, notification())
+        } catch (_: Exception) {
+            stopSelf()
+            return
+        }
         manager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val density = resources.displayMetrics.density
         layout = WindowManager.LayoutParams(
