@@ -12,12 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.graphics.Color as ComposeColor
-import com.google.android.filament.Engine
-import com.google.android.filament.gltfio.Animator
-import com.google.android.filament.gltfio.FilamentAsset
-import com.google.android.filament.utils.Float3
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,7 +28,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import io.github.sceneview.SceneView
 import io.github.sceneview.rememberCameraManipulator
-import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberModelLoader
 
@@ -45,12 +38,12 @@ import io.github.sceneview.rememberModelLoader
  * run after the model's actual Filament asset has supplied a verified name map.
  */
 private class ProceduralRigDriver {
-    data class RigChannels(
-        val head: String? = null,
-        val torso: String? = null,
-        val eyes: String? = null,
-        val leftArm: String? = null,
-        val rightArm: String? = null
+    fun availableChannels(nodeNames: Set<String>): RigChannels = RigChannels(
+        head = nodeNames.firstOrNull { it.contains("head", ignoreCase = true) },
+        torso = nodeNames.firstOrNull { it.contains("spine", ignoreCase = true) || it.contains("torso", ignoreCase = true) },
+        eyes = nodeNames.firstOrNull { it.contains("eye", ignoreCase = true) },
+        leftArm = nodeNames.firstOrNull { it.contains("leftarm", ignoreCase = true) || it.contains("arm_l", ignoreCase = true) },
+        rightArm = nodeNames.firstOrNull { it.contains("rightarm", ignoreCase = true) || it.contains("arm_r", ignoreCase = true) }
     )
 
     fun sanitize(intent: MotionIntent): MotionIntent = intent.copy(
