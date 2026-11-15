@@ -14,6 +14,25 @@ class MotionIntentTest {
         assertEquals(0.2f, result.headTilt)
     }
 
+    @Test fun decodesEscapedJsonStringsAndUnicode() {
+        val result = MotionIntent.parse("""{"reply":"She said: \"hello\" \u263A","mood":"happy"}""")
+        assertEquals("She said: \"hello\" ☺", result.reply)
+        assertEquals("happy", result.mood)
+    }
+
+    @Test fun malformedJsonFallsBackToPlainReply() {
+        val result = MotionIntent.parse("""{"reply":"broken","mood":""", "хаха, это смешно")
+        assertEquals("хаха, это смешно", result.reply)
+        assertEquals("happy", result.mood)
+    }
+
+    @Test fun resolvesListeningThinkingAndSpeechByPriority() {
+        assertEquals(BehaviorMode.LISTENING, resolveBehaviorMode(true, false, false))
+        assertEquals(BehaviorMode.THINKING, resolveBehaviorMode(true, true, false))
+        assertEquals(BehaviorMode.SPEAKING, resolveBehaviorMode(true, true, true))
+        assertEquals(BehaviorMode.IDLE, resolveBehaviorMode(false, false, false))
+    }
+
     @Test fun parsesVerticalGazeDirections() {
         val up = MotionIntent.parse("""{"reply":"look up","gaze":"up"}""")
         val down = MotionIntent.parse("""{"reply":"look down","gaze":"down"}""")

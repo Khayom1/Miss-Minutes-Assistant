@@ -144,6 +144,7 @@ private fun MissMinutesRoot(activity: Activity) {
     var currentMotion by remember { mutableStateOf(MotionIntent.neutral()) }
     var isSpeaking by remember { mutableStateOf(false) }
     var isThinking by remember { mutableStateOf(false) }
+    var isListening by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("TVA SYSTEM / READY") }
     var recognizedText by remember { mutableStateOf<String?>(null) }
 
@@ -155,7 +156,14 @@ private fun MissMinutesRoot(activity: Activity) {
 
     DisposableEffect(memory) { onDispose { memory.close() } }
 
-    val voice = remember(activity, assistantLanguage) { LocalizedVoiceController(activity, assistantLanguage) { recognizedText = it } }
+    val voice = remember(activity, assistantLanguage) {
+        LocalizedVoiceController(
+            activity,
+            assistantLanguage,
+            onRecognized = { recognizedText = it },
+            onListeningChanged = { listening -> isListening = listening }
+        )
+    }
     DisposableEffect(voice) { onDispose { voice.release() } }
 
     fun speak(text: String) {
@@ -284,6 +292,7 @@ private fun MissMinutesRoot(activity: Activity) {
             input = input,
             motion = if (isSpeaking) currentMotion.copy(gesture = "talk") else currentMotion,
             isThinking = isThinking,
+            isListening = isListening,
             onInputChange = { input = it },
             onSend = { send(input) },
             onAnimationChange = { /* motion is produced by semantic intent, not manual clip selection */ },
@@ -358,6 +367,7 @@ private fun Dashboard(
     input: String,
     motion: MotionIntent,
     isThinking: Boolean,
+    isListening: Boolean,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onAnimationChange: (String) -> Unit,
@@ -392,13 +402,20 @@ private fun Dashboard(
                     Modifier.fillMaxWidth().height(285.dp),
                     motion = motion,
                     modelScale = 1.05f,
-                    behaviorMode = if (isThinking) BehaviorMode.THINKING else if (motion.gesture == "talk") BehaviorMode.SPEAKING else BehaviorMode.IDLE
+                    behaviorMode = resolveBehaviorMode(
+                        isListening = isListening,
+                        isThinking = isThinking,
+                        isSpeaking = motion.gesture == "talk"
+                    )
                 )
                 Text("TVA CHARACTER // 3D LIVE RIG", color = Color(0xFFD6A57B), fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
         }
 
         Text("LIVE BEHAVIOUR // AI DIRECTED", color = Color(0xFFD6A57B), fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        if (isListening) {
+            Text("VOICE INPUT // LISTENING", color = TvaOrange, fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(

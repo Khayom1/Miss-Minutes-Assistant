@@ -37,6 +37,21 @@ import kotlinx.coroutines.delay
 import java.util.concurrent.atomic.AtomicReference
 
 /**
+ * Resolves the live interaction state using explicit priority. Speech and thinking always
+ * suppress idle autonomy; listening is represented as a distinct active state.
+ */
+internal fun resolveBehaviorMode(
+    isListening: Boolean,
+    isThinking: Boolean,
+    isSpeaking: Boolean
+): BehaviorMode = when {
+    isSpeaking -> BehaviorMode.SPEAKING
+    isThinking -> BehaviorMode.THINKING
+    isListening -> BehaviorMode.LISTENING
+    else -> BehaviorMode.IDLE
+}
+
+/**
  * Converts the AI's semantic intent to a clip supported by the currently shipped
  * GLB. Clip names are validated by tools/validate-model.mjs in CI.
  *

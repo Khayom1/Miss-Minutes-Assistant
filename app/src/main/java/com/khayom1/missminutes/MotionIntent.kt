@@ -1,5 +1,7 @@
 package com.khayom1.missminutes
 
+import org.json.JSONObject
+
 /** Semantic movement intent selected by the dialogue model. */
 data class MotionIntent(
     val reply: String,
@@ -16,26 +18,29 @@ data class MotionIntent(
         private val moods = setOf("neutral", "happy", "curious", "surprised", "angry", "sad", "sleepy", "playful")
         private val gestures = setOf("none", "talk", "open_hands", "wave", "point", "shrug", "hands_together", "present")
 
-        private fun jsonString(source: String, key: String): String? {
-            val pattern = Regex(Regex.escape("\"" + key + "\"") + "\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
-            val value = pattern.find(source)?.groupValues?.getOrNull(1) ?: return null
-            return value.replace("\\\"", "\"")
-                .replace("\\n", "\n")
-                .replace("\\r", "\r")
-                .replace("\\t", "\t")
-                .replace("\\\\", "\\")
+        private fun parseObject(raw: String): JSONObject? {
+            val first = raw.indexOf('{')
+            val last = raw.lastIndexOf('}')
+            if (first < 0 || last <= first) return null
+            return runCatching { JSONObject(raw.substring(first, last + 1)) }.getOrNull()
         }
 
-        private fun jsonNumber(source: String, key: String, fallback: Double): Double {
-            val pattern = Regex(Regex.escape("\"" + key + "\"") + "\\s*:\\s*(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)")
-            return pattern.find(source)?.groupValues?.getOrNull(1)?.toDoubleOrNull() ?: fallback
+        private fun jsonString(source: JSONObject, key: String): String? =
+            source.opt(key) as? String
+
+        private fun jsonNumber(source: JSONObject, key: String, fallback: Double): Double {
+            val value = source.opt(key)
+            val parsed = when (value) {
+                is Number -> value.toDouble()
+                is String -> value.toDoubleOrNull()
+                else -> null
+            } ?: return fallback
+            return parsed.takeIf { it.isFinite() } ?: fallback
         }
 
         fun parse(raw: String, fallbackReply: String = raw): MotionIntent {
-            val first = raw.indexOf('{')
-            val last = raw.lastIndexOf('}')
-            if (first >= 0 && last > first) {
-                val json = raw.substring(first, last + 1)
+            val json = parseObject(raw)
+            if (json != null) {
                 val mood = jsonString(json, "mood")?.lowercase()?.takeIf { it in moods } ?: "neutral"
                 val gesture = jsonString(json, "gesture")?.lowercase()?.takeIf { it in gestures } ?: "none"
                 val gazeDirection = jsonString(json, "gaze")?.lowercase()

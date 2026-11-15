@@ -212,7 +212,8 @@ object DeepSeekClient {
 class LocalizedVoiceController(
     context: Context,
     private val language: String,
-    private val onRecognized: (String) -> Unit
+    private val onRecognized: (String) -> Unit,
+    private val onListeningChanged: (Boolean) -> Unit = {}
 ) : RecognitionListener {
     private val appContext = context.applicationContext
     private val recognizer = if (SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -296,7 +297,12 @@ class LocalizedVoiceController(
     }
 
     fun listen() {
-        val engine = recognizer ?: return
+        val engine = recognizer
+        if (engine == null) {
+            onListeningChanged(false)
+            return
+        }
+        onListeningChanged(true)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             // Android 14+ can switch between Russian and English during one session.
@@ -315,22 +321,25 @@ class LocalizedVoiceController(
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
         runCatching { engine.startListening(intent) }
+            .onFailure { onListeningChanged(false) }
     }
 
     override fun onResults(results: Bundle?) {
+        onListeningChanged(false)
         val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
         if (!spoken.isNullOrBlank()) onRecognized(spoken)
     }
-    override fun onReadyForSpeech(params: Bundle?) = Unit
-    override fun onBeginningOfSpeech() = Unit
+    override fun onReadyForSpeech(params: Bundle?) { onListeningChanged(true) }
+    override fun onBeginningOfSpeech() { onListeningChanged(true) }
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
-    override fun onEndOfSpeech() = Unit
-    override fun onError(error: Int) = Unit
+    override fun onEndOfSpeech() { onListeningChanged(true) }
+    override fun onError(error: Int) { onListeningChanged(false) }
     override fun onPartialResults(partialResults: Bundle?) = Unit
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
     fun release() {
+        onListeningChanged(false)
         runCatching { recognizer?.cancel() }
         recognizer?.destroy()
         runCatching { player?.stop() }
