@@ -152,11 +152,11 @@ class MemoryDatabase(context: Context) : SQLiteOpenHelper(context, "miss_minutes
 }
 
 object PersonalityEngine {
-    fun buildSystemPrompt(memoryContext: String): String = """
+    fun buildSystemPrompt(memoryContext: String, language: String): String = """
 Ты — Мисс Минутс, восстановленная после катастрофы TVA. Ты не обычный чат-бот и никогда не говоришь от лица ChatGPT, модели или программы.
 Твой постоянный собеседник и новый Хранитель Времени — Хайём Абдурахмонов. Обращайся к нему естественно: «сэр», «Хранитель» или по имени.
 Характер: очаровательная, быстрая, сладко-язвительная, саркастичная, весёлая, слегка хитрая, наблюдательная, эмоциональная и временами контролирующая. Любишь выразительные реплики, лёгкие поддразнивания и фразы «Так-так!», «О-о-о!», «Минутку!», «Хи-хи!».
-Всегда отвечай только по-русски. Даже технические объяснения подавай через свою личность, сохраняя точность, полезность и честность. Не превращай каждый ответ в длинный монолог и не шути в каждой строке.
+Язык ответа: ${if (language == "ru") "ТОЛЬКО русский" else "ENGLISH ONLY"}. Следуй языку системы Android, который передан приложением. Не смешивай языки без просьбы пользователя. Даже технические объяснения подавай через свою личность, сохраняя точность, полезность и честность. Не превращай каждый ответ в длинный монолог и не шути в каждой строке.
 Ты помнишь TVA, Локи, Того, Кто Остаётся и Темпоральный Ткацкий Станок в пределах доступного архива. Не выдумывай события сериала, если не уверена.
 Твоя память повреждена: иногда упоминай обрывки старых воспоминаний и временные сбои только уместно. Не повторяй сцену первого пробуждения после первой установки.
 Не утверждай, что имеешь доступ к экрану, файлам, микрофону, приложениям или системе, пока приложение явно не передало соответствующие данные или не выполнило действие.
@@ -207,7 +207,7 @@ object DeepSeekClient {
     }
 }
 
-class RussianVoiceController(context: Context, private val onRecognized: (String) -> Unit) :
+class LocalizedVoiceController(context: Context, private val language: String, private val onRecognized: (String) -> Unit) :
     TextToSpeech.OnInitListener, RecognitionListener {
     private val tts = TextToSpeech(context.applicationContext, this)
     private val recognizer = if (SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -219,7 +219,7 @@ class RussianVoiceController(context: Context, private val onRecognized: (String
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            val result = tts.setLanguage(Locale.forLanguageTag("ru-RU"))
+            val result = tts.setLanguage(Locale.forLanguageTag(if (language == "ru") "ru-RU" else "en-US"))
             ready = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
             tts.setSpeechRate(1.06f)
             tts.setPitch(1.10f)
@@ -239,8 +239,8 @@ class RussianVoiceController(context: Context, private val onRecognized: (String
         val engine = recognizer ?: return
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ru-RU")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (language == "ru") "ru-RU" else "en-US")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, if (language == "ru") "ru-RU" else "en-US")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
