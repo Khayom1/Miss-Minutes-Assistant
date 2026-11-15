@@ -3,6 +3,7 @@ package com.khayom1.missminutes
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -111,6 +112,18 @@ internal fun detectConversationLanguage(text: String, fallback: String): String 
     }
 }
 
+private fun persistCharacterMotion(preferences: SharedPreferences, motion: MotionIntent) {
+    preferences.edit()
+        .putString("mm_motion_mood", motion.mood)
+        .putFloat("mm_motion_gaze", motion.gaze)
+        .putFloat("mm_motion_head_tilt", motion.headTilt)
+        .putFloat("mm_motion_body_lean", motion.bodyLean)
+        .putString("mm_motion_gesture", motion.gesture)
+        .putFloat("mm_motion_energy", motion.energy)
+        .putFloat("mm_motion_emphasis", motion.emphasis)
+        .apply()
+}
+
 private fun localizedGreeting(language: String): String = if (language == "ru") {
     "Так-так! Ну здравствуй, Хранитель Времени. Надеюсь, сегодня без очередного апокалипсиса временной линии?"
 } else {
@@ -156,10 +169,13 @@ private fun MissMinutesRoot(activity: Activity) {
             try {
                 voice.speak(text, elevenLabsKey) { isPlaying ->
                     isSpeaking = isPlaying
+                    val speechMotion = if (isPlaying) currentMotion.copy(gesture = "talk") else currentMotion
+                    persistCharacterMotion(prefs, speechMotion)
                 }
             } catch (error: Exception) {
                 isSpeaking = false
                 currentMotion = MotionIntent.neutral()
+                persistCharacterMotion(prefs, currentMotion)
                 status = "ELEVENLABS / ERROR"
                 messages.add(ChatLine("assistant", "ElevenLabs: " + (error.message ?: "unknown error")))
             }
@@ -233,6 +249,7 @@ private fun MissMinutesRoot(activity: Activity) {
                 messages.add(ChatLine("assistant", response))
                 memory.saveConversation("assistant", response)
                 currentMotion = turn
+                persistCharacterMotion(prefs, turn)
                 speak(response)
                 status = "TVA SYSTEM / STABLE"
             } catch (error: Exception) {
