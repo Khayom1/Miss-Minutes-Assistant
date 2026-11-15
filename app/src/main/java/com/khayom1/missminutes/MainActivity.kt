@@ -209,10 +209,20 @@ private fun MissMinutesRoot(activity: Activity) {
         scope.launch {
             try {
                 val prompt = PersonalityEngine.buildSystemPrompt(memory.buildPromptContext(), assistantLanguage)
-                val response = DeepSeekClient.reply(key, prompt, message)
+                val motionPrompt = prompt + """
+
+ФОРМАТ ОТВЕТА: верни только один JSON-объект без Markdown и без текста до/после:
+{"reply":"текст ответа пользователю","animation":"одно имя из списка","emotion":"neutral|happy|curious|surprised|angry|sad|sleepy"}
+Выбери действие персонажа по смыслу текущего диалога, а не случайно.
+Доступные анимации текущей 3D-модели: Idle_Breathe, Blink, Wave_Greeting, Pointing, Talk_Loop, Laugh, Surprised, Angry_Expression, Sleep_Idle, Glitch_Recovery, Walk_Cycle, Run_Cycle, Look_Around, Peek_Around, Spin_In_Place, Nervous_Glance, Cheerful_Bounce.
+Не выдумывай другие анимации. Для обычного ответа выбери Idle_Breathe. Для приветствия — Wave_Greeting, для шутки — Laugh, для удивления — Surprised, для объяснения с акцентом — Pointing, для любопытства — Look_Around или Peek_Around.
+"""
+                val rawTurn = DeepSeekClient.reply(key, motionPrompt, message)
+                val turn = MotionIntent.parse(rawTurn)
+                val response = turn.reply
                 messages.add(ChatLine("assistant", response))
                 memory.saveConversation("assistant", response)
-                selectedAnimation = "Talk_Loop"
+                selectedAnimation = if (turn.animation == "Idle_Breathe") "Talk_Loop" else turn.animation
                 speak(response)
                 status = "TVA SYSTEM / STABLE"
             } catch (error: Exception) {

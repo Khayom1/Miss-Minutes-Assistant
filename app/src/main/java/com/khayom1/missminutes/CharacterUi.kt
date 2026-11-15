@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -30,6 +31,7 @@ import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberModelLoader
 import kotlinx.coroutines.delay
+import kotlin.random.Random
 
 @Composable
 fun CharacterScene(
@@ -40,6 +42,22 @@ fun CharacterScene(
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
     val loops = setOf("Idle_Breathe", "Talk_Loop", "Walk_Cycle", "Run_Cycle", "Look_Around")
+    var runtimeAnimation by remember { mutableStateOf(animation) }
+
+    // Autonomous low-frequency idle behavior uses only clips shipped with the current GLB.
+    // It never assumes that missing rig controls exist.
+    LaunchedEffect(animation) {
+        runtimeAnimation = animation
+        if (animation == "Idle_Breathe") {
+            val idleChoices = listOf("Blink", "Look_Around", "Nervous_Glance", "Peek_Around")
+            while (true) {
+                delay(4200L + Random.nextLong(2800L))
+                runtimeAnimation = idleChoices.random()
+                delay(900L)
+                runtimeAnimation = "Idle_Breathe"
+            }
+        }
+    }
     SceneView(
         modifier = modifier,
         engine = engine,
@@ -52,8 +70,8 @@ fun CharacterScene(
                 modelInstance = it,
                 scaleToUnits = modelScale,
                 autoAnimate = false,
-                animationName = animation,
-                animationLoop = animation in loops,
+                animationName = runtimeAnimation,
+                animationLoop = runtimeAnimation in loops,
                 animationSpeed = 1.0f
             )
         }
