@@ -43,6 +43,8 @@ jobs:
         run: mkdir -p app/src/main/assets/models && cp assets/models/miss-minutes.glb app/src/main/assets/models/miss-minutes.glb
       - name: Validate GLB and animation contract
         run: node tools/validate-model.mjs app/src/main/assets/models/miss-minutes.glb
+      - name: Check advanced-rig validator syntax
+        run: node --check tools/validate-advanced-rig.mjs
       - name: Run tests and assemble APK
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
       - name: Upload installable debug APK
