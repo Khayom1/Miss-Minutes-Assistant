@@ -103,16 +103,25 @@ class SecretStore(context: Context) {
     }
 }
 
-class MemoryDatabase(context: Context) : SQLiteOpenHelper(context, "miss_minutes_memory.db", null, 1) {
+class MemoryDatabase(context: Context) : SQLiteOpenHelper(context, "miss_minutes_memory.db", null, DATABASE_VERSION) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE tva_memory(id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL UNIQUE, body TEXT NOT NULL, updated_at INTEGER NOT NULL)")
         db.execSQL("CREATE TABLE personal_memory(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, body TEXT NOT NULL, updated_at INTEGER NOT NULL)")
         db.execSQL("CREATE TABLE notifications(id INTEGER PRIMARY KEY AUTOINCREMENT, package_name TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, created_at INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX idx_personal_time ON personal_memory(updated_at DESC)")
         db.execSQL("CREATE INDEX idx_notifications_time ON notifications(created_at DESC)")
+        db.execSQL("CREATE INDEX idx_notifications_package_time ON notifications(package_name, created_at DESC)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_notifications_package_time ON notifications(package_name, created_at DESC)")
+        }
+    }
+
+    private companion object {
+        const val DATABASE_VERSION = 2
+    }
 
     fun seedTvaArchive() {
         val entries = listOf(
@@ -136,8 +145,15 @@ class MemoryDatabase(context: Context) : SQLiteOpenHelper(context, "miss_minutes
         val values = ContentValues().apply {
             put("kind", kind.take(40)); put("body", body.take(4000)); put("updated_at", System.currentTimeMillis())
         }
-        writableDatabase.insert("personal_memory", null, values)
-        writableDatabase.execSQL("DELETE FROM personal_memory WHERE id NOT IN (SELECT id FROM personal_memory ORDER BY updated_at DESC, id DESC LIMIT 500)")
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertOrThrow("personal_memory", null, values)
+            db.execSQL("DELETE FROM personal_memory WHERE id NOT IN (SELECT id FROM personal_memory ORDER BY updated_at DESC, id DESC LIMIT 500)")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     fun saveConversation(role: String, body: String) = savePersonalMemory("dialogue_" + role.take(16), body)
@@ -150,8 +166,15 @@ class MemoryDatabase(context: Context) : SQLiteOpenHelper(context, "miss_minutes
             put("body", body.take(1200))
             put("created_at", System.currentTimeMillis())
         }
-        writableDatabase.insert("notifications", null, values)
-        writableDatabase.execSQL("DELETE FROM notifications WHERE id NOT IN (SELECT id FROM notifications ORDER BY created_at DESC, id DESC LIMIT 50)")
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertOrThrow("notifications", null, values)
+            db.execSQL("DELETE FROM notifications WHERE id NOT IN (SELECT id FROM notifications ORDER BY created_at DESC, id DESC LIMIT 50)")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     fun recentNotifications(): String = readRows(

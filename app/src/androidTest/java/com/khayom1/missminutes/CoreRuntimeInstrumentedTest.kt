@@ -99,6 +99,34 @@ class CoreRuntimeInstrumentedTest {
     }
 
     @Test
+    fun databaseUpgradesVersionOneWithoutDroppingStoredMemory() {
+        val database = MemoryDatabase(context)
+        database.writableDatabase.delete("personal_memory", null, null)
+        database.savePersonalMemory("upgrade-test", "preserve-this-row")
+        database.writableDatabase.version = 1
+        database.close()
+
+        val upgraded = MemoryDatabase(context)
+        try {
+            val db = upgraded.readableDatabase
+            assertEquals(2, db.version)
+            val stored = db.rawQuery(
+                "SELECT body FROM personal_memory WHERE kind = ?",
+                arrayOf("upgrade-test")
+            ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            assertEquals("preserve-this-row", stored)
+            val indexExists = db.rawQuery(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?",
+                arrayOf("idx_notifications_package_time")
+            ).use { cursor -> cursor.moveToFirst(); cursor.getInt(0) == 1 }
+            assertTrue(indexExists)
+        } finally {
+            upgraded.close()
+            context.deleteDatabase("miss_minutes_memory.db")
+        }
+    }
+
+    @Test
     fun overlayServiceIsNotExportedAndRequiredPermissionsExist() {
         val overlayService = context.packageManager.getServiceInfo(
             ComponentName(context, com.khayom1.missminutes.overlay.OverlayService::class.java),

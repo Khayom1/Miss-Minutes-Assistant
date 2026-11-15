@@ -63,66 +63,67 @@ class OverlayService : LifecycleService() {
     private lateinit var frame: DraggableFrame
     private lateinit var layout: WindowManager.LayoutParams
     private var attached = false
+    private var startupReady = false
 
     override fun onCreate() {
         super.onCreate()
         try {
             createChannel()
             startForeground(NOTIFICATION_ID, notification())
-        } catch (_: Exception) {
-            stopSelf()
-            return
-        }
-        manager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val density = resources.displayMetrics.density
-        layout = WindowManager.LayoutParams(
-            (218 * density).toInt(),
-            (250 * density).toInt(),
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = (overlayPreferences.getInt(PREF_X_DP, 16) * density).toInt()
-            y = (overlayPreferences.getInt(PREF_Y_DP, 150) * density).toInt()
-        }
-        frame = DraggableFrame(
-            context = this,
-            move = { dx, dy ->
-                layout.x += dx
-                layout.y += dy
-                clampOverlayPosition()
-                runCatching { manager.updateViewLayout(frame, layout) }
-            },
-            onDragFinished = { persistOverlayPosition() }
-        )
-        clampOverlayPosition()
-        val compose = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(this@OverlayService)
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent {
-                OverlayCharacter(
-                    onStop = { stopSelf() },
-                    onCompact = { compact ->
-                        layout.width = ((if (compact) 78 else 218) * density).toInt()
-                        layout.height = ((if (compact) 78 else 250) * density).toInt()
-                        clampOverlayPosition()
-                        runCatching { manager.updateViewLayout(frame, layout) }
-                    }
-                )
+            manager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val density = resources.displayMetrics.density
+            layout = WindowManager.LayoutParams(
+                (218 * density).toInt(),
+                (250 * density).toInt(),
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = (overlayPreferences.getInt(PREF_X_DP, 16) * density).toInt()
+                y = (overlayPreferences.getInt(PREF_Y_DP, 150) * density).toInt()
             }
-        }
-        frame.addView(compose, FrameLayout.LayoutParams(-1, -1))
-        try {
+            frame = DraggableFrame(
+                context = this,
+                move = { dx, dy ->
+                    layout.x += dx
+                    layout.y += dy
+                    clampOverlayPosition()
+                    runCatching { manager.updateViewLayout(frame, layout) }
+                },
+                onDragFinished = { persistOverlayPosition() }
+            )
+            clampOverlayPosition()
+            val compose = ComposeView(this).apply {
+                setViewTreeLifecycleOwner(this@OverlayService)
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+                setContent {
+                    OverlayCharacter(
+                        onStop = { stopSelf() },
+                        onCompact = { compact ->
+                            layout.width = ((if (compact) 78 else 218) * density).toInt()
+                            layout.height = ((if (compact) 78 else 250) * density).toInt()
+                            clampOverlayPosition()
+                            runCatching { manager.updateViewLayout(frame, layout) }
+                        }
+                    )
+                }
+            }
+            frame.addView(compose, FrameLayout.LayoutParams(-1, -1))
             manager.addView(frame, layout)
             attached = true
+            startupReady = true
         } catch (_: Exception) {
+            if (attached) runCatching { manager.removeView(frame) }
+            attached = false
+            runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
             stopSelf()
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!startupReady) return START_NOT_STICKY
         if (intent?.action == ACTION_STOP) {
             stopSelf()
             return START_NOT_STICKY
