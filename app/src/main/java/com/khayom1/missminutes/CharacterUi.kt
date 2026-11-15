@@ -54,12 +54,40 @@ internal fun MotionIntent.animationName(): String = when {
 internal fun MotionIntent.animationSpeed(): Float =
     (0.85f + energy.coerceIn(0f, 1f) * 0.35f).coerceIn(0.85f, 1.2f)
 
+internal fun isLoopingCharacterAnimation(name: String): Boolean =
+    name in setOf("Idle_Breathe", "Talk_Loop", "Walk_Cycle", "Run_Cycle", "Look_Around")
+
+internal fun characterAnimationDurationMillis(name: String): Long = when (name) {
+    "Blink" -> 300L
+    "Wave_Greeting" -> 1_850L
+    "Pointing" -> 1_250L
+    "Laugh" -> 850L
+    "Surprised" -> 950L
+    "Angry_Expression" -> 1_050L
+    "Sleep_Idle" -> 1_550L
+    "Glitch_Recovery" -> 700L
+    "Peek_Around" -> 1_800L
+    "Spin_In_Place" -> 2_000L
+    "Nervous_Glance" -> 1_200L
+    "Cheerful_Bounce" -> 1_500L
+    else -> 1_200L
+}
+
 @Composable
 fun CharacterScene(
     modifier: Modifier = Modifier,
     motion: MotionIntent = MotionIntent.neutral(),
     modelScale: Float = 1.0f
 ) {
+    var activeAnimation by remember { mutableStateOf(motion.animationName()) }
+    LaunchedEffect(motion) {
+        val selected = motion.animationName()
+        activeAnimation = selected
+        if (!isLoopingCharacterAnimation(selected)) {
+            delay(characterAnimationDurationMillis(selected))
+            activeAnimation = "Idle_Breathe"
+        }
+    }
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
     SceneView(
@@ -74,8 +102,8 @@ fun CharacterScene(
                 modelInstance = it,
                 scaleToUnits = modelScale,
                 autoAnimate = false,
-                animationName = motion.animationName(),
-                animationLoop = true,
+                animationName = activeAnimation,
+                animationLoop = isLoopingCharacterAnimation(activeAnimation),
                 animationSpeed = motion.animationSpeed()
             )
         }
