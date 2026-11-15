@@ -36,6 +36,10 @@ class MotionIntentTest {
         assertEquals("Cheerful_Bounce", MotionIntent.neutral().copy(mood = "happy").animationName())
         assertEquals("Look_Around", MotionIntent.neutral().copy(mood = "curious").animationName())
         assertEquals("Idle_Breathe", MotionIntent.neutral().animationName())
+        assertEquals(true, isLoopingCharacterAnimation("Idle_Breathe"))
+        assertEquals(true, isLoopingCharacterAnimation("Talk_Loop"))
+        assertEquals(false, isLoopingCharacterAnimation("Wave_Greeting"))
+        assertEquals(1_850L, characterAnimationDurationMillis("Wave_Greeting"))
     }
 
     @Test fun clampsAnimationSpeed() {
