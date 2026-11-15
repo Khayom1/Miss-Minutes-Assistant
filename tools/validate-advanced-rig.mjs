@@ -245,7 +245,8 @@ try {
   for (const side of ["l", "r"]) {
     for (const finger of ["thumb", "index", "middle", "ring", "pinky"]) {
       const baseIndex = names.findIndex(name =>
-        name.includes(`finger_${finger}_${side}`) || name.includes(`${finger}_${side}`)
+        (name.includes(`finger_${finger}_${side}`) || name.includes(`${finger}_${side}`)) &&
+        !name.includes(`finger_tip_${finger}_${side}`)
       );
       const tipIndex = finger === "thumb" ? -1 : names.findIndex(name =>
         name.includes(`finger_tip_${finger}_${side}`)
