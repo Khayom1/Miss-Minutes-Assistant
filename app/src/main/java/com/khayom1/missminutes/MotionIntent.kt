@@ -15,7 +15,7 @@ data class MotionIntent(
 ) {
     companion object {
         private val moods = setOf("neutral", "happy", "curious", "surprised", "angry", "sad", "sleepy", "playful")
-        private val gestures = setOf("none", "open_hands", "wave", "point", "shrug", "hands_together", "present")
+        private val gestures = setOf("none", "talk", "open_hands", "wave", "point", "shrug", "hands_together", "present")
 
         fun parse(raw: String, fallbackReply: String = raw): MotionIntent {
             val first = raw.indexOf('{')
