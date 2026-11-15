@@ -55,8 +55,9 @@ class SecretStore(context: Context) {
         }
     }
 
-    fun read(name: String): String? = try {
-        val encoded = preferences.getString(name, null) ?: return null
+    fun read(name: String): String? {
+        return try {
+            val encoded = preferences.getString(name, null) ?: return null
         val payload = Base64.decode(encoded, Base64.NO_WRAP)
         val versioned = payload.size > PAYLOAD_MAGIC.size + 12 &&
             payload.copyOfRange(0, PAYLOAD_MAGIC.size).contentEquals(PAYLOAD_MAGIC)
@@ -70,10 +71,11 @@ class SecretStore(context: Context) {
         )
         if (versioned) cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
         val value = String(cipher.doFinal(payload.copyOfRange(ivOffset + 12, payload.size)), Charsets.UTF_8)
-        if (!versioned) save(name, value)
-        value
-    } catch (_: Exception) {
-        null
+            if (!versioned) save(name, value)
+            value
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private companion object {
