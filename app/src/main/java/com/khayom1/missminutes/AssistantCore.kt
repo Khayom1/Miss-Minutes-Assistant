@@ -170,6 +170,9 @@ object PersonalityEngine {
 object DeepSeekClient {
     suspend fun reply(apiKey: String, systemPrompt: String, userMessage: String): String = withContext(Dispatchers.IO) {
         require(apiKey.isNotBlank()) { "DeepSeek API Key не задан" }
+        require(userMessage.length <= MAX_USER_MESSAGE_CHARS) {
+            "Сообщение слишком длинное: максимум $MAX_USER_MESSAGE_CHARS символов"
+        }
         val connection = URL("https://api.deepseek.com/chat/completions").openConnection() as HttpURLConnection
         connection.instanceFollowRedirects = false
         connection.requestMethod = "POST"
@@ -211,6 +214,7 @@ object DeepSeekClient {
     }
 
     private const val MAX_RESPONSE_BYTES = 1_048_576
+    private const val MAX_USER_MESSAGE_CHARS = 12_000
 }
 
 class LocalizedVoiceController(
@@ -485,8 +489,12 @@ class NotificationReaderService : NotificationListenerService() {
         val title = extras.getCharSequence("android.title")?.toString().orEmpty()
         val body = extras.getCharSequence("android.text")?.toString().orEmpty()
         if (title.isBlank() && body.isBlank()) return
-        val database = MemoryDatabase(applicationContext)
-        try { database.saveNotification(item.packageName, title, body) } finally { database.close() }
+        val database = runCatching { MemoryDatabase(applicationContext) }.getOrNull() ?: return
+        try {
+            runCatching { database.saveNotification(item.packageName, title, body) }
+        } finally {
+            runCatching { database.close() }
+        }
     }
 }
 
