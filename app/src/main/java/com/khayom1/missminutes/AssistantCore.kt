@@ -519,21 +519,25 @@ internal fun classifyLocalCommand(raw: String): LocalCommandType {
         "back", "go back", "press back"
     )
     val timerPrefixes = listOf(
-        "таймер", "поставь таймер", "поставь мне таймер", "установи таймер",
+        "поставь таймер", "поставь мне таймер", "установи таймер",
         "установи мне таймер", "запусти таймер", "создай таймер",
-        "timer", "set timer", "set a timer", "start timer", "start a timer",
+        "set timer", "set a timer", "start timer", "start a timer",
         "create timer", "create a timer", "launch timer"
     )
     val alarmPrefixes = listOf(
-        "будильник", "поставь будильник", "поставь мне будильник", "установи будильник",
+        "поставь будильник", "поставь мне будильник", "установи будильник",
         "установи мне будильник", "создай будильник",
-        "alarm", "set alarm", "set an alarm", "create alarm", "create an alarm"
+        "set alarm", "set an alarm", "create alarm", "create an alarm"
     )
     return when {
         command in homeCommands -> LocalCommandType.HOME
         command in backCommands -> LocalCommandType.BACK
-        timerPrefixes.any { command == it || command.startsWith("$it ") } -> LocalCommandType.TIMER
-        alarmPrefixes.any { command == it || command.startsWith("$it ") } -> LocalCommandType.ALARM
+        command in setOf("таймер", "timer") ||
+            timerPrefixes.any { command == it || command.startsWith("$it ") } ||
+            Regex("^(таймер|timer)\\s+(на|for)\\b").containsMatchIn(command) -> LocalCommandType.TIMER
+        command in setOf("будильник", "alarm") ||
+            alarmPrefixes.any { command == it || command.startsWith("$it ") } ||
+            Regex("^(будильник|alarm)\\s+(на|for)\\b").containsMatchIn(command) -> LocalCommandType.ALARM
         Regex("^(открой|запусти|включи|open|launch)\\s+.+$").matches(command) -> LocalCommandType.OPEN_APP
         else -> LocalCommandType.NONE
     }
