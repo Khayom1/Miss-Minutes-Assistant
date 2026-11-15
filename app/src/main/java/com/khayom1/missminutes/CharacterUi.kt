@@ -27,67 +27,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import io.github.sceneview.SceneView
+import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberCameraManipulator
 import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberModelLoader
 
 /**
- * The model is intentionally rendered without canned clips. SceneView's current
- * public ModelNode wrapper does not expose a stable cross-version bone handle;
- * procedural joint writes are kept in the dedicated rig driver below and only
- * run after the model's actual Filament asset has supplied a verified name map.
+ * Converts the AI's semantic intent to a clip supported by the currently shipped
+ * GLB. Clip names are validated by tools/validate-model.mjs in CI.
+ *
+ * This is an animation-selection layer, not a claim of live bone/morph posing.
  */
-private class ProceduralRigDriver {
-    data class RigChannels(
-        val head: String? = null,
-        val torso: String? = null,
-        val eyes: String? = null,
-        val leftArm: String? = null,
-        val rightArm: String? = null
-    )
-
-    data class Pose(
-        val headTilt: Float,
-        val gazeYaw: Float,
-        val bodyLean: Float,
-        val gesture: String,
-        val armWeight: Float,
-        val blink: Float,
-        val mood: String,
-        val energy: Float
-    )
-
-    fun availableChannels(nodeNames: Set<String>): RigChannels = RigChannels(
-        head = nodeNames.firstOrNull { it.contains("head", ignoreCase = true) },
-        torso = nodeNames.firstOrNull { it.contains("spine", ignoreCase = true) || it.contains("torso", ignoreCase = true) },
-        eyes = nodeNames.firstOrNull { it.contains("eye", ignoreCase = true) },
-        leftArm = nodeNames.firstOrNull { it.contains("leftarm", ignoreCase = true) || it.contains("arm_l", ignoreCase = true) },
-        rightArm = nodeNames.firstOrNull { it.contains("rightarm", ignoreCase = true) || it.contains("arm_r", ignoreCase = true) }
-    )
-
-    fun sanitize(intent: MotionIntent): MotionIntent = intent.copy(
-        gaze = intent.gaze.coerceIn(-0.65f, 0.65f),
-        headTilt = intent.headTilt.coerceIn(-0.55f, 0.55f),
-        bodyLean = intent.bodyLean.coerceIn(-0.22f, 0.22f),
-        energy = intent.energy.coerceIn(0f, 1f),
-        emphasis = intent.emphasis.coerceIn(0f, 1f)
-    )
-
-    fun pose(intent: MotionIntent): Pose {
-        val safe = sanitize(intent)
-        val gestureWeight = if (safe.gesture == "none") 0f else safe.energy * (0.35f + safe.emphasis * 0.65f)
-        return Pose(
-            headTilt = safe.headTilt,
-            gazeYaw = safe.gaze,
-            bodyLean = safe.bodyLean,
-            gesture = safe.gesture,
-            armWeight = gestureWeight,
-            blink = 0f,
-            mood = safe.mood,
-            energy = safe.energy
-        )
-    }
+internal fun MotionIntent.animationName(): String = when {
+    gesture == "talk" -> "Talk_Loop"
+    gesture == "wave" -> "Wave_Greeting"
+    gesture == "point" -> "Pointing"
+    gesture == "shrug" || gesture == "open_hands" || gesture == "present" -> "Wave_Greeting"
+    mood == "surprised" -> "Surprised"
+    mood == "angry" -> "Angry_Expression"
+    mood == "sad" || mood == "sleepy" -> "Sleep_Idle"
+    mood == "happy" || mood == "playful" -> "Cheerful_Bounce"
+    mood == "curious" || gaze != 0f -> "Look_Around"
+    else -> "Idle_Breathe"
 }
+
+internal fun MotionIntent.animationSpeed(): Float =
+    (0.85f + energy.coerceIn(0f, 1f) * 0.35f).coerceIn(0.85f, 1.2f)
 
 @Composable
 fun CharacterScene(
@@ -105,7 +70,14 @@ fun CharacterScene(
     ) {
         val instance = rememberModelInstance(modelLoader, "models/miss-minutes.glb")
         instance?.let {
-            ModelNode(modelInstance = it, scaleToUnits = modelScale, autoAnimate = false)
+            ModelNode(
+                modelInstance = it,
+                scaleToUnits = modelScale,
+                autoAnimate = false,
+                animationName = motion.animationName(),
+                animationLoop = true,
+                animationSpeed = motion.animationSpeed()
+            )
         }
     }
 }
