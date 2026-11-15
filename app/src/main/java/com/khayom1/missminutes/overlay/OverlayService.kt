@@ -32,7 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,7 +52,6 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import com.khayom1.missminutes.CharacterScene
 import com.khayom1.missminutes.MotionIntent
 import com.khayom1.missminutes.MainActivity
-import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 class OverlayService : LifecycleService() {
@@ -191,22 +191,34 @@ class OverlayService : LifecycleService() {
     }
 }
 
+private fun readStoredMotion(preferences: android.content.SharedPreferences): MotionIntent =
+    MotionIntent.neutral().copy(
+        mood = preferences.getString("mm_motion_mood", "neutral") ?: "neutral",
+        gaze = preferences.getFloat("mm_motion_gaze", 0f),
+        headTilt = preferences.getFloat("mm_motion_head_tilt", 0f),
+        bodyLean = preferences.getFloat("mm_motion_body_lean", 0f),
+        gesture = preferences.getString("mm_motion_gesture", "none") ?: "none",
+        energy = preferences.getFloat("mm_motion_energy", 0.35f),
+        emphasis = preferences.getFloat("mm_motion_emphasis", 0.2f)
+    )
+
 @Composable
 private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
     var compact by remember { mutableStateOf(false) }
-    var motion by remember { mutableStateOf(MotionIntent.neutral()) }
+    val context = LocalContext.current
+    val preferences = remember(context) {
+        context.getSharedPreferences("tva_session", android.content.Context.MODE_PRIVATE)
+    }
+    var motion by remember(preferences) { mutableStateOf(readStoredMotion(preferences)) }
 
-    LaunchedEffect(compact) {
-        if (!compact) {
-            while (true) {
-                delay(26000)
-                motion = MotionIntent.neutral().copy(mood = "curious", gaze = 0.2f)
-                delay(2200)
-                motion = MotionIntent.neutral().copy(mood = "surprised")
-                delay(700)
-                motion = MotionIntent.neutral()
+    DisposableEffect(preferences) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key?.startsWith("mm_motion_") == true) {
+                motion = readStoredMotion(preferences)
             }
         }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
     if (compact) {
