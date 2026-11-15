@@ -265,34 +265,52 @@ class LocalizedVoiceController(
                 connection.disconnect()
             }
         }
-        withContext(Dispatchers.Main) {
-            runCatching { player?.stop() }
-            player?.release()
-            currentAudioFile?.delete()
-            currentAudioFile = audioFile
-            val next = android.media.MediaPlayer()
-            player = next
-            next.setOnCompletionListener { completed ->
-                onPlaybackState(false)
-                completed.release()
+        try {
+            withContext(Dispatchers.Main) {
+                runCatching { player?.stop() }
+                player?.release()
                 currentAudioFile?.delete()
-                currentAudioFile = null
-                if (player === completed) player = null
+                currentAudioFile = audioFile
+
+                val next = android.media.MediaPlayer()
+                player = next
+                next.setOnCompletionListener { completed ->
+                    onPlaybackState(false)
+                    completed.release()
+                    audioFile.delete()
+                    if (player === completed) {
+                        player = null
+                        if (currentAudioFile === audioFile) currentAudioFile = null
+                    }
+                }
+                next.setOnErrorListener { failed, _, _ ->
+                    onPlaybackState(false)
+                    failed.release()
+                    audioFile.delete()
+                    if (player === failed) {
+                        player = null
+                        if (currentAudioFile === audioFile) currentAudioFile = null
+                    }
+                    true
+                }
+                try {
+                    next.setDataSource(audioFile.absolutePath)
+                    next.setOnPreparedListener { prepared ->
+                        onPlaybackState(true)
+                        prepared.start()
+                    }
+                    next.prepareAsync()
+                } catch (error: Exception) {
+                    if (player === next) player = null
+                    currentAudioFile = if (currentAudioFile === audioFile) null else currentAudioFile
+                    runCatching { next.release() }
+                    audioFile.delete()
+                    throw error
+                }
             }
-            next.setOnErrorListener { failed, _, _ ->
-                onPlaybackState(false)
-                failed.release()
-                currentAudioFile?.delete()
-                currentAudioFile = null
-                if (player === failed) player = null
-                true
-            }
-            next.setDataSource(audioFile.absolutePath)
-            next.setOnPreparedListener { prepared ->
-                onPlaybackState(true)
-                prepared.start()
-            }
-            next.prepareAsync()
+        } catch (error: Exception) {
+            audioFile.delete()
+            throw error
         }
     }
 
