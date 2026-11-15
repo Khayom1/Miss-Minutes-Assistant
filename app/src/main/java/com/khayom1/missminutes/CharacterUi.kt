@@ -40,7 +40,8 @@ import java.util.concurrent.atomic.AtomicReference
  * Converts the AI's semantic intent to a clip supported by the currently shipped
  * GLB. Clip names are validated by tools/validate-model.mjs in CI.
  *
- * This is an animation-selection layer, not a claim of live bone/morph posing.
+ * ProceduralRigController applies named node/bone transforms after each authored clip update.
+ * Morph-target facial deformation and phoneme-level lip sync remain separate release gates.
  */
 internal fun MotionIntent.animationName(): String = when {
     gesture == "talk" -> "Talk_Loop"
@@ -51,7 +52,7 @@ internal fun MotionIntent.animationName(): String = when {
     mood == "angry" -> "Angry_Expression"
     mood == "sad" || mood == "sleepy" -> "Sleep_Idle"
     mood == "happy" || mood == "playful" -> "Cheerful_Bounce"
-    mood == "curious" || gaze != 0f -> "Look_Around"
+    mood == "curious" || gaze != 0f || gazeVertical != 0f -> "Look_Around"
     else -> "Idle_Breathe"
 }
 
