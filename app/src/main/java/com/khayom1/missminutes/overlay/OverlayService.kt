@@ -72,8 +72,7 @@ class OverlayService : LifecycleService() {
             (250 * density).toInt(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -140,7 +139,7 @@ class OverlayService : LifecycleService() {
         } else {
             Rect(0, 0, resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
         }
-        val position = clampOverlayPosition(
+        val position = clampOverlayCoordinates(
             x = layout.x,
             y = layout.y,
             screenWidth = bounds.width(),
