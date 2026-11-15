@@ -63,8 +63,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.khayom1.missminutes.overlay.OverlayService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val TvaBackground = Color(0xFF160D09)
 private val TvaPanel = Color(0xFF28170F)
@@ -89,19 +93,27 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private data class ChatLine(val role: String, val text: String)
+internal data class ChatLine(val role: String, val text: String)
+
+internal const val MAX_VISIBLE_MESSAGES = 100
+
+internal fun appendMessage(messages: MutableList<ChatLine>, line: ChatLine) {
+    if (messages.size >= MAX_VISIBLE_MESSAGES) messages.removeAt(0)
+    appendMessage(messages, line)
+}
 
 @Composable
 private fun MissMinutesRoot(activity: Activity) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("tva_session", Activity.MODE_PRIVATE) }
     val memory = remember { MemoryDatabase(context.applicationContext) }
+    DisposableEffect(memory) { onDispose { memory.close() } }
     val secrets = remember { SecretStore(context.applicationContext) }
     val scope = rememberCoroutineScope()
 
     var firstRun by remember { mutableStateOf(!prefs.getBoolean("initialization_complete", false)) }
     var showSettings by remember { mutableStateOf(false) }
-    var apiKeyDraft by remember { mutableStateOf(secrets.read("deepseek_api_key").orEmpty()) }
+    var apiKeyDraft by remember { mutableStateOf("") }
     var input by remember { mutableStateOf("") }
     var selectedAnimation by remember { mutableStateOf("Idle_Breathe") }
     var isThinking by remember { mutableStateOf(false) }
@@ -116,6 +128,13 @@ private fun MissMinutesRoot(activity: Activity) {
 
     val voice = remember(activity) { RussianVoiceController(activity) { recognizedText = it } }
     DisposableEffect(voice) { onDispose { voice.release() } }
+    DisposableEffect(voice, activity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) voice.cancelListening()
+        }
+        activity.lifecycle.addObserver(observer)
+        onDispose { activity.lifecycle.removeObserver(observer) }
+    }
 
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) voice.listen() else status = "MICROPHONE / PERMISSION DENIED"
@@ -125,10 +144,13 @@ private fun MissMinutesRoot(activity: Activity) {
     }
 
     LaunchedEffect(Unit) {
-        memory.seedTvaArchive()
-        if (!prefs.getBoolean("owner_seeded", false)) {
-            memory.savePersonalMemory("owner", "Мой новый Хранитель Времени — Хайём Абдурахмонов.")
-            prefs.edit().putBoolean("owner_seeded", true).apply()
+        apiKeyDraft = withContext(Dispatchers.IO) { secrets.read("deepseek_api_key").orEmpty() }
+        withContext(Dispatchers.IO) {
+            memory.seedTvaArchive()
+            if (!prefs.getBoolean("owner_seeded", false)) {
+                memory.savePersonalMemory("owner", "Мой новый Хранитель Времени — Хайём Абдурахмонов.")
+                prefs.edit().putBoolean("owner_seeded", true).apply()
+            }
         }
     }
 
@@ -136,57 +158,53 @@ private fun MissMinutesRoot(activity: Activity) {
         val message = text.trim()
         if (message.isEmpty() || isThinking) return
         input = ""
-        messages.add(ChatLine("user", message))
-        memory.saveConversation("user", message)
-
+        appendMessage(messages, ChatLine("user", message))
+        scope.launch(Dispatchers.IO) { memory.saveConversation("user", message) }
         val localAction = AndroidActions.tryHandle(activity, message)
         if (localAction != null) {
-            messages.add(ChatLine("assistant", localAction))
-            memory.saveConversation("assistant", localAction)
+            appendMessage(messages, ChatLine("assistant", localAction))
+            scope.launch(Dispatchers.IO) { memory.saveConversation("assistant", localAction) }
             voice.speak(localAction)
             return
         }
-
         if (message.contains("уведомлен", ignoreCase = true)) {
-            val notifications = memory.recentNotifications()
-            val response = if (notifications.isBlank()) {
-                "Хм-м... В архиве уведомлений пока пусто. Проверь, выдан ли мне доступ к уведомлениям Android."
-            } else {
-                "Так-так, вот что происходит в твоём цифровом королевстве:\n" + notifications
+            scope.launch {
+                val notifications = withContext(Dispatchers.IO) { memory.recentNotifications() }
+                val response = if (notifications.isBlank()) {
+                    "Хм-м... В архиве уведомлений пока пусто. Проверь, выдан ли мне доступ к уведомлениям Android."
+                } else {
+                    "Так-так, вот что происходит в твоём цифровом королевстве:\n" + notifications
+                }
+                appendMessage(messages, ChatLine("assistant", response))
+                withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
+                voice.speak(response)
             }
-            messages.add(ChatLine("assistant", response))
-            voice.speak(response)
             return
         }
-
-        val key = secrets.read("deepseek_api_key")
-        if (key.isNullOrBlank()) {
-            val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь DeepSeek API Key. И не вздумай записывать его на табличке у входа в TVA!"
-            messages.add(ChatLine("assistant", response))
-            voice.speak(response)
-            return
-        }
-
         isThinking = true
         status = "TEMPORAL LINK / CONNECTING"
         scope.launch {
             try {
-                val prompt = PersonalityEngine.buildSystemPrompt(memory.buildPromptContext())
-                val response = DeepSeekClient.reply(key, prompt, message)
-                messages.add(ChatLine("assistant", response))
-                memory.saveConversation("assistant", response)
+                val key = withContext(Dispatchers.IO) { secrets.read("deepseek_api_key") }
+                if (key.isNullOrBlank()) {
+                    val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь DeepSeek API Key. И не вздумай записывать его на табличке у входа в TVA!"
+                    appendMessage(messages, ChatLine("assistant", response))
+                    voice.speak(response)
+                    return@launch
+                }
+                val memoryContext = withContext(Dispatchers.IO) { memory.buildPromptContext() }
+                val response = DeepSeekClient.reply(key, PersonalityEngine.buildSystemPrompt(memoryContext), message)
+                appendMessage(messages, ChatLine("assistant", response))
+                withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
                 selectedAnimation = "Talk_Loop"
                 voice.speak(response)
                 status = "TVA SYSTEM / STABLE"
             } catch (error: Exception) {
                 val response = "Так, минутку! Канал связи с DeepSeek временно схлопнулся: " +
-                    (error.message ?: "неизвестная ошибка") +
-                    ". Проверь интернет и API Key, Хранитель."
-                messages.add(ChatLine("assistant", response))
+                    (error.message ?: "неизвестная ошибка") + ". Проверь интернет и API Key, Хранитель."
+                appendMessage(messages, ChatLine("assistant", response))
                 status = "TEMPORAL LINK / ERROR"
-            } finally {
-                isThinking = false
-            }
+            } finally { isThinking = false }
         }
     }
 
@@ -215,8 +233,8 @@ private fun MissMinutesRoot(activity: Activity) {
             onSend = { send(input) },
             onAnimationChange = { selectedAnimation = it },
             onSettings = {
-                apiKeyDraft = secrets.read("deepseek_api_key").orEmpty()
                 showSettings = true
+                scope.launch { apiKeyDraft = withContext(Dispatchers.IO) { secrets.read("deepseek_api_key").orEmpty() } }
             },
             onOverlay = {
                 if (Settings.canDrawOverlays(activity)) {
@@ -252,9 +270,14 @@ private fun MissMinutesRoot(activity: Activity) {
             apiKey = apiKeyDraft,
             onApiKeyChange = { apiKeyDraft = it },
             onSave = {
-                secrets.save("deepseek_api_key", apiKeyDraft.trim())
-                showSettings = false
-                status = if (apiKeyDraft.isBlank()) "API KEY / EMPTY" else "API KEY / STORED SECURELY"
+                val keyToSave = apiKeyDraft.trim()
+                scope.launch {
+                    try {
+                        withContext(Dispatchers.IO) { secrets.save("deepseek_api_key", keyToSave) }
+                        showSettings = false
+                        status = if (keyToSave.isBlank()) "API KEY / EMPTY" else "API KEY / STORED SECURELY"
+                    } catch (_: Exception) { status = "API KEY / STORAGE ERROR" }
+                }
             },
             onDismiss = { showSettings = false },
             onNotificationSettings = {

@@ -25,7 +25,7 @@ android {
             excludes += setOf("META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/DEPENDENCIES")
         }
     }
-    lint { abortOnError = false; checkReleaseBuilds = false }
+    lint { abortOnError = true; checkReleaseBuilds = true }
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.12.00"))
@@ -40,6 +40,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("io.github.sceneview:sceneview:4.18.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
 }
