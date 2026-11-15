@@ -47,11 +47,7 @@ fun CharacterScene(
     ) {
         val instance = rememberModelInstance(modelLoader, "models/miss-minutes.glb")
         instance?.let {
-            ModelNode(
-                modelInstance = it,
-                scaleToUnits = modelScale,
-                autoAnimate = false
-            )
+            ModelNode(modelInstance = it, scaleToUnits = modelScale, autoAnimate = false)
         }
     }
 }
