@@ -16,7 +16,7 @@ data class MotionIntent(
         private val gestures = setOf("none", "talk", "open_hands", "wave", "point", "shrug", "hands_together", "present")
 
         private fun jsonString(source: String, key: String): String? {
-            val pattern = Regex("\"\u0024{Regex.escape(key)}\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
+            val pattern = Regex(Regex.escape("\"" + key + "\"") + "\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
             val value = pattern.find(source)?.groupValues?.getOrNull(1) ?: return null
             return value.replace("\\\"", "\"")
                 .replace("\\n", "\n")
@@ -26,7 +26,7 @@ data class MotionIntent(
         }
 
         private fun jsonNumber(source: String, key: String, fallback: Double): Double {
-            val pattern = Regex("\"\u0024{Regex.escape(key)}\"\\s*:\\s*(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)")
+            val pattern = Regex(Regex.escape("\"" + key + "\"") + "\\s*:\\s*(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)")
             return pattern.find(source)?.groupValues?.getOrNull(1)?.toDoubleOrNull() ?: fallback
         }
 
