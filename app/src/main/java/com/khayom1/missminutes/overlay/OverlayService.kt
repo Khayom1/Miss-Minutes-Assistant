@@ -50,8 +50,10 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.setViewTreeLifecycleOwner
+import com.khayom1.missminutes.BehaviorMode
 import com.khayom1.missminutes.CharacterScene
 import com.khayom1.missminutes.MotionIntent
+import com.khayom1.missminutes.parseBehaviorMode
 import com.khayom1.missminutes.MainActivity
 import com.khayom1.missminutes.clampOverlayCoordinates
 import kotlin.math.abs
@@ -238,6 +240,9 @@ class OverlayService : LifecycleService() {
     }
 }
 
+private fun readStoredBehaviorMode(preferences: android.content.SharedPreferences): BehaviorMode =
+    parseBehaviorMode(preferences.getString("mm_behavior_mode", null))
+
 private fun readStoredMotion(preferences: android.content.SharedPreferences): MotionIntent =
     MotionIntent.neutral().copy(
         mood = preferences.getString("mm_motion_mood", "neutral") ?: "neutral",
@@ -258,11 +263,15 @@ private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
         context.getSharedPreferences("tva_session", android.content.Context.MODE_PRIVATE)
     }
     var motion by remember(preferences) { mutableStateOf(readStoredMotion(preferences)) }
+    var behaviorMode by remember(preferences) { mutableStateOf(readStoredBehaviorMode(preferences)) }
 
     DisposableEffect(preferences) {
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key?.startsWith("mm_motion_") == true) {
                 motion = readStoredMotion(preferences)
+            }
+            if (key == "mm_behavior_mode") {
+                behaviorMode = readStoredBehaviorMode(preferences)
             }
         }
         preferences.registerOnSharedPreferenceChangeListener(listener)
@@ -297,7 +306,12 @@ private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
                         }
                     }
                 }
-                CharacterScene(Modifier.fillMaxWidth().height(205.dp), motion = motion, modelScale = 0.78f)
+                CharacterScene(
+                    Modifier.fillMaxWidth().height(205.dp),
+                    motion = motion,
+                    modelScale = 0.78f,
+                    behaviorMode = behaviorMode
+                )
                 Text("Так-так, я здесь!", color = Color(0xFFFFE8D2), fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
             }
         }

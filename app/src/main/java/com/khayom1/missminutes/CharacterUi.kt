@@ -51,6 +51,9 @@ internal fun resolveBehaviorMode(
     else -> BehaviorMode.IDLE
 }
 
+internal fun parseBehaviorMode(value: String?): BehaviorMode =
+    value?.let { runCatching { BehaviorMode.valueOf(it) }.getOrNull() } ?: BehaviorMode.IDLE
+
 /**
  * Converts the AI's semantic intent to a clip supported by the currently shipped
  * GLB. Clip names are validated by tools/validate-model.mjs in CI.

@@ -156,6 +156,15 @@ private fun MissMinutesRoot(activity: Activity) {
 
     DisposableEffect(memory) { onDispose { memory.close() } }
 
+    val resolvedBehaviorMode = resolveBehaviorMode(
+        isListening = isListening,
+        isThinking = isThinking,
+        isSpeaking = isSpeaking
+    )
+    LaunchedEffect(resolvedBehaviorMode) {
+        prefs.edit().putString("mm_behavior_mode", resolvedBehaviorMode.name).apply()
+    }
+
     val voice = remember(activity, assistantLanguage) {
         LocalizedVoiceController(
             activity,
@@ -293,6 +302,7 @@ private fun MissMinutesRoot(activity: Activity) {
             motion = if (isSpeaking) currentMotion.copy(gesture = "talk") else currentMotion,
             isThinking = isThinking,
             isListening = isListening,
+            behaviorMode = resolvedBehaviorMode,
             onInputChange = { input = it },
             onSend = { send(input) },
             onAnimationChange = { /* motion is produced by semantic intent, not manual clip selection */ },
@@ -368,6 +378,7 @@ private fun Dashboard(
     motion: MotionIntent,
     isThinking: Boolean,
     isListening: Boolean,
+    behaviorMode: BehaviorMode,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onAnimationChange: (String) -> Unit,
@@ -402,11 +413,7 @@ private fun Dashboard(
                     Modifier.fillMaxWidth().height(285.dp),
                     motion = motion,
                     modelScale = 1.05f,
-                    behaviorMode = resolveBehaviorMode(
-                        isListening = isListening,
-                        isThinking = isThinking,
-                        isSpeaking = motion.gesture == "talk"
-                    )
+                    behaviorMode = behaviorMode
                 )
                 Text("TVA CHARACTER // 3D LIVE RIG", color = Color(0xFFD6A57B), fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
             }

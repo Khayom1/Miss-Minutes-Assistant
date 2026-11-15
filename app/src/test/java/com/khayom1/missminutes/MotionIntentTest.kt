@@ -26,6 +26,13 @@ class MotionIntentTest {
         assertEquals("happy", result.mood)
     }
 
+    @Test fun parsesPersistedBehaviorModesSafely() {
+        assertEquals(BehaviorMode.SPEAKING, parseBehaviorMode("SPEAKING"))
+        assertEquals(BehaviorMode.HIDDEN, parseBehaviorMode("HIDDEN"))
+        assertEquals(BehaviorMode.IDLE, parseBehaviorMode("unknown"))
+        assertEquals(BehaviorMode.IDLE, parseBehaviorMode(null))
+    }
+
     @Test fun resolvesListeningThinkingAndSpeechByPriority() {
         assertEquals(BehaviorMode.LISTENING, resolveBehaviorMode(true, false, false))
         assertEquals(BehaviorMode.THINKING, resolveBehaviorMode(true, true, false))
