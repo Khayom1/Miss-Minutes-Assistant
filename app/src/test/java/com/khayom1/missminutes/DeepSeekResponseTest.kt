@@ -17,6 +17,11 @@ class DeepSeekResponseTest {
     @Test(expected = IllegalStateException::class)
     fun rejectsMalformedPayload() { parseDeepSeekChatCompletion("not-json") }
     @Test(expected = IllegalStateException::class)
+    fun rejectsNullAssistantContent() {
+        parseDeepSeekChatCompletion("""{"choices":[{"finish_reason":"stop","message":{"content":null}}]}""")
+    }
+
+    @Test(expected = IllegalStateException::class)
     fun rejectsEmptyAssistantContent() {
         parseDeepSeekChatCompletion("""{"choices":[{"finish_reason":"stop","message":{"content":" "}}]}""")
     }

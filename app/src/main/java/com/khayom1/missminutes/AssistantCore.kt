@@ -205,7 +205,7 @@ internal fun parseDeepSeekChatCompletion(payload: String): String {
     }
     val message = choice.optJSONObject("message")
         ?: throw IllegalStateException("DeepSeek response is missing its message")
-    val content = message.optString("content").trim()
+    val content = (message.opt("content") as? String).orEmpty().trim()
     if (content.isBlank()) throw IllegalStateException("DeepSeek returned an empty response")
     return content
 }
@@ -235,7 +235,6 @@ object DeepSeekClient {
                 .put("thinking", JSONObject().put("type", "disabled"))
                 .put("stream", false)
                 .put("max_tokens", 700)
-                .put("temperature", 0.8)
                 .put("response_format", JSONObject().put("type", "json_object"))
                 .put("messages", messages)
 
@@ -250,7 +249,8 @@ object DeepSeekClient {
                         error.optJSONObject("detail")?.optString("message").orEmpty().ifBlank { error.optString("message") }
                     }
                 }.getOrNull()
-                throw IllegalStateException("DeepSeek HTTP " + status + if (detail.isNullOrBlank()) "" else ": " + detail)
+                val safeDetail = detail.orEmpty().take(500)
+                throw IllegalStateException("DeepSeek HTTP " + status + if (safeDetail.isBlank()) "" else ": " + safeDetail)
             }
             parseDeepSeekChatCompletion(payload)
         } finally {
@@ -324,7 +324,8 @@ class LocalizedVoiceController(
                             json.optString("message")
                         }
                     }.getOrNull().orEmpty()
-                    throw IllegalStateException("ElevenLabs HTTP $status" + if (message.isBlank()) "" else ": $message")
+                    val safeMessage = message.take(500)
+                    throw IllegalStateException("ElevenLabs HTTP $status" + if (safeMessage.isBlank()) "" else ": $safeMessage")
                 }
                 val bytes = connection.inputStream.use { it.readBoundedBytes(MAX_AUDIO_BYTES) }
                 if (bytes.isEmpty()) throw IllegalStateException("ElevenLabs аудиои холӣ баргардонд")

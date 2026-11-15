@@ -3,6 +3,7 @@ package com.khayom1.missminutes
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.pm.ApplicationInfo
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.core.app.ApplicationProvider
@@ -97,11 +98,23 @@ class CoreRuntimeInstrumentedTest {
 
     @Test
     fun overlayServiceIsNotExportedAndRequiredPermissionsExist() {
-        val service = context.packageManager.getServiceInfo(
+        val overlayService = context.packageManager.getServiceInfo(
             ComponentName(context, com.khayom1.missminutes.overlay.OverlayService::class.java),
             0
         )
-        assertFalse(service.exported)
+        assertFalse(overlayService.exported)
+        val notificationService = context.packageManager.getServiceInfo(
+            ComponentName(context, NotificationReaderService::class.java), 0
+        )
+        assertEquals("android.permission.BIND_NOTIFICATION_LISTENER_SERVICE", notificationService.permission)
+        val accessibilityService = context.packageManager.getServiceInfo(
+            ComponentName(context, DeviceAccessibilityService::class.java), 0
+        )
+        assertEquals("android.permission.BIND_ACCESSIBILITY_SERVICE", accessibilityService.permission)
+
+        val applicationInfo = context.packageManager.getApplicationInfo(context.packageName, 0)
+        assertFalse(applicationInfo.flags and ApplicationInfo.FLAG_ALLOW_BACKUP != 0)
+        assertFalse(applicationInfo.flags and ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC != 0)
 
         @Suppress("DEPRECATION")
         val packageInfo = context.packageManager.getPackageInfo(
