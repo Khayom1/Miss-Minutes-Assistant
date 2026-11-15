@@ -41,6 +41,7 @@ class SecretStore(context: Context) {
     private val preferences = context.getSharedPreferences("secure_secrets", Context.MODE_PRIVATE)
     private val alias = "miss_minutes_aes_key"
 
+    @Synchronized
     fun save(name: String, value: String) {
         if (value.isBlank()) {
             check(preferences.edit().remove(name).commit()) { "Unable to remove encrypted secret" }
@@ -55,6 +56,7 @@ class SecretStore(context: Context) {
         }
     }
 
+    @Synchronized
     fun read(name: String): String? {
         return try {
             val encoded = preferences.getString(name, null) ?: return null
@@ -702,10 +704,15 @@ class NotificationReaderService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val item = sbn ?: return
-        val packageName = item.packageName
-        val extras = item.notification.extras
-        val title = extras.getCharSequence("android.title")?.toString().orEmpty()
-        val body = extras.getCharSequence("android.text")?.toString().orEmpty()
+        val notificationContent = runCatching {
+            val extras = item.notification.extras
+            Triple(
+                item.packageName,
+                extras.getCharSequence("android.title")?.toString().orEmpty(),
+                extras.getCharSequence("android.text")?.toString().orEmpty()
+            )
+        }.getOrNull() ?: return
+        val (packageName, title, body) = notificationContent
         if (title.isBlank() && body.isBlank()) return
         ioScope.launch {
             val database = runCatching { MemoryDatabase(applicationContext) }.getOrNull() ?: return@launch
