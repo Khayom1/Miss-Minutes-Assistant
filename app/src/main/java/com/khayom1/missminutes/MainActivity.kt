@@ -101,6 +101,16 @@ private fun resolveAssistantLanguage(context: android.content.Context): String {
     return if (locale.language.equals("ru", ignoreCase = true)) "ru" else "en"
 }
 
+internal fun detectConversationLanguage(text: String, fallback: String): String {
+    val cyrillic = text.count { it in '\\u0400'..'\\u04FF' }
+    val latin = text.count { it in 'A'..'Z' || it in 'a'..'z' }
+    return when {
+        cyrillic > latin -> "ru"
+        latin > 0 -> "en"
+        else -> fallback
+    }
+}
+
 private fun localizedGreeting(language: String): String = if (language == "ru") {
     "Так-так! Ну здравствуй, Хранитель Времени. Надеюсь, сегодня без очередного апокалипсиса временной линии?"
 } else {
@@ -210,7 +220,8 @@ private fun MissMinutesRoot(activity: Activity) {
         status = "TEMPORAL LINK / CONNECTING"
         scope.launch {
             try {
-                val prompt = PersonalityEngine.buildSystemPrompt(memory.buildPromptContext(), assistantLanguage)
+                val turnLanguage = detectConversationLanguage(message, assistantLanguage)
+                val prompt = PersonalityEngine.buildSystemPrompt(memory.buildPromptContext(), turnLanguage)
                 val motionPrompt = prompt + """
 ФОРМАТ ОТВЕТА: верни один JSON-объект без Markdown:
 {"reply":"полный ответ","mood":"neutral|happy|curious|surprised|angry|sad|sleepy|playful","gaze":"viewer|left|right|up|down|wander","head_tilt":0.0,"body_lean":0.0,"gesture":"none|open_hands|wave|point|shrug|hands_together|present","energy":0.0,"emphasis":0.0}
