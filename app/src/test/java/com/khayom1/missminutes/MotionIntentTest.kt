@@ -27,3 +27,19 @@ class MotionIntentTest {
         assertEquals("none", result.gesture)
     }
 }
+
+    @Test fun mapsSemanticBehaviorToSupportedCharacterClips() {
+        assertEquals("Wave_Greeting", MotionIntent.neutral().copy(gesture = "wave").animationName())
+        assertEquals("Pointing", MotionIntent.neutral().copy(gesture = "point").animationName())
+        assertEquals("Talk_Loop", MotionIntent.neutral().copy(gesture = "talk").animationName())
+        assertEquals("Surprised", MotionIntent.neutral().copy(mood = "surprised").animationName())
+        assertEquals("Angry_Expression", MotionIntent.neutral().copy(mood = "angry").animationName())
+        assertEquals("Cheerful_Bounce", MotionIntent.neutral().copy(mood = "happy").animationName())
+        assertEquals("Look_Around", MotionIntent.neutral().copy(mood = "curious").animationName())
+        assertEquals("Idle_Breathe", MotionIntent.neutral().animationName())
+    }
+
+    @Test fun clampsAnimationSpeed() {
+        assertEquals(0.85f, MotionIntent.neutral().copy(energy = -1f).animationSpeed())
+        assertEquals(1.2f, MotionIntent.neutral().copy(energy = 2f).animationSpeed())
+    }
