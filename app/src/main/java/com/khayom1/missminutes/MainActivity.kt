@@ -150,8 +150,8 @@ private fun MissMinutesRoot(activity: Activity) {
 
     var firstRun by remember { mutableStateOf(!prefs.getBoolean("initialization_complete", false)) }
     var showSettings by remember { mutableStateOf(false) }
-    var apiKeyDraft by remember { mutableStateOf(secrets.read("deepseek_api_key").orEmpty()) }
-    var elevenLabsKeyDraft by remember { mutableStateOf(secrets.read("elevenlabs_api_key").orEmpty()) }
+    var apiKeyDraft by remember { mutableStateOf("") }
+    var elevenLabsKeyDraft by remember { mutableStateOf("") }
     var input by remember { mutableStateOf("") }
     var currentMotion by remember { mutableStateOf(MotionIntent.neutral()) }
     var isSpeaking by remember { mutableStateOf(false) }
@@ -198,13 +198,13 @@ private fun MissMinutesRoot(activity: Activity) {
     }
 
     fun speak(text: String, onFinished: (() -> Unit)? = null) {
-        val elevenLabsKey = secrets.read("elevenlabs_api_key")
-        if (elevenLabsKey.isNullOrBlank()) {
-            status = "ELEVENLABS / API KEY REQUIRED"
-            onFinished?.invoke()
-            return
-        }
         scope.launch {
+            val elevenLabsKey = withContext(Dispatchers.IO) { secrets.read("elevenlabs_api_key") }
+            if (elevenLabsKey.isNullOrBlank()) {
+                status = "ELEVENLABS / API KEY REQUIRED"
+                onFinished?.invoke()
+                return@launch
+            }
             try {
                 voice.speak(text, elevenLabsKey) { isPlaying ->
                     isSpeaking = isPlaying
@@ -232,6 +232,8 @@ private fun MissMinutesRoot(activity: Activity) {
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
+            apiKeyDraft = secrets.read("deepseek_api_key").orEmpty()
+            elevenLabsKeyDraft = secrets.read("elevenlabs_api_key").orEmpty()
             memory.seedTvaArchive()
             if (!prefs.getBoolean("owner_seeded", false)) {
                 memory.savePersonalMemory("owner", "Мой новый Хранитель Времени — Хайём Абдурахмонов.")
@@ -277,22 +279,21 @@ private fun MissMinutesRoot(activity: Activity) {
             return
         }
 
-        val key = secrets.read("deepseek_api_key")
-        if (key.isNullOrBlank()) {
-            val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь DeepSeek API Key. И не вздумай записывать его на табличке у входа в TVA!"
-            appendMessage(messages, ChatLine("assistant", response))
-            scope.launch(Dispatchers.IO) {
-                memory.saveConversation("user", message)
-                withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
-            }
-            speak(response)
-            return
-        }
-
         isThinking = true
         status = "TEMPORAL LINK / CONNECTING"
         scope.launch {
             try {
+                val key = withContext(Dispatchers.IO) { secrets.read("deepseek_api_key") }
+                if (key.isNullOrBlank()) {
+                    val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь DeepSeek API Key. И не вздумай записывать его на табличке у входа в TVA!"
+                    appendMessage(messages, ChatLine("assistant", response))
+                    withContext(Dispatchers.IO) {
+                        memory.saveConversation("user", message)
+                        withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
+                    }
+                    speak(response)
+                    return@launch
+                }
                 val turnLanguage = detectConversationLanguage(message, assistantLanguage)
                 val memoryContext = withContext(Dispatchers.IO) {
                     memory.saveConversation("user", message)
@@ -353,10 +354,7 @@ private fun MissMinutesRoot(activity: Activity) {
             onInputChange = { input = it },
             onSend = { send(input) },
             onAnimationChange = { /* motion is produced by semantic intent, not manual clip selection */ },
-            onSettings = {
-                apiKeyDraft = secrets.read("deepseek_api_key").orEmpty()
-                showSettings = true
-            },
+            onSettings = { showSettings = true },
             onOverlay = {
                 if (Settings.canDrawOverlays(activity)) {
                     if (Build.VERSION.SDK_INT >= 33 &&
@@ -393,10 +391,21 @@ private fun MissMinutesRoot(activity: Activity) {
             elevenLabsApiKey = elevenLabsKeyDraft,
             onElevenLabsApiKeyChange = { elevenLabsKeyDraft = it },
             onSave = {
-                secrets.save("deepseek_api_key", apiKeyDraft.trim())
-                secrets.save("elevenlabs_api_key", elevenLabsKeyDraft.trim())
-                showSettings = false
-                status = if (apiKeyDraft.isBlank()) "API KEY / EMPTY" else "API KEY / STORED SECURELY"
+                val deepSeekValue = apiKeyDraft.trim()
+                val elevenLabsValue = elevenLabsKeyDraft.trim()
+                scope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            secrets.save("deepseek_api_key", deepSeekValue)
+                            secrets.save("elevenlabs_api_key", elevenLabsValue)
+                        }
+                        showSettings = false
+                        status = if (deepSeekValue.isBlank()) "API KEY / EMPTY" else "API KEY / STORED SECURELY"
+                    } catch (error: Exception) {
+                        status = "SECURE STORAGE / ERROR"
+                        appendMessage(messages, ChatLine("assistant", error.message ?: "Unable to store API keys securely"))
+                    }
+                }
             },
             onDismiss = { showSettings = false },
             onNotificationSettings = {
