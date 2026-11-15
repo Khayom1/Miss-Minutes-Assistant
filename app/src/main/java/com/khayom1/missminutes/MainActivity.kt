@@ -102,7 +102,7 @@ private fun resolveAssistantLanguage(context: android.content.Context): String {
 }
 
 internal fun detectConversationLanguage(text: String, fallback: String): String {
-    val cyrillic = text.count { it in '\\u0400'..'\\u04FF' }
+    val cyrillic = text.count { it in '\u0400'..'\u04FF' }
     val latin = text.count { it in 'A'..'Z' || it in 'a'..'z' }
     return when {
         cyrillic > latin -> "ru"
