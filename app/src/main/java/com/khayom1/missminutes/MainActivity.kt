@@ -29,7 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -94,11 +94,7 @@ class MainActivity : ComponentActivity() {
 private data class ChatLine(val role: String, val text: String)
 
 private fun resolveAssistantLanguage(context: android.content.Context): String {
-    val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-        context.resources.configuration.locales[0] ?: Locale.getDefault()
-    } else {
-        @Suppress("DEPRECATION") context.resources.configuration.locale ?: Locale.getDefault()
-    }
+    val locale = context.resources.configuration.locales[0] ?: Locale.getDefault()
     return if (locale.language.equals("ru", ignoreCase = true)) "ru" else "en"
 }
 
