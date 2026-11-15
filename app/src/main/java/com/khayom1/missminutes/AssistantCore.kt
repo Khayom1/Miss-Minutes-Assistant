@@ -501,74 +501,155 @@ class LocalizedVoiceController(
     }
 }
 
+internal enum class LocalCommandType { HOME, BACK, TIMER, ALARM, OPEN_APP, NONE }
+
+internal fun classifyLocalCommand(raw: String): LocalCommandType {
+    val command = raw.lowercase(Locale.ROOT).trim()
+        .replace(Regex("\\s+"), " ")
+        .trimEnd('.', '!', '?')
+    val homeCommands = setOf(
+        "домой", "на главный экран", "вернись домой", "вернись на главный экран",
+        "перейди домой", "перейди на главный экран", "открой главный экран",
+        "home", "go home", "open home screen", "go to home screen"
+    )
+    val backCommands = setOf(
+        "назад", "вернись назад", "шаг назад", "перейди назад",
+        "back", "go back", "press back"
+    )
+    val timerPrefixes = listOf(
+        "таймер", "поставь таймер", "поставь мне таймер", "установи таймер",
+        "установи мне таймер", "запусти таймер", "создай таймер",
+        "timer", "set timer", "set a timer", "start timer", "start a timer",
+        "create timer", "create a timer", "launch timer"
+    )
+    val alarmPrefixes = listOf(
+        "будильник", "поставь будильник", "установи будильник", "создай будильник",
+        "alarm", "set alarm", "set an alarm", "create alarm", "create an alarm"
+    )
+    return when {
+        command in homeCommands -> LocalCommandType.HOME
+        command in backCommands -> LocalCommandType.BACK
+        timerPrefixes.any { command == it || command.startsWith("$it ") } -> LocalCommandType.TIMER
+        alarmPrefixes.any { command == it || command.startsWith("$it ") } -> LocalCommandType.ALARM
+        Regex("^(открой|запусти|включи|open|launch)\\s+.+$").matches(command) -> LocalCommandType.OPEN_APP
+        else -> LocalCommandType.NONE
+    }
+}
+
 object AndroidActions {
     fun tryHandle(context: Context, raw: String): String? {
-        val text = raw.lowercase(Locale.ROOT)
-        if (text.contains("домой") || text.contains("на главный экран")) {
-            return if (DeviceAccessibilityService.performHome()) "Так-так! Возвращаемся на главный экран."
-            else "Для этого включи специальные возможности Miss Minutes в настройках Android."
-        }
-        if (text.contains("назад") || text.contains("вернись назад")) {
-            return if (DeviceAccessibilityService.performBack()) "Минутку! Шаг назад по временной линии."
-            else "Мне нужен доступ к специальным возможностям, чтобы выполнить это действие."
-        }
-        if (text.contains("таймер")) {
-            val match = Regex("(\\d{1,3})\\s*(секунд|секунды|секунду|сек|минут|минуты|минуту|мин|час|часа|часов)").find(text)
-                ?: return "Так-так! Укажи длительность: «таймер на 5 минут»."
-            val amount = match.groupValues[1].toIntOrNull() ?: return "Не удалось разобрать время."
-            val unit = match.groupValues[2]
-            val seconds = when {
-                unit.startsWith("сек") -> amount
-                unit.startsWith("час") -> amount * 3600
-                else -> amount * 60
-            }
-            if (seconds <= 0) return "Даже во TVA время должно хоть немного идти!"
-            val intent = Intent(AlarmClock.ACTION_SET_TIMER)
-                .putExtra(AlarmClock.EXTRA_LENGTH, seconds)
-                .putExtra(AlarmClock.EXTRA_MESSAGE, "Miss Minutes — напоминание")
-                .putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-            return launch(context, intent, "Таймер передан приложению часов. Не опаздывай, Хранитель!")
-        }
-        if (text.contains("будильник")) {
-            val match = Regex("\\b([01]?\\d|2[0-3]):([0-5]\\d)\\b").find(text)
-                ?: return "Назови время в формате ЧЧ:ММ, например «будильник на 07:30»."
-            val intent = Intent(AlarmClock.ACTION_SET_ALARM)
-                .putExtra(AlarmClock.EXTRA_HOUR, match.groupValues[1].toInt())
-                .putExtra(AlarmClock.EXTRA_MINUTES, match.groupValues[2].toInt())
-                .putExtra(AlarmClock.EXTRA_MESSAGE, "Miss Minutes")
-                .putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-            return launch(context, intent, "Будильник на " + match.value + " передан в приложение часов.")
-        }
-        val open = Regex("^(открой|запусти|включи)\\s+(.+)$").find(text)
-        if (open != null) {
-            val requested = open.groupValues[2].trim()
-            val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            val item = context.packageManager.queryIntentActivities(query, 0).firstOrNull {
-                it.loadLabel(context.packageManager).toString().lowercase(Locale.ROOT).contains(requested)
-            }
-            if (item != null) {
-                val launchIntent = context.packageManager.getLaunchIntentForPackage(item.activityInfo.packageName)
-                if (launchIntent != null) {
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    return try {
-                        context.startActivity(launchIntent)
-                        "Так-так! Запускаю " + item.loadLabel(context.packageManager) + "."
-                    } catch (_: Exception) {
-                        "Не удалось открыть приложение «" + requested + "». Проверь разрешения Android."
-                    }
+        val text = raw.lowercase(Locale.ROOT).trim()
+            .replace(Regex("\\s+"), " ")
+            .trimEnd('.', '!', '?')
+        val english = Regex("[a-z]").containsMatchIn(text)
+        fun response(ru: String, en: String): String = if (english) en else ru
+
+        when (classifyLocalCommand(text)) {
+            LocalCommandType.HOME -> {
+                return if (DeviceAccessibilityService.performHome()) {
+                    response("Так-так! Возвращаемся на главный экран.", "Returning to the home screen.")
+                } else {
+                    response(
+                        "Для этого включи специальные возможности Miss Minutes в настройках Android.",
+                        "Enable Miss Minutes accessibility access in Android settings to do that."
+                    )
                 }
             }
-            return "Не нашла приложение «" + requested + "». Проверь название, сэр."
+            LocalCommandType.BACK -> {
+                return if (DeviceAccessibilityService.performBack()) {
+                    response("Минутку! Шаг назад по временной линии.", "One step back.")
+                } else {
+                    response(
+                        "Мне нужен доступ к специальным возможностям, чтобы выполнить это действие.",
+                        "I need accessibility access to perform that action."
+                    )
+                }
+            }
+            LocalCommandType.TIMER -> {
+                val match = Regex("(\\d{1,3})\\s*(секунд|секунды|секунду|сек|минут|минуты|минуту|мин|час|часа|часов|seconds?|secs?|minutes?|mins?|hours?|hrs?)").find(text)
+                    ?: return response(
+                        "Так-так! Укажи длительность: «таймер на 5 минут».",
+                        "Please specify a duration, for example: “set a timer for 5 minutes”."
+                    )
+                val amount = match.groupValues[1].toIntOrNull()
+                    ?: return response("Не удалось разобрать время.", "I couldn't parse that duration.")
+                val unit = match.groupValues[2]
+                val seconds = when {
+                    unit.startsWith("сек") || unit.startsWith("sec") -> amount
+                    unit.startsWith("час") || unit.startsWith("hour") || unit.startsWith("hr") -> amount * 3600
+                    else -> amount * 60
+                }
+                if (seconds <= 0) return response(
+                    "Даже во TVA время должно хоть немного идти!",
+                    "Even in the TVA, time has to move forward!"
+                )
+                val intent = Intent(AlarmClock.ACTION_SET_TIMER)
+                    .putExtra(AlarmClock.EXTRA_LENGTH, seconds)
+                    .putExtra(AlarmClock.EXTRA_MESSAGE, "Miss Minutes — reminder")
+                    .putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+                return launch(
+                    context, intent,
+                    response("Таймер передан приложению часов. Не опаздывай, Хранитель!", "The timer was handed to your clock app."),
+                    response("Приложение часов не поддерживает этот запрос.", "Your clock app doesn't support this timer request.")
+                )
+            }
+            LocalCommandType.ALARM -> {
+                val match = Regex("\\b([01]?\\d|2[0-3]):([0-5]\\d)\\b").find(text)
+                    ?: return response(
+                        "Назови время в формате ЧЧ:ММ, например «будильник на 07:30».",
+                        "Specify a time as HH:MM, for example “set an alarm for 07:30”."
+                    )
+                val intent = Intent(AlarmClock.ACTION_SET_ALARM)
+                    .putExtra(AlarmClock.EXTRA_HOUR, match.groupValues[1].toInt())
+                    .putExtra(AlarmClock.EXTRA_MINUTES, match.groupValues[2].toInt())
+                    .putExtra(AlarmClock.EXTRA_MESSAGE, "Miss Minutes")
+                    .putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+                return launch(
+                    context, intent,
+                    response("Будильник на " + match.value + " передан в приложение часов.", "Alarm for " + match.value + " handed to your clock app."),
+                    response("Приложение часов не поддерживает этот запрос.", "Your clock app doesn't support this alarm request.")
+                )
+            }
+            LocalCommandType.OPEN_APP -> {
+                val requested = Regex("^(открой|запусти|включи|open|launch)\\s+(.+)$")
+                    .find(text)?.groupValues?.get(2)?.trim().orEmpty()
+                val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                val item = context.packageManager.queryIntentActivities(query, 0).firstOrNull {
+                    it.loadLabel(context.packageManager).toString().lowercase(Locale.ROOT).contains(requested)
+                }
+                if (item != null) {
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(item.activityInfo.packageName)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        return try {
+                            context.startActivity(launchIntent)
+                            response(
+                                "Так-так! Запускаю " + item.loadLabel(context.packageManager) + ".",
+                                "Launching " + item.loadLabel(context.packageManager) + "."
+                            )
+                        } catch (_: Exception) {
+                            response(
+                                "Не удалось открыть приложение «" + requested + "». Проверь разрешения Android.",
+                                "Couldn't open “" + requested + "”. Check Android permissions."
+                            )
+                        }
+                    }
+                }
+                return response(
+                    "Не нашла приложение «" + requested + "». Проверь название, сэр.",
+                    "I couldn't find the app “" + requested + "”. Check its name."
+                )
+            }
+            LocalCommandType.NONE -> return null
         }
-        return null
     }
 
-    private fun launch(context: Context, intent: Intent, success: String): String = try {
+    private fun launch(context: Context, intent: Intent, success: String, failure: String): String = try {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
         success
     } catch (_: Exception) {
-        "Приложение часов не поддерживает этот запрос. Попробуй открыть его вручную."
+        failure
     }
 }
 
