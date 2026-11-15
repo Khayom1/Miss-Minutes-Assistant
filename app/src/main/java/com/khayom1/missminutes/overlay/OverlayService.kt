@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Build
 import android.view.Gravity
 import android.view.MotionEvent
@@ -76,14 +77,20 @@ class OverlayService : LifecycleService() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = (16 * density).toInt()
-            y = (150 * density).toInt()
+            x = (overlayPreferences.getInt(PREF_X_DP, 16) * density).toInt()
+            y = (overlayPreferences.getInt(PREF_Y_DP, 150) * density).toInt()
         }
-        frame = DraggableFrame(this) { dx, dy ->
-            layout.x += dx
-            layout.y += dy
-            runCatching { manager.updateViewLayout(frame, layout) }
-        }
+        frame = DraggableFrame(
+            context = this,
+            move = { dx, dy ->
+                layout.x += dx
+                layout.y += dy
+                clampOverlayPosition()
+                runCatching { manager.updateViewLayout(frame, layout) }
+            },
+            onDragFinished = { persistOverlayPosition() }
+        )
+        clampOverlayPosition()
         val compose = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@OverlayService)
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
@@ -93,6 +100,7 @@ class OverlayService : LifecycleService() {
                     onCompact = { compact ->
                         layout.width = ((if (compact) 78 else 218) * density).toInt()
                         layout.height = ((if (compact) 78 else 250) * density).toInt()
+                        clampOverlayPosition()
                         runCatching { manager.updateViewLayout(frame, layout) }
                     }
                 )
@@ -122,6 +130,36 @@ class OverlayService : LifecycleService() {
         super.onDestroy()
     }
 
+    private val overlayPreferences by lazy {
+        getSharedPreferences("tva_session", Context.MODE_PRIVATE)
+    }
+
+    private fun clampOverlayPosition() {
+        val bounds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            manager.currentWindowMetrics.bounds
+        } else {
+            Rect(0, 0, resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
+        }
+        val position = clampOverlayPosition(
+            x = layout.x,
+            y = layout.y,
+            screenWidth = bounds.width(),
+            screenHeight = bounds.height(),
+            overlayWidth = layout.width,
+            overlayHeight = layout.height
+        )
+        layout.x = position.x
+        layout.y = position.y
+    }
+
+    private fun persistOverlayPosition() {
+        val density = resources.displayMetrics.density.coerceAtLeast(1f)
+        overlayPreferences.edit()
+            .putInt(PREF_X_DP, (layout.x / density).toInt())
+            .putInt(PREF_Y_DP, (layout.y / density).toInt())
+            .apply()
+    }
+
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -149,7 +187,11 @@ class OverlayService : LifecycleService() {
             .build()
     }
 
-    private class DraggableFrame(context: Context, private val move: (Int, Int) -> Unit) : FrameLayout(context) {
+    private class DraggableFrame(
+        context: Context,
+        private val move: (Int, Int) -> Unit,
+        private val onDragFinished: () -> Unit
+    ) : FrameLayout(context) {
         private val slop = ViewConfiguration.get(context).scaledTouchSlop
         private var startX = 0f
         private var startY = 0f
@@ -178,7 +220,10 @@ class OverlayService : LifecycleService() {
                     move((x - lastX).toInt(), (y - lastY).toInt())
                     lastX = x; lastY = y
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> drag = false
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    drag = false
+                    onDragFinished()
+                }
             }
             return true
         }
@@ -188,6 +233,8 @@ class OverlayService : LifecycleService() {
         private const val CHANNEL_ID = "miss_minutes_overlay"
         private const val NOTIFICATION_ID = 4102
         private const val ACTION_STOP = "com.khayom1.missminutes.action.STOP_OVERLAY"
+        private const val PREF_X_DP = "mm_overlay_x_dp"
+        private const val PREF_Y_DP = "mm_overlay_y_dp"
     }
 }
 
