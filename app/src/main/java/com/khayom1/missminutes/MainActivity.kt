@@ -152,6 +152,7 @@ private fun MissMinutesRoot(activity: Activity) {
     var showSettings by remember { mutableStateOf(false) }
     var apiKeyDraft by remember { mutableStateOf("") }
     var elevenLabsKeyDraft by remember { mutableStateOf("") }
+    var secretsLoaded by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf("") }
     var currentMotion by remember { mutableStateOf(MotionIntent.neutral()) }
     var isSpeaking by remember { mutableStateOf(false) }
