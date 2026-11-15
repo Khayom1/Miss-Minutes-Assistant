@@ -26,7 +26,6 @@ class MotionIntentTest {
         assertEquals("neutral", result.mood)
         assertEquals("none", result.gesture)
     }
-}
 
     @Test fun mapsSemanticBehaviorToSupportedCharacterClips() {
         assertEquals("Wave_Greeting", MotionIntent.neutral().copy(gesture = "wave").animationName())
@@ -43,3 +42,10 @@ class MotionIntentTest {
         assertEquals(0.85f, MotionIntent.neutral().copy(energy = -1f).animationSpeed())
         assertEquals(1.2f, MotionIntent.neutral().copy(energy = 2f).animationSpeed())
     }
+
+    @Test fun detectsRussianAndEnglishPerUtterance() {
+        assertEquals("ru", detectConversationLanguage("Привет, как дела?", "en"))
+        assertEquals("en", detectConversationLanguage("Hello, how are you?", "ru"))
+        assertEquals("ru", detectConversationLanguage("123", "ru"))
+    }
+}
