@@ -124,7 +124,7 @@ fun InitializationSequence(onComplete: () -> Unit) {
         )
         Spacer(Modifier.height(18.dp))
         LinearProgressIndicator(
-            progress = (index + 1).toFloat() / stages.size.toFloat(),
+            progress = { (index + 1).toFloat() / stages.size.toFloat() },
             modifier = Modifier.fillMaxWidth(.82f),
             color = Color(0xFFF28A35),
             trackColor = Color(0xFF382319)
