@@ -523,7 +523,8 @@ internal fun classifyLocalCommand(raw: String): LocalCommandType {
         "create timer", "create a timer", "launch timer"
     )
     val alarmPrefixes = listOf(
-        "будильник", "поставь будильник", "установи будильник", "создай будильник",
+        "будильник", "поставь будильник", "поставь мне будильник", "установи будильник",
+        "установи мне будильник", "создай будильник",
         "alarm", "set alarm", "set an alarm", "create alarm", "create an alarm"
     )
     return when {
@@ -541,7 +542,13 @@ object AndroidActions {
         val text = raw.lowercase(Locale.ROOT).trim()
             .replace(Regex("\\s+"), " ")
             .trimEnd('.', '!', '?')
-        val english = Regex("[a-z]").containsMatchIn(text)
+        val englishPrefixes = listOf(
+            "home", "go home", "open home screen", "go to home screen", "back", "go back", "press back",
+            "timer", "set timer", "set a timer", "start timer", "start a timer", "create timer",
+            "create a timer", "launch timer", "alarm", "set alarm", "set an alarm", "create alarm",
+            "create an alarm", "open", "launch"
+        )
+        val english = englishPrefixes.any { text == it || text.startsWith("$it ") }
         fun response(ru: String, en: String): String = if (english) en else ru
 
         when (classifyLocalCommand(text)) {

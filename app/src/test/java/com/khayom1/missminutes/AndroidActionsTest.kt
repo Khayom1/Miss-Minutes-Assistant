@@ -19,6 +19,7 @@ class AndroidActionsTest {
         assertEquals(LocalCommandType.TIMER, classifyLocalCommand("поставь таймер на 5 минут"))
         assertEquals(LocalCommandType.TIMER, classifyLocalCommand("set a timer for 5 minutes"))
         assertEquals(LocalCommandType.ALARM, classifyLocalCommand("будильник на 07:30"))
+        assertEquals(LocalCommandType.ALARM, classifyLocalCommand("поставь мне будильник на 07:30"))
         assertEquals(LocalCommandType.ALARM, classifyLocalCommand("set an alarm for 07:30"))
         assertEquals(LocalCommandType.NONE, classifyLocalCommand("как работает таймер?"))
         assertEquals(LocalCommandType.NONE, classifyLocalCommand("расскажи про будильник"))
