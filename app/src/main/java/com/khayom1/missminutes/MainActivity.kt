@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.khayom1.missminutes.overlay.OverlayService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -128,12 +129,13 @@ private fun MissMinutesRoot(activity: Activity) {
 
     val voice = remember(activity) { RussianVoiceController(activity) { recognizedText = it } }
     DisposableEffect(voice) { onDispose { voice.release() } }
-    DisposableEffect(voice, activity) {
+    val activityLifecycle = (activity as? LifecycleOwner)?.lifecycle
+    DisposableEffect(voice, activityLifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) voice.cancelListening()
         }
-        activity.lifecycle.addObserver(observer)
-        onDispose { activity.lifecycle.removeObserver(observer) }
+        activityLifecycle?.addObserver(observer)
+        onDispose { activityLifecycle?.removeObserver(observer) }
     }
 
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
