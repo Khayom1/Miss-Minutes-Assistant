@@ -145,6 +145,7 @@ private fun MissMinutesRoot(activity: Activity) {
     var isSpeaking by remember { mutableStateOf(false) }
     var isThinking by remember { mutableStateOf(false) }
     var isListening by remember { mutableStateOf(false) }
+    var isInteracting by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("TVA SYSTEM / READY") }
     var recognizedText by remember { mutableStateOf<String?>(null) }
 
@@ -159,7 +160,8 @@ private fun MissMinutesRoot(activity: Activity) {
     val resolvedBehaviorMode = resolveBehaviorMode(
         isListening = isListening,
         isThinking = isThinking,
-        isSpeaking = isSpeaking
+        isSpeaking = isSpeaking,
+        isInteracting = isInteracting
     )
     LaunchedEffect(resolvedBehaviorMode) {
         prefs.edit().putString("mm_behavior_mode", resolvedBehaviorMode.name).apply()
@@ -175,10 +177,11 @@ private fun MissMinutesRoot(activity: Activity) {
     }
     DisposableEffect(voice) { onDispose { voice.release() } }
 
-    fun speak(text: String) {
+    fun speak(text: String, onFinished: (() -> Unit)? = null) {
         val elevenLabsKey = secrets.read("elevenlabs_api_key")
         if (elevenLabsKey.isNullOrBlank()) {
             status = "ELEVENLABS / API KEY REQUIRED"
+            onFinished?.invoke()
             return
         }
         scope.launch {
@@ -187,6 +190,7 @@ private fun MissMinutesRoot(activity: Activity) {
                     isSpeaking = isPlaying
                     val speechMotion = if (isPlaying) currentMotion.copy(gesture = "talk") else currentMotion
                     persistCharacterMotion(prefs, speechMotion)
+                    if (!isPlaying) onFinished?.invoke()
                 }
             } catch (error: Exception) {
                 isSpeaking = false
@@ -194,6 +198,7 @@ private fun MissMinutesRoot(activity: Activity) {
                 persistCharacterMotion(prefs, currentMotion)
                 status = "ELEVENLABS / ERROR"
                 messages.add(ChatLine("assistant", "ElevenLabs: " + (error.message ?: "unknown error")))
+                onFinished?.invoke()
             }
         }
     }
@@ -224,7 +229,8 @@ private fun MissMinutesRoot(activity: Activity) {
         if (localAction != null) {
             messages.add(ChatLine("assistant", localAction))
             memory.saveConversation("assistant", localAction)
-            speak(localAction)
+            isInteracting = true
+            speak(localAction) { isInteracting = false }
             return
         }
 

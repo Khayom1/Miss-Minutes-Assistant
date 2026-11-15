@@ -43,8 +43,10 @@ import java.util.concurrent.atomic.AtomicReference
 internal fun resolveBehaviorMode(
     isListening: Boolean,
     isThinking: Boolean,
-    isSpeaking: Boolean
+    isSpeaking: Boolean,
+    isInteracting: Boolean = false
 ): BehaviorMode = when {
+    isInteracting -> BehaviorMode.INTERACTING
     isSpeaking -> BehaviorMode.SPEAKING
     isThinking -> BehaviorMode.THINKING
     isListening -> BehaviorMode.LISTENING
