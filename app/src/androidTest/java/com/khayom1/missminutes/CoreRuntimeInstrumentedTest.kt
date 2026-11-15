@@ -42,6 +42,8 @@ class CoreRuntimeInstrumentedTest {
 
             preferences.edit().putString(name, "not-valid-ciphertext").commit()
             assertNull(store.read(name))
+            preferences.edit().putInt(name, 7).commit()
+            assertNull(store.read(name))
         } finally {
             store.save(name, "")
             store.save("different_secret_name", "")
