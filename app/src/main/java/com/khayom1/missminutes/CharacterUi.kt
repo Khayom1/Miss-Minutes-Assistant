@@ -1,5 +1,6 @@
 package com.khayom1.missminutes
 
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,12 +26,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import io.github.sceneview.SceneView
-import io.github.sceneview.rememberEngine
+import io.github.sceneview.math.Position
+import io.github.sceneview.math.Rotation
 import io.github.sceneview.rememberCameraManipulator
+import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberModelLoader
+import kotlinx.coroutines.delay
 
 /**
  * Converts the AI's semantic intent to a clip supported by the currently shipped
@@ -80,14 +83,45 @@ fun CharacterScene(
     modelScale: Float = 1.0f
 ) {
     var activeAnimation by remember { mutableStateOf(motion.animationName()) }
+    var pose by remember { mutableStateOf(ProceduralPose(0f, 0f, 0f, 0f)) }
+
     LaunchedEffect(motion) {
         val selected = motion.animationName()
         activeAnimation = selected
-        if (!isLoopingCharacterAnimation(selected)) {
-            delay(characterAnimationDurationMillis(selected))
-            activeAnimation = "Idle_Breathe"
+        val startedAt = SystemClock.elapsedRealtime()
+        var animationUntil = if (isLoopingCharacterAnimation(selected)) {
+            Long.MAX_VALUE
+        } else {
+            startedAt + characterAnimationDurationMillis(selected)
+        }
+        val autonomous = AutonomousBehaviorEngine()
+
+        while (true) {
+            val now = SystemClock.elapsedRealtime()
+
+            if (motion.gesture == "talk") {
+                activeAnimation = "Talk_Loop"
+                animationUntil = Long.MAX_VALUE
+                autonomous.nextAction(now, isSpeaking = true)
+            } else {
+                if (now >= animationUntil) {
+                    activeAnimation = "Idle_Breathe"
+                    animationUntil = Long.MAX_VALUE
+                }
+                if (activeAnimation == "Idle_Breathe") {
+                    val action = autonomous.nextAction(now, isSpeaking = false)
+                    if (action != null) {
+                        activeAnimation = action.animationName
+                        animationUntil = now + action.durationMillis
+                    }
+                }
+            }
+
+            pose = ProceduralMotionEngine.sample(now, motion)
+            delay(33L)
         }
     }
+
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
     SceneView(
@@ -104,7 +138,13 @@ fun CharacterScene(
                 autoAnimate = false,
                 animationName = activeAnimation,
                 animationLoop = isLoopingCharacterAnimation(activeAnimation),
-                animationSpeed = motion.animationSpeed()
+                animationSpeed = motion.animationSpeed(),
+                position = Position(y = pose.liftMeters),
+                rotation = Rotation(
+                    x = pose.pitchDegrees,
+                    y = pose.yawDegrees,
+                    z = pose.rollDegrees
+                )
             )
         }
     }
