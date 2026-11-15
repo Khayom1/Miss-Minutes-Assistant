@@ -25,7 +25,7 @@ android {
             excludes += setOf("META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/DEPENDENCIES")
         }
     }
-    lint { abortOnError = false; checkReleaseBuilds = false }
+    lint { abortOnError = true; checkReleaseBuilds = true }
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.12.00"))
