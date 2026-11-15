@@ -121,7 +121,7 @@ private fun MissMinutesRoot(activity: Activity) {
     var apiKeyDraft by remember { mutableStateOf(secrets.read("deepseek_api_key").orEmpty()) }
     var elevenLabsKeyDraft by remember { mutableStateOf(secrets.read("elevenlabs_api_key").orEmpty()) }
     var input by remember { mutableStateOf("") }
-    var selectedAnimation by remember { mutableStateOf("Idle_Breathe") }
+    var currentMotion by remember { mutableStateOf(MotionIntent.neutral()) }
     var isThinking by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("TVA SYSTEM / READY") }
     var recognizedText by remember { mutableStateOf<String?>(null) }
@@ -144,10 +144,10 @@ private fun MissMinutesRoot(activity: Activity) {
         scope.launch {
             try {
                 voice.speak(text, elevenLabsKey) { isPlaying ->
-                    selectedAnimation = if (isPlaying) "Talk_Loop" else "Idle_Breathe"
+                    if (isPlaying) currentMotion = currentMotion.copy(energy = currentMotion.energy.coerceAtLeast(0.35f))
                 }
             } catch (error: Exception) {
-                selectedAnimation = "Idle_Breathe"
+                currentMotion = MotionIntent.neutral()
                 status = "ELEVENLABS / ERROR"
                 messages.add(ChatLine("assistant", "ElevenLabs: " + (error.message ?: "unknown error")))
             }
@@ -211,18 +211,16 @@ private fun MissMinutesRoot(activity: Activity) {
                 val prompt = PersonalityEngine.buildSystemPrompt(memory.buildPromptContext(), assistantLanguage)
                 val motionPrompt = prompt + """
 
-ФОРМАТ ОТВЕТА: верни только один JSON-объект без Markdown и без текста до/после:
-{"reply":"текст ответа пользователю","animation":"одно имя из списка","emotion":"neutral|happy|curious|surprised|angry|sad|sleepy"}
-Выбери действие персонажа по смыслу текущего диалога, а не случайно.
-Доступные анимации текущей 3D-модели: Idle_Breathe, Blink, Wave_Greeting, Pointing, Talk_Loop, Laugh, Surprised, Angry_Expression, Sleep_Idle, Glitch_Recovery, Walk_Cycle, Run_Cycle, Look_Around, Peek_Around, Spin_In_Place, Nervous_Glance, Cheerful_Bounce.
-Не выдумывай другие анимации. Для обычного ответа выбери Idle_Breathe. Для приветствия — Wave_Greeting, для шутки — Laugh, для удивления — Surprised, для объяснения с акцентом — Pointing, для любопытства — Look_Around или Peek_Around.
+ФОРМАТ ОТВЕТА: верни один JSON-объект без Markdown:
+{"reply":"полный ответ","mood":"neutral|happy|curious|surprised|angry|sad|sleepy|playful","gaze":"viewer|left|right|up|down|wander","head_tilt":0.0,"body_lean":0.0,"gesture":"none|open_hands|wave|point|shrug|hands_together|present","energy":0.0,"emphasis":0.0}
+Выбирай эмоциональное и физическое поведение самостоятельно из смысла разговора. Не называй анимационные клипы, скелетные кости или команды рендера. Значения head_tilt: -0.55..0.55 радиан; body_lean: -0.22..0.22; energy ва emphasis: 0..1.
 """
                 val rawTurn = DeepSeekClient.reply(key, motionPrompt, message)
                 val turn = MotionIntent.parse(rawTurn)
                 val response = turn.reply
                 messages.add(ChatLine("assistant", response))
                 memory.saveConversation("assistant", response)
-                selectedAnimation = if (turn.animation == "Idle_Breathe") "Talk_Loop" else turn.animation
+                currentMotion = turn
                 speak(response)
                 status = "TVA SYSTEM / STABLE"
             } catch (error: Exception) {
@@ -256,11 +254,11 @@ private fun MissMinutesRoot(activity: Activity) {
             status = status,
             messages = messages,
             input = input,
-            selectedAnimation = selectedAnimation,
+            motion = currentMotion,
             isThinking = isThinking,
             onInputChange = { input = it },
             onSend = { send(input) },
-            onAnimationChange = { selectedAnimation = it },
+            onAnimationChange = { /* motion is produced by semantic intent, not manual clip selection */ },
             onSettings = {
                 apiKeyDraft = secrets.read("deepseek_api_key").orEmpty()
                 showSettings = true
@@ -330,7 +328,7 @@ private fun Dashboard(
     status: String,
     messages: List<ChatLine>,
     input: String,
-    selectedAnimation: String,
+    motion: MotionIntent,
     isThinking: Boolean,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
@@ -362,27 +360,12 @@ private fun Dashboard(
 
         Card(colors = CardDefaults.cardColors(containerColor = TvaPanel), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-                CharacterScene(Modifier.fillMaxWidth().height(285.dp), selectedAnimation, modelScale = 1.05f)
+                CharacterScene(Modifier.fillMaxWidth().height(285.dp), motion = motion, modelScale = 1.05f)
                 Text("TVA CHARACTER // 3D LIVE RIG", color = Color(0xFFD6A57B), fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
         }
 
-        Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            val clips = listOf(
-                "Idle_Breathe", "Blink", "Wave_Greeting", "Pointing", "Talk_Loop", "Laugh",
-                "Surprised", "Angry_Expression", "Sleep_Idle", "Glitch_Recovery", "Walk_Cycle",
-                "Run_Cycle", "Look_Around", "Peek_Around", "Spin_In_Place", "Nervous_Glance", "Cheerful_Bounce"
-            )
-            clips.forEach { clip ->
-                OutlinedButton(
-                    onClick = { onAnimationChange(clip) },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = if (selectedAnimation == clip) Color(0xFF69371D) else Color.Transparent,
-                        contentColor = TvaText
-                    )
-                ) { Text(clip.replace("_", " "), fontSize = 10.sp) }
-            }
-        }
+        Text("LIVE BEHAVIOUR // AI DIRECTED", color = Color(0xFFD6A57B), fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(
