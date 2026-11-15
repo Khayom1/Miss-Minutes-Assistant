@@ -472,16 +472,24 @@ class LocalizedVoiceController(
     }
 
     override fun onResults(results: Bundle?) {
+        val wasActive = recognitionActive
         recognitionActive = false
         onListeningChanged(false)
+        if (!wasActive) return
         val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
         if (!spoken.isNullOrBlank()) onRecognized(spoken)
     }
-    override fun onReadyForSpeech(params: Bundle?) { onListeningChanged(true) }
-    override fun onBeginningOfSpeech() { onListeningChanged(true) }
+    override fun onReadyForSpeech(params: Bundle?) {
+        if (recognitionActive) onListeningChanged(true)
+    }
+    override fun onBeginningOfSpeech() {
+        if (recognitionActive) onListeningChanged(true)
+    }
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
-    override fun onEndOfSpeech() { onListeningChanged(true) }
+    override fun onEndOfSpeech() {
+        if (recognitionActive) onListeningChanged(true)
+    }
     override fun onError(error: Int) {
         val wasActive = recognitionActive
         recognitionActive = false
