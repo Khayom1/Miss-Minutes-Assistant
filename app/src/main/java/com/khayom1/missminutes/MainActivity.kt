@@ -68,7 +68,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.khayom1.missminutes.overlay.OverlayService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 private val TvaBackground = Color(0xFF160D09)
@@ -95,6 +97,13 @@ class MainActivity : ComponentActivity() {
 }
 
 private data class ChatLine(val role: String, val text: String)
+
+private const val MAX_VISIBLE_MESSAGES = 100
+
+private fun appendMessage(messages: MutableList<ChatLine>, line: ChatLine) {
+    if (messages.size >= MAX_VISIBLE_MESSAGES) messages.removeAt(0)
+    messages.add(line)
+}
 
 private fun resolveAssistantLanguage(context: android.content.Context): String {
     val locale = context.resources.configuration.locales[0] ?: Locale.getDefault()
@@ -208,7 +217,7 @@ private fun MissMinutesRoot(activity: Activity) {
                 currentMotion = MotionIntent.neutral()
                 persistCharacterMotion(prefs, currentMotion)
                 status = "ELEVENLABS / ERROR"
-                messages.add(ChatLine("assistant", "ElevenLabs: " + (error.message ?: "unknown error")))
+                appendMessage(messages, ChatLine("assistant", "ElevenLabs: " + (error.message ?: "unknown error")))
                 onFinished?.invoke()
             }
         }
@@ -222,10 +231,12 @@ private fun MissMinutesRoot(activity: Activity) {
     }
 
     LaunchedEffect(Unit) {
-        memory.seedTvaArchive()
-        if (!prefs.getBoolean("owner_seeded", false)) {
-            memory.savePersonalMemory("owner", "Мой новый Хранитель Времени — Хайём Абдурахмонов.")
-            prefs.edit().putBoolean("owner_seeded", true).apply()
+        withContext(Dispatchers.IO) {
+            memory.seedTvaArchive()
+            if (!prefs.getBoolean("owner_seeded", false)) {
+                memory.savePersonalMemory("owner", "Мой новый Хранитель Времени — Хайём Абдурахмонов.")
+                prefs.edit().putBoolean("owner_seeded", true).apply()
+            }
         }
     }
 
@@ -233,34 +244,47 @@ private fun MissMinutesRoot(activity: Activity) {
         val message = text.trim()
         if (message.isEmpty() || isThinking) return
         input = ""
-        messages.add(ChatLine("user", message))
-        memory.saveConversation("user", message)
+        appendMessage(messages, ChatLine("user", message))
 
         val localAction = AndroidActions.tryHandle(activity, message)
         if (localAction != null) {
-            messages.add(ChatLine("assistant", localAction))
-            memory.saveConversation("assistant", localAction)
+            appendMessage(messages, ChatLine("assistant", localAction))
+            scope.launch(Dispatchers.IO) {
+                memory.saveConversation("user", message)
+                memory.saveConversation("assistant", localAction)
+            }
             isInteracting = true
             speak(localAction) { isInteracting = false }
             return
         }
 
         if (message.contains("уведомлен", ignoreCase = true)) {
-            val notifications = memory.recentNotifications()
-            val response = if (notifications.isBlank()) {
-                "Хм-м... В архиве уведомлений пока пусто. Проверь, выдан ли мне доступ к уведомлениям Android."
-            } else {
-                "Так-так, вот что происходит в твоём цифровом королевстве:\n" + notifications
+            scope.launch {
+                val notifications = withContext(Dispatchers.IO) {
+                    val recent = memory.recentNotifications()
+                    memory.saveConversation("user", message)
+                    recent
+                }
+                val response = if (notifications.isBlank()) {
+                    "Хм-м... В архиве уведомлений пока пусто. Проверь, выдан ли мне доступ к уведомлениям Android."
+                } else {
+                    "Так-так, вот что происходит в твоём цифровом королевстве:\n" + notifications
+                }
+                appendMessage(messages, ChatLine("assistant", response))
+                withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
+                speak(response)
             }
-            messages.add(ChatLine("assistant", response))
-            speak(response)
             return
         }
 
         val key = secrets.read("deepseek_api_key")
         if (key.isNullOrBlank()) {
             val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь DeepSeek API Key. И не вздумай записывать его на табличке у входа в TVA!"
-            messages.add(ChatLine("assistant", response))
+            appendMessage(messages, ChatLine("assistant", response))
+            scope.launch(Dispatchers.IO) {
+                memory.saveConversation("user", message)
+                withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
+            }
             speak(response)
             return
         }
@@ -270,7 +294,11 @@ private fun MissMinutesRoot(activity: Activity) {
         scope.launch {
             try {
                 val turnLanguage = detectConversationLanguage(message, assistantLanguage)
-                val prompt = PersonalityEngine.buildSystemPrompt(memory.buildPromptContext(), turnLanguage)
+                val memoryContext = withContext(Dispatchers.IO) {
+                    memory.saveConversation("user", message)
+                    memory.buildPromptContext()
+                }
+                val prompt = PersonalityEngine.buildSystemPrompt(memoryContext, turnLanguage)
                 val motionPrompt = prompt + """
 ФОРМАТ ОТВЕТА: верни один JSON-объект без Markdown:
 {"reply":"полный ответ","mood":"neutral|happy|curious|surprised|angry|sad|sleepy|playful","gaze":"viewer|left|right|up|down|wander","head_tilt":0.0,"body_lean":0.0,"gesture":"none|open_hands|wave|point|shrug|hands_together|present","energy":0.0,"emphasis":0.0}
@@ -280,7 +308,7 @@ private fun MissMinutesRoot(activity: Activity) {
                 val turn = MotionIntent.parse(rawTurn)
                 require(turn.reply.isNotBlank()) { "DeepSeek JSON response is missing a non-empty reply field" }
                 val response = turn.reply
-                messages.add(ChatLine("assistant", response))
+                appendMessage(messages, ChatLine("assistant", response))
                 memory.saveConversation("assistant", response)
                 currentMotion = turn
                 persistCharacterMotion(prefs, turn)
@@ -290,7 +318,8 @@ private fun MissMinutesRoot(activity: Activity) {
                 val response = "Так, минутку! Канал связи с DeepSeek временно схлопнулся: " +
                     (error.message ?: "неизвестная ошибка") +
                     ". Проверь интернет и API Key, Хранитель."
-                messages.add(ChatLine("assistant", response))
+                appendMessage(messages, ChatLine("assistant", response))
+                withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
                 status = "TEMPORAL LINK / ERROR"
             } finally {
                 isThinking = false

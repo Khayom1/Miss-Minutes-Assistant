@@ -18,7 +18,11 @@ import android.service.notification.StatusBarNotification
 import android.provider.AlarmClock
 import android.util.Base64
 import android.view.accessibility.AccessibilityEvent
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -44,21 +48,36 @@ class SecretStore(context: Context) {
         }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+        cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
         val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
-        preferences.edit().putString(name, Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)).apply()
+        preferences.edit().putString(name, Base64.encodeToString(PAYLOAD_MAGIC + cipher.iv + encrypted, Base64.NO_WRAP)).apply()
     }
 
     fun read(name: String): String? {
         val encoded = preferences.getString(name, null) ?: return null
         return try {
             val payload = Base64.decode(encoded, Base64.NO_WRAP)
-            require(payload.size > 12)
+            val versioned = payload.size > PAYLOAD_MAGIC.size + 12 &&
+                payload.copyOfRange(0, PAYLOAD_MAGIC.size).contentEquals(PAYLOAD_MAGIC)
+            val ivOffset = if (versioned) PAYLOAD_MAGIC.size else 0
+            require(payload.size > ivOffset + 12)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, payload.copyOfRange(0, 12)))
-            String(cipher.doFinal(payload.copyOfRange(12, payload.size)), Charsets.UTF_8)
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                getOrCreateKey(),
+                GCMParameterSpec(128, payload.copyOfRange(ivOffset, ivOffset + 12))
+            )
+            if (versioned) cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
+            val value = String(cipher.doFinal(payload.copyOfRange(ivOffset + 12, payload.size)), Charsets.UTF_8)
+            if (!versioned) save(name, value)
+            value
         } catch (_: Exception) {
             null
         }
+    }
+
+    private companion object {
+        val PAYLOAD_MAGIC = byteArrayOf(0x4d, 0x4d, 0x4b, 0x31)
     }
 
     private fun getOrCreateKey(): SecretKey {
@@ -515,18 +534,28 @@ object AndroidActions {
 }
 
 class NotificationReaderService : NotificationListenerService() {
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val item = sbn ?: return
+        val packageName = item.packageName
         val extras = item.notification.extras
         val title = extras.getCharSequence("android.title")?.toString().orEmpty()
         val body = extras.getCharSequence("android.text")?.toString().orEmpty()
         if (title.isBlank() && body.isBlank()) return
-        val database = runCatching { MemoryDatabase(applicationContext) }.getOrNull() ?: return
-        try {
-            runCatching { database.saveNotification(item.packageName, title, body) }
-        } finally {
-            runCatching { database.close() }
+        ioScope.launch {
+            val database = runCatching { MemoryDatabase(applicationContext) }.getOrNull() ?: return@launch
+            try {
+                runCatching { database.saveNotification(packageName, title, body) }
+            } finally {
+                runCatching { database.close() }
+            }
         }
+    }
+
+    override fun onDestroy() {
+        ioScope.cancel()
+        super.onDestroy()
     }
 }
 

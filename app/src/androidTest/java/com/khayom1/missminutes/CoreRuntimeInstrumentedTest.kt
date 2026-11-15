@@ -3,14 +3,19 @@ package com.khayom1.missminutes
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.security.KeyStore
+import javax.crypto.Cipher
 
 @RunWith(AndroidJUnit4::class)
 class CoreRuntimeInstrumentedTest {
@@ -30,8 +35,37 @@ class CoreRuntimeInstrumentedTest {
             assertFalse(ciphertext!!.contains(secret))
             assertEquals(secret, store.read(name))
 
+            preferences.edit().putString("different_secret_name", ciphertext).commit()
+            assertNull(store.read("different_secret_name"))
+            preferences.edit().remove("different_secret_name").commit()
+
             preferences.edit().putString(name, "not-valid-ciphertext").commit()
             assertNull(store.read(name))
+        } finally {
+            store.save(name, "")
+            store.save("different_secret_name", "")
+        }
+    }
+
+    @Test
+    fun legacyEncryptedKeysAreReadableAndMigrated() {
+        val preferences = context.getSharedPreferences("secure_secrets", Context.MODE_PRIVATE)
+        val store = SecretStore(context)
+        val name = "legacy_instrumentation_secret"
+        val secret = "legacy-miss-minutes-key"
+        try {
+            store.save(name, "seed")
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            val key = keyStore.getKey("miss_minutes_aes_key", null) as java.security.Key
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, key)
+            val legacyPayload = cipher.iv + cipher.doFinal(secret.toByteArray(Charsets.UTF_8))
+            preferences.edit().putString(name, Base64.encodeToString(legacyPayload, Base64.NO_WRAP)).commit()
+
+            assertEquals(secret, store.read(name))
+            val migrated = Base64.decode(preferences.getString(name, null), Base64.NO_WRAP)
+            assertArrayEquals(byteArrayOf(0x4d, 0x4d, 0x4b, 0x31), migrated.copyOfRange(0, 4))
+            assertTrue(!String(migrated, Charsets.UTF_8).contains(secret))
         } finally {
             store.save(name, "")
         }
@@ -75,9 +109,11 @@ class CoreRuntimeInstrumentedTest {
             PackageManager.GET_PERMISSIONS
         )
         val permissions = packageInfo.requestedPermissions.orEmpty().toSet()
-        assert(permissions.contains(android.Manifest.permission.INTERNET))
-        assert(permissions.contains(android.Manifest.permission.RECORD_AUDIO))
-        assert(permissions.contains(android.Manifest.permission.FOREGROUND_SERVICE))
-        assert(permissions.contains(android.Manifest.permission.SYSTEM_ALERT_WINDOW))
+        assertTrue(permissions.contains(android.Manifest.permission.INTERNET))
+        assertTrue(permissions.contains(android.Manifest.permission.RECORD_AUDIO))
+        assertTrue(permissions.contains(android.Manifest.permission.FOREGROUND_SERVICE))
+        assertTrue(permissions.contains(android.Manifest.permission.FOREGROUND_SERVICE_SPECIAL_USE))
+        assertTrue(permissions.contains(android.Manifest.permission.SYSTEM_ALERT_WINDOW))
+        assertTrue(permissions.contains(android.Manifest.permission.POST_NOTIFICATIONS))
     }
 }
