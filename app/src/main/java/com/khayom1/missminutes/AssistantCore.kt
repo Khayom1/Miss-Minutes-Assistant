@@ -57,22 +57,24 @@ class SecretStore(context: Context) {
     }
 
     @Synchronized
-    fun read(name: String): String? = try {
-        val encoded = preferences.getString(name, null) ?: return null
-        val payload = Base64.decode(encoded, Base64.NO_WRAP)
-        val versioned = payload.size > PAYLOAD_MAGIC.size + 12 &&
-            payload.copyOfRange(0, PAYLOAD_MAGIC.size).contentEquals(PAYLOAD_MAGIC)
-        val ivOffset = if (versioned) PAYLOAD_MAGIC.size else 0
-        require(payload.size > ivOffset + 12)
-        val key = getExistingKey() ?: return null
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, payload.copyOfRange(ivOffset, ivOffset + 12)))
-        if (versioned) cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
-        val value = String(cipher.doFinal(payload.copyOfRange(ivOffset + 12, payload.size)), Charsets.UTF_8)
-        if (!versioned) save(name, value)
-        value
-    } catch (_: Exception) {
-        null
+    fun read(name: String): String? {
+        return try {
+            val encoded = preferences.getString(name, null) ?: return null
+            val payload = Base64.decode(encoded, Base64.NO_WRAP)
+            val versioned = payload.size > PAYLOAD_MAGIC.size + 12 &&
+                payload.copyOfRange(0, PAYLOAD_MAGIC.size).contentEquals(PAYLOAD_MAGIC)
+            val ivOffset = if (versioned) PAYLOAD_MAGIC.size else 0
+            require(payload.size > ivOffset + 12)
+            val key = getExistingKey() ?: return null
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, payload.copyOfRange(ivOffset, ivOffset + 12)))
+            if (versioned) cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
+            val value = String(cipher.doFinal(payload.copyOfRange(ivOffset + 12, payload.size)), Charsets.UTF_8)
+            if (!versioned) save(name, value)
+            value
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun getExistingKey(): SecretKey? {

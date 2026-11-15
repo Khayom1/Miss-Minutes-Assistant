@@ -99,7 +99,7 @@ internal const val MAX_VISIBLE_MESSAGES = 100
 
 internal fun appendMessage(messages: MutableList<ChatLine>, line: ChatLine) {
     if (messages.size >= MAX_VISIBLE_MESSAGES) messages.removeAt(0)
-    appendMessage(messages, line)
+    messages.add(line)
 }
 
 @Composable
