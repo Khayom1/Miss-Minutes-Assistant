@@ -5,7 +5,7 @@ import kotlin.random.Random
 /**
  * Activity priority gates autonomous behavior. User-directed work always wins over idle motion.
  */
-internal enum class BehaviorMode(val priority: Int) {
+enum class BehaviorMode(val priority: Int) {
     IDLE(0),
     LISTENING(1),
     THINKING(2),
