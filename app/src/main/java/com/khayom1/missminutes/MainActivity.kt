@@ -312,7 +312,7 @@ private fun Dashboard(
 
         Card(colors = CardDefaults.cardColors(containerColor = TvaPanel), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-                CharacterScene(Modifier.fillMaxWidth().height(285.dp), selectedAnimation)
+                CharacterScene(Modifier.fillMaxWidth().height(285.dp), selectedAnimation, modelScale = 1.05f)
                 Text("TVA CHARACTER // 3D LIVE RIG", color = Color(0xFFD6A57B), fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
         }

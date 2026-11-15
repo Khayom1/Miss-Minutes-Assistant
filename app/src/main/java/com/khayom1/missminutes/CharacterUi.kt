@@ -32,7 +32,11 @@ import io.github.sceneview.rememberModelLoader
 import kotlinx.coroutines.delay
 
 @Composable
-fun CharacterScene(modifier: Modifier = Modifier, animation: String = "Idle_Breathe") {
+fun CharacterScene(
+    modifier: Modifier = Modifier,
+    animation: String = "Idle_Breathe",
+    modelScale: Float = 1.0f
+) {
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
     val loops = setOf("Idle_Breathe", "Talk_Loop", "Walk_Cycle", "Run_Cycle", "Look_Around")
@@ -46,7 +50,7 @@ fun CharacterScene(modifier: Modifier = Modifier, animation: String = "Idle_Brea
         instance?.let {
             ModelNode(
                 modelInstance = it,
-                scaleToUnits = 1.35f,
+                scaleToUnits = modelScale,
                 autoAnimate = false,
                 animationName = animation,
                 animationLoop = animation in loops,
@@ -86,7 +90,7 @@ fun InitializationSequence(onComplete: () -> Unit) {
         Text("TIME VARIANCE AUTHORITY", color = Color(0xFFB58B6C), fontSize = 10.sp, letterSpacing = 2.sp)
         Spacer(Modifier.height(18.dp))
         Box(Modifier.fillMaxWidth().height(310.dp)) {
-            CharacterScene(Modifier.fillMaxSize(), if (index in 3..4) "Glitch_Recovery" else "Idle_Breathe")
+            CharacterScene(Modifier.fillMaxSize(), if (index in 3..4) "Glitch_Recovery" else "Idle_Breathe", modelScale = 1.0f)
         }
         Text(
             stages[index],

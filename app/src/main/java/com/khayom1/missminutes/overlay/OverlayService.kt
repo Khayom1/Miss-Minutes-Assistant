@@ -236,7 +236,7 @@ private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
                         }
                     }
                 }
-                CharacterScene(Modifier.fillMaxWidth().height(205.dp), clip)
+                CharacterScene(Modifier.fillMaxWidth().height(205.dp), clip, modelScale = 0.78f)
                 Text("Так-так, я здесь!", color = Color(0xFFFFE8D2), fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
             }
         }
