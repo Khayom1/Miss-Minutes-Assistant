@@ -167,6 +167,30 @@ object PersonalityEngine {
 """ + JSONObject.quote(memoryContext)
 }
 
+internal fun parseDeepSeekChatCompletion(payload: String): String {
+    val root = try { JSONObject(payload) } catch (_: Exception) {
+        throw IllegalStateException("DeepSeek returned an invalid JSON response")
+    }
+    val choices = root.optJSONArray("choices")
+        ?: throw IllegalStateException("DeepSeek response is missing choices")
+    if (choices.length() == 0) throw IllegalStateException("DeepSeek returned no completion choices")
+    val choice = choices.optJSONObject(0)
+        ?: throw IllegalStateException("DeepSeek returned an invalid completion choice")
+    when (choice.optString("finish_reason")) {
+        "stop" -> Unit
+        "length" -> throw IllegalStateException("DeepSeek response was truncated by the output-token limit")
+        "content_filter" -> throw IllegalStateException("DeepSeek response was blocked by its content filter")
+        "insufficient_system_resource" -> throw IllegalStateException("DeepSeek could not complete the request due to temporary capacity limits")
+        "aborted" -> throw IllegalStateException("DeepSeek aborted the response")
+        else -> throw IllegalStateException("DeepSeek returned an incomplete or unsupported completion state")
+    }
+    val message = choice.optJSONObject("message")
+        ?: throw IllegalStateException("DeepSeek response is missing its message")
+    val content = message.optString("content").trim()
+    if (content.isBlank()) throw IllegalStateException("DeepSeek returned an empty response")
+    return content
+}
+
 object DeepSeekClient {
     suspend fun reply(apiKey: String, systemPrompt: String, userMessage: String): String = withContext(Dispatchers.IO) {
         require(apiKey.isNotBlank()) { "DeepSeek API Key не задан" }
@@ -201,13 +225,15 @@ object DeepSeekClient {
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val payload = stream?.use { it.readBoundedText(MAX_RESPONSE_BYTES) }.orEmpty()
             if (status !in 200..299) {
-                val detail = runCatching { JSONObject(payload).optString("message") }.getOrNull()
+                val detail = runCatching {
+                    val error = JSONObject(payload)
+                    error.optJSONObject("error")?.optString("message").orEmpty().ifBlank {
+                        error.optJSONObject("detail")?.optString("message").orEmpty().ifBlank { error.optString("message") }
+                    }
+                }.getOrNull()
                 throw IllegalStateException("DeepSeek HTTP " + status + if (detail.isNullOrBlank()) "" else ": " + detail)
             }
-            val response = JSONObject(payload).getJSONArray("choices").getJSONObject(0)
-                .getJSONObject("message").optString("content").trim()
-            if (response.isBlank()) throw IllegalStateException("DeepSeek вернул пустой ответ")
-            response
+            parseDeepSeekChatCompletion(payload)
         } finally {
             connection.disconnect()
         }
@@ -348,6 +374,12 @@ class LocalizedVoiceController(
             audioFile.delete()
             throw error
         }
+    }
+
+    /** Stop microphone capture when the host activity leaves the foreground. */
+    fun cancelListening() {
+        runCatching { recognizer?.cancel() }
+        onListeningChanged(false)
     }
 
     fun listen() {

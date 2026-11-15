@@ -64,6 +64,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.khayom1.missminutes.overlay.OverlayService
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -176,6 +179,14 @@ private fun MissMinutesRoot(activity: Activity) {
         )
     }
     DisposableEffect(voice) { onDispose { voice.release() } }
+    val lifecycle = (activity as? LifecycleOwner)?.lifecycle
+    DisposableEffect(voice, lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) voice.cancelListening()
+        }
+        lifecycle?.addObserver(observer)
+        onDispose { lifecycle?.removeObserver(observer) }
+    }
 
     fun speak(text: String, onFinished: (() -> Unit)? = null) {
         val elevenLabsKey = secrets.read("elevenlabs_api_key")
@@ -267,6 +278,7 @@ private fun MissMinutesRoot(activity: Activity) {
 """
                 val rawTurn = DeepSeekClient.reply(key, motionPrompt, message)
                 val turn = MotionIntent.parse(rawTurn)
+                require(turn.reply.isNotBlank()) { "DeepSeek JSON response is missing a non-empty reply field" }
                 val response = turn.reply
                 messages.add(ChatLine("assistant", response))
                 memory.saveConversation("assistant", response)

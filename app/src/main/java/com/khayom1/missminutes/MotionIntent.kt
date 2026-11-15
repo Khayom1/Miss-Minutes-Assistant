@@ -56,7 +56,9 @@ data class MotionIntent(
                     "wander" -> 0.12f
                     else -> 0f
                 }
-                val reply = jsonString(json, "reply")?.trim().orEmpty().ifBlank { fallbackReply }
+                val reply = jsonString(json, "reply")?.trim().orEmpty().ifBlank {
+                    fallbackReply.takeIf { it != raw }?.trim().orEmpty()
+                }
                 return MotionIntent(
                     reply = reply,
                     mood = mood,

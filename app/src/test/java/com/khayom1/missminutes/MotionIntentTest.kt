@@ -20,6 +20,13 @@ class MotionIntentTest {
         assertEquals("happy", result.mood)
     }
 
+    @Test fun validJsonWithoutReplyDoesNotExposeRawJsonAsChatText() {
+        val raw = """{"mood":"happy","gesture":"wave"}"""
+        val result = MotionIntent.parse(raw)
+        assertEquals("", result.reply)
+        assertEquals("happy", result.mood)
+    }
+
     @Test fun malformedJsonFallsBackToPlainReply() {
         val result = MotionIntent.parse("""{"reply":"broken","mood":""", "хаха, это смешно")
         assertEquals("хаха, это смешно", result.reply)
