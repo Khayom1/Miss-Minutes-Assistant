@@ -80,13 +80,19 @@ internal fun characterAnimationDurationMillis(name: String): Long = when (name) 
 fun CharacterScene(
     modifier: Modifier = Modifier,
     motion: MotionIntent = MotionIntent.neutral(),
-    modelScale: Float = 1.0f
+    modelScale: Float = 1.0f,
+    behaviorMode: BehaviorMode? = null
 ) {
+    val resolvedBehaviorMode = behaviorMode ?: if (motion.gesture == "talk") BehaviorMode.SPEAKING else BehaviorMode.IDLE
     var activeAnimation by remember { mutableStateOf(motion.animationName()) }
     var pose by remember { mutableStateOf(ProceduralPose(0f, 0f, 0f, 0f)) }
 
-    LaunchedEffect(motion) {
-        val selected = motion.animationName()
+    LaunchedEffect(motion, resolvedBehaviorMode) {
+        val selected = when (resolvedBehaviorMode) {
+            BehaviorMode.SPEAKING -> "Talk_Loop"
+            BehaviorMode.THINKING, BehaviorMode.LISTENING, BehaviorMode.INTERACTING -> "Look_Around"
+            BehaviorMode.HIDDEN, BehaviorMode.IDLE -> motion.animationName()
+        }
         activeAnimation = selected
         val startedAt = SystemClock.elapsedRealtime()
         var animationUntil = if (isLoopingCharacterAnimation(selected)) {
@@ -98,21 +104,32 @@ fun CharacterScene(
 
         while (true) {
             val now = SystemClock.elapsedRealtime()
-
-            if (motion.gesture == "talk") {
-                activeAnimation = "Talk_Loop"
-                animationUntil = Long.MAX_VALUE
-                autonomous.nextAction(now, isSpeaking = true)
-            } else {
-                if (now >= animationUntil) {
-                    activeAnimation = "Idle_Breathe"
+            when (resolvedBehaviorMode) {
+                BehaviorMode.SPEAKING -> {
+                    if (activeAnimation != "Talk_Loop") activeAnimation = "Talk_Loop"
                     animationUntil = Long.MAX_VALUE
                 }
-                if (activeAnimation == "Idle_Breathe") {
-                    val action = autonomous.nextAction(now, isSpeaking = false)
-                    if (action != null) {
-                        activeAnimation = action.animationName
-                        animationUntil = now + action.durationMillis
+                BehaviorMode.THINKING, BehaviorMode.LISTENING, BehaviorMode.INTERACTING -> {
+                    if (activeAnimation != "Look_Around") activeAnimation = "Look_Around"
+                    animationUntil = Long.MAX_VALUE
+                    autonomous.nextAction(now, resolvedBehaviorMode, motion.mood, motion.energy)
+                }
+                BehaviorMode.HIDDEN -> {
+                    if (activeAnimation != "Idle_Breathe") activeAnimation = "Idle_Breathe"
+                    animationUntil = Long.MAX_VALUE
+                    autonomous.nextAction(now, BehaviorMode.HIDDEN, motion.mood, motion.energy)
+                }
+                BehaviorMode.IDLE -> {
+                    if (now >= animationUntil) {
+                        activeAnimation = "Idle_Breathe"
+                        animationUntil = Long.MAX_VALUE
+                    }
+                    if (activeAnimation == "Idle_Breathe") {
+                        val action = autonomous.nextAction(now, BehaviorMode.IDLE, motion.mood, motion.energy)
+                        if (action != null) {
+                            activeAnimation = action.animationName
+                            animationUntil = now + action.durationMillis
+                        }
                     }
                 }
             }
