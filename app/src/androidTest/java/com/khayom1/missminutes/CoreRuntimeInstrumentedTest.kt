@@ -115,5 +115,6 @@ class CoreRuntimeInstrumentedTest {
         assertTrue(permissions.contains(android.Manifest.permission.FOREGROUND_SERVICE_SPECIAL_USE))
         assertTrue(permissions.contains(android.Manifest.permission.SYSTEM_ALERT_WINDOW))
         assertTrue(permissions.contains(android.Manifest.permission.POST_NOTIFICATIONS))
+        assertTrue(permissions.contains("com.android.alarm.permission.SET_ALARM"))
     }
 }

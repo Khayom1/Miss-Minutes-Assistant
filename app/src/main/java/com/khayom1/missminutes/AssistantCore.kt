@@ -515,8 +515,12 @@ object AndroidActions {
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(item.activityInfo.packageName)
                 if (launchIntent != null) {
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(launchIntent)
-                    return "Так-так! Запускаю " + item.loadLabel(context.packageManager) + "."
+                    return try {
+                        context.startActivity(launchIntent)
+                        "Так-так! Запускаю " + item.loadLabel(context.packageManager) + "."
+                    } catch (_: Exception) {
+                        "Не удалось открыть приложение «" + requested + "». Проверь разрешения Android."
+                    }
                 }
             }
             return "Не нашла приложение «" + requested + "». Проверь название, сэр."

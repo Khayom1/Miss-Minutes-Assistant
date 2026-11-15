@@ -96,11 +96,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private data class ChatLine(val role: String, val text: String)
+internal data class ChatLine(val role: String, val text: String)
 
-private const val MAX_VISIBLE_MESSAGES = 100
+internal const val MAX_VISIBLE_MESSAGES = 100
 
-private fun appendMessage(messages: MutableList<ChatLine>, line: ChatLine) {
+internal fun appendMessage(messages: MutableList<ChatLine>, line: ChatLine) {
     if (messages.size >= MAX_VISIBLE_MESSAGES) messages.removeAt(0)
     messages.add(line)
 }
@@ -231,9 +231,13 @@ private fun MissMinutesRoot(activity: Activity) {
     }
 
     LaunchedEffect(Unit) {
+        val storedKeys = withContext(Dispatchers.IO) {
+            secrets.read("deepseek_api_key").orEmpty() to secrets.read("elevenlabs_api_key").orEmpty()
+        }
+        apiKeyDraft = storedKeys.first
+        elevenLabsKeyDraft = storedKeys.second
+        secretsLoaded = true
         withContext(Dispatchers.IO) {
-            apiKeyDraft = secrets.read("deepseek_api_key").orEmpty()
-            elevenLabsKeyDraft = secrets.read("elevenlabs_api_key").orEmpty()
             memory.seedTvaArchive()
             if (!prefs.getBoolean("owner_seeded", false)) {
                 memory.savePersonalMemory("owner", "Мой новый Хранитель Времени — Хайём Абдурахмонов.")
@@ -310,7 +314,7 @@ private fun MissMinutesRoot(activity: Activity) {
                 require(turn.reply.isNotBlank()) { "DeepSeek JSON response is missing a non-empty reply field" }
                 val response = turn.reply
                 appendMessage(messages, ChatLine("assistant", response))
-                memory.saveConversation("assistant", response)
+                withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
                 currentMotion = turn
                 persistCharacterMotion(prefs, turn)
                 speak(response)
@@ -354,7 +358,9 @@ private fun MissMinutesRoot(activity: Activity) {
             onInputChange = { input = it },
             onSend = { send(input) },
             onAnimationChange = { /* motion is produced by semantic intent, not manual clip selection */ },
-            onSettings = { showSettings = true },
+            onSettings = {
+                if (secretsLoaded) showSettings = true else status = "SECURE STORAGE / LOADING"
+            },
             onOverlay = {
                 if (Settings.canDrawOverlays(activity)) {
                     if (Build.VERSION.SDK_INT >= 33 &&
