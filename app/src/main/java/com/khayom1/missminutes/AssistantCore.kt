@@ -112,6 +112,7 @@ class MemoryDatabase(context: Context) : SQLiteOpenHelper(context, "miss_minutes
             put("kind", kind.take(40)); put("body", body.take(4000)); put("updated_at", System.currentTimeMillis())
         }
         writableDatabase.insert("personal_memory", null, values)
+        writableDatabase.execSQL("DELETE FROM personal_memory WHERE id NOT IN (SELECT id FROM personal_memory ORDER BY updated_at DESC, id DESC LIMIT 500)")
     }
 
     fun saveConversation(role: String, body: String) = savePersonalMemory("dialogue_" + role.take(16), body)
@@ -125,11 +126,11 @@ class MemoryDatabase(context: Context) : SQLiteOpenHelper(context, "miss_minutes
             put("created_at", System.currentTimeMillis())
         }
         writableDatabase.insert("notifications", null, values)
-        writableDatabase.execSQL("DELETE FROM notifications WHERE id NOT IN (SELECT id FROM notifications ORDER BY created_at DESC LIMIT 50)")
+        writableDatabase.execSQL("DELETE FROM notifications WHERE id NOT IN (SELECT id FROM notifications ORDER BY created_at DESC, id DESC LIMIT 50)")
     }
 
     fun recentNotifications(): String = readRows(
-        "SELECT package_name, title, body FROM notifications ORDER BY created_at DESC LIMIT 8"
+        "SELECT package_name, title, body FROM notifications ORDER BY created_at DESC, id DESC LIMIT 8"
     ) { c -> "• " + c.getString(0) + " — " + c.getString(1) + ": " + c.getString(2) }
 
     fun buildPromptContext(): String {
@@ -187,6 +188,7 @@ object DeepSeekClient {
                 .put("stream", false)
                 .put("max_tokens", 700)
                 .put("temperature", 0.8)
+                .put("response_format", JSONObject().put("type", "json_object"))
                 .put("messages", messages)
 
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }

@@ -152,6 +152,8 @@ private fun MissMinutesRoot(activity: Activity) {
         )
     }
 
+    DisposableEffect(memory) { onDispose { memory.close() } }
+
     val voice = remember(activity, assistantLanguage) { LocalizedVoiceController(activity, assistantLanguage) { recognizedText = it } }
     DisposableEffect(voice) { onDispose { voice.release() } }
 
