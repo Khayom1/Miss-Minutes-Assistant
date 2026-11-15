@@ -170,6 +170,7 @@ object DeepSeekClient {
     suspend fun reply(apiKey: String, systemPrompt: String, userMessage: String): String = withContext(Dispatchers.IO) {
         require(apiKey.isNotBlank()) { "DeepSeek API Key не задан" }
         val connection = URL("https://api.deepseek.com/chat/completions").openConnection() as HttpURLConnection
+        connection.instanceFollowRedirects = false
         connection.requestMethod = "POST"
         connection.connectTimeout = 15000
         connection.readTimeout = 45000
@@ -194,7 +195,7 @@ object DeepSeekClient {
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val payload = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val payload = stream?.use { it.readBoundedText(MAX_RESPONSE_BYTES) }.orEmpty()
             if (status !in 200..299) {
                 val detail = runCatching { JSONObject(payload).optString("message") }.getOrNull()
                 throw IllegalStateException("DeepSeek HTTP " + status + if (detail.isNullOrBlank()) "" else ": " + detail)
@@ -207,6 +208,8 @@ object DeepSeekClient {
             connection.disconnect()
         }
     }
+
+    private const val MAX_RESPONSE_BYTES = 1_048_576
 }
 
 class LocalizedVoiceController(
@@ -230,6 +233,7 @@ class LocalizedVoiceController(
         val audioFile = withContext(Dispatchers.IO) {
             val endpoint = URL("https://api.elevenlabs.io/v1/text-to-speech/$VOICE_ID?output_format=mp3_44100_128")
             val connection = endpoint.openConnection() as HttpURLConnection
+            connection.instanceFollowRedirects = false
             connection.requestMethod = "POST"
             connection.connectTimeout = 15000
             connection.readTimeout = 60000
@@ -249,7 +253,7 @@ class LocalizedVoiceController(
                 connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
                 val status = connection.responseCode
                 if (status !in 200..299) {
-                    val detail = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                    val detail = connection.errorStream?.use { it.readBoundedText(MAX_ERROR_BYTES) }.orEmpty()
                     val message = runCatching {
                         val json = JSONObject(detail)
                         json.optJSONObject("detail")?.optString("message").orEmpty().ifBlank {
@@ -258,7 +262,7 @@ class LocalizedVoiceController(
                     }.getOrNull().orEmpty()
                     throw IllegalStateException("ElevenLabs HTTP $status" + if (message.isBlank()) "" else ": $message")
                 }
-                val bytes = connection.inputStream.use { it.readBytes() }
+                val bytes = connection.inputStream.use { it.readBoundedBytes(MAX_AUDIO_BYTES) }
                 if (bytes.isEmpty()) throw IllegalStateException("ElevenLabs аудиои холӣ баргардонд")
                 File.createTempFile("miss-minutes-", ".mp3", appContext.cacheDir).apply { writeBytes(bytes) }
             } finally {
@@ -371,6 +375,8 @@ class LocalizedVoiceController(
         const val VOICE_ID = "3ooIiYiDLwKz4dFFc7WM"
         const val VOICE_NAME = "Miss minutes"
         private const val MAX_TEXT_LENGTH = 4000
+        private const val MAX_ERROR_BYTES = 65_536
+        private const val MAX_AUDIO_BYTES = 25 * 1024 * 1024
     }
 }
 
