@@ -142,6 +142,7 @@ try {
   let invalidWeightVertices = 0;
   let maxWeightSumError = 0;
   let unpairedSkinAttributes = 0;
+  const weightedJointNodeIndices = new Set();
 
   for (const node of skinnedNodes) {
     const skin = skins[node.skin];
@@ -168,9 +169,19 @@ try {
         continue;
       }
       for (let row = 0; row < joints.length; row++) {
-        for (const joint of joints[row]) {
+        if (joints[row].length !== weights[row].length) {
+          invalidWeightVertices++;
+          continue;
+        }
+        for (let column = 0; column < joints[row].length; column++) {
+          const joint = joints[row][column];
+          const weight = weights[row][column];
           maxJointIndex = Math.max(maxJointIndex, joint);
-          if (!Number.isInteger(joint) || joint < 0 || joint >= skin.joints.length) invalidWeightVertices++;
+          if (!Number.isInteger(joint) || joint < 0 || joint >= skin.joints.length) {
+            invalidWeightVertices++;
+          } else if (weight > 0) {
+            weightedJointNodeIndices.add(skin.joints[joint]);
+          }
         }
         const sum = weights[row].reduce((total, value) => total + value, 0);
         const error = Math.abs(sum - 1);
@@ -233,8 +244,19 @@ try {
 
   for (const side of ["l", "r"]) {
     for (const finger of ["thumb", "index", "middle", "ring", "pinky"]) {
-      const found = names.some(name => name.includes(`finger_${finger}_${side}`) || name.includes(`${finger}_${side}`));
-      check(found, `${side.toUpperCase()} ${finger} finger chain: ${found ? "present" : "missing"}`);
+      const baseIndex = names.findIndex(name =>
+        name.includes(`finger_${finger}_${side}`) || name.includes(`${finger}_${side}`)
+      );
+      const tipIndex = finger === "thumb" ? -1 : names.findIndex(name =>
+        name.includes(`finger_tip_${finger}_${side}`)
+      );
+      const chainIndices = [baseIndex, ...(finger === "thumb" ? [] : [tipIndex])];
+      const chainFound = chainIndices.every(index => index >= 0);
+      const chainWeighted = chainFound && chainIndices.every(index => weightedJointNodeIndices.has(index));
+      check(
+        chainFound && chainWeighted,
+        `${side.toUpperCase()} ${finger} finger chain: ${chainFound ? (chainWeighted ? "present and weighted" : "present but unweighted") : "missing"}`
+      );
     }
     const brow = names.some(name => name.includes(`brow_${side}`) || name.includes(`eyebrow_${side}`));
     check(brow, `${side.toUpperCase()} eyebrow control: ${brow ? "present" : "missing"}`);
@@ -257,7 +279,7 @@ try {
   console.log(`Advanced Rig release gate: ${path.resolve(file)}`);
   console.log(`GLB ${bytes.length} bytes | nodes ${nodes.length} | meshes ${meshes.length} | primitives ${primitives.length} | triangles ${triangleCount}`);
   console.log(`skins ${skins.length} | unique joint sets ${uniqueJointSets} | unique inverse-bind data ${inverseBindHashes.size} | skinned nodes ${skinnedNodes.length}`);
-  console.log(`weighted primitives ${weightedPrimitiveCount} | weighted vertices ${weightedVertexCount} | max weight-sum error ${maxWeightSumError}`);
+  console.log(`weighted primitives ${weightedPrimitiveCount} | weighted vertices ${weightedVertexCount} | weighted joint nodes ${weightedJointNodeIndices.size} | max weight-sum error ${maxWeightSumError}`);
   console.log(`animations ${(json.animations ?? []).length} | morph primitives ${morphPrimitives.length} | materials ${(json.materials ?? []).length} | images ${embeddedImages} | textures ${embeddedTextures}`);
   for (const message of passes) console.log("PASS  " + message);
   for (const message of warnings) console.warn("WARN  " + message);
