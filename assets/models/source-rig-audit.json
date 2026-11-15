@@ -1,0 +1,98 @@
+{
+  "sourceFiles": {
+    "blender": {
+      "name": "Rig - Miss Minutes.blend",
+      "bytes": 1010722,
+      "decompressedBytes": 5837376,
+      "header": "BLENDER-v300",
+      "blenderVersion": "3.0"
+    },
+    "glb": {
+      "name": "Rig - Miss Minutes.glb",
+      "bytes": 2732724,
+      "version": 2,
+      "generator": "THREE.GLTFExporter r187"
+    }
+  },
+  "structure": {
+    "nodes": 245,
+    "meshes": 88,
+    "primitives": 88,
+    "triangles": 39536,
+    "materials": 4,
+    "images": 0,
+    "textures": 0,
+    "sceneRoots": [
+      0
+    ],
+    "reachableNodes": 245,
+    "unreachableNodes": 0,
+    "invalidChildReferences": 0,
+    "multipleParentNodes": 0
+  },
+  "skin": {
+    "skinObjects": 53,
+    "jointsPerSkin": 138,
+    "uniqueJointSets": 1,
+    "uniqueInverseBindMatrixData": 47,
+    "skinnedNodes": 53,
+    "weightedPrimitives": 53,
+    "weightedVertices": 22101,
+    "maxJointIndex": 137,
+    "invalidWeightVertices": 0,
+    "maxWeightSumError": 3.1188392313197255e-8,
+    "allJointReferencesValid": true,
+    "allInverseBindMatrixCountsMatch": true
+  },
+  "animation": {
+    "clips": 0,
+    "channels": 0,
+    "morphTargetPrimitives": 0
+  },
+  "facialControls": {
+    "eyelidBonesAndMeshes": true,
+    "lipBones": true,
+    "pupilNodes": true,
+    "tongueControls": true,
+    "independentEyebrowControls": false,
+    "jawControlNamed": false,
+    "phonemeMorphTargets": false
+  },
+  "hands": {
+    "left": {
+      "thumb": true,
+      "index": true,
+      "middle": true,
+      "ring": false,
+      "pinky": true
+    },
+    "right": {
+      "thumb": true,
+      "index": true,
+      "middle": true,
+      "ring": false,
+      "pinky": true
+    }
+  },
+  "clock": {
+    "dial": true,
+    "combinedHandsMesh": true,
+    "hourHandControl": false,
+    "minuteHandControl": false
+  },
+  "appearance": {
+    "vertexColorPrimitives": 84,
+    "embeddedImages": 0,
+    "materials": 4
+  },
+  "releaseDecision": "BLOCKED",
+  "blockers": [
+    "Left and right ring-finger chains are absent.",
+    "Independent eyebrow controls are absent.",
+    "Hour and minute hands are not independently addressable.",
+    "No facial morph targets or phoneme visemes are exported.",
+    "No GLB animation clips are present; Android procedural rig driving is not yet connected to this advanced skeleton.",
+    "Physical Android renderer/deformation/performance verification is outstanding."
+  ],
+  "method": "Measured directly from the uploaded GLB JSON/BIN chunks; JOINTS_0 and WEIGHTS_0 values were decoded and validated per skinned node. The Blender file header identifies Blender 3.0; the Blender scene itself has not yet been opened in Blender."
+}
