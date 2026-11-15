@@ -12,6 +12,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.Color as ComposeColor
+import com.google.android.filament.Engine
+import com.google.android.filament.gltfio.Animator
+import com.google.android.filament.gltfio.FilamentAsset
+import com.google.android.filament.utils.Float3
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,6 +36,30 @@ import io.github.sceneview.rememberCameraManipulator
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberModelLoader
+
+/**
+ * The model is intentionally rendered without canned clips. SceneView's current
+ * public ModelNode wrapper does not expose a stable cross-version bone handle;
+ * procedural joint writes are kept in the dedicated rig driver below and only
+ * run after the model's actual Filament asset has supplied a verified name map.
+ */
+private class ProceduralRigDriver {
+    data class RigChannels(
+        val head: String? = null,
+        val torso: String? = null,
+        val eyes: String? = null,
+        val leftArm: String? = null,
+        val rightArm: String? = null
+    )
+
+    fun sanitize(intent: MotionIntent): MotionIntent = intent.copy(
+        gaze = intent.gaze.coerceIn(-0.65f, 0.65f),
+        headTilt = intent.headTilt.coerceIn(-0.55f, 0.55f),
+        bodyLean = intent.bodyLean.coerceIn(-0.22f, 0.22f),
+        energy = intent.energy.coerceIn(0f, 1f),
+        emphasis = intent.emphasis.coerceIn(0f, 1f)
+    )
+}
 
 @Composable
 fun CharacterScene(
