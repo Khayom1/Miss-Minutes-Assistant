@@ -108,6 +108,9 @@ fun CharacterScene(
     val latestMotion = rememberUpdatedState(motion)
     val latestAnimation = rememberUpdatedState(activeAnimation)
     val rigControllerRef = remember { AtomicReference<ProceduralRigController?>(null) }
+    // Keep the scheduler stable across semantic-motion updates; otherwise every AI response
+    // restarts the idle cooldown and can indefinitely starve autonomous actions.
+    val autonomous = remember { AutonomousBehaviorEngine() }
 
     LaunchedEffect(motion, resolvedBehaviorMode) {
         val selected = when (resolvedBehaviorMode) {
@@ -122,8 +125,6 @@ fun CharacterScene(
         } else {
             startedAt + characterAnimationDurationMillis(selected)
         }
-        val autonomous = AutonomousBehaviorEngine()
-
         while (true) {
             val now = SystemClock.elapsedRealtime()
             when (resolvedBehaviorMode) {
