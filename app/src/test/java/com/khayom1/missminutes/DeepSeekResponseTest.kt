@@ -5,8 +5,8 @@ import org.junit.Test
 
 class DeepSeekResponseTest {
     @Test fun extractsOnlyCompletedAssistantContent() {
-        val payload = """{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"{\\\"reply\\\":\\\"Hello\\\"}"}}]}"""
-        assertEquals("{\\\"reply\\\":\\\"Hello\\\"}", parseDeepSeekChatCompletion(payload))
+        val payload = """{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"{\"reply\":\"Hello\"}"}}]}"""
+        assertEquals("""{"reply":"Hello"}""", parseDeepSeekChatCompletion(payload))
     }
     @Test(expected = IllegalStateException::class)
     fun rejectsTruncatedCompletion() {
