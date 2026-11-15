@@ -27,6 +27,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyStore
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -224,12 +225,24 @@ class LocalizedVoiceController(
     } else null
     private var player: android.media.MediaPlayer? = null
     private var currentAudioFile: File? = null
+    private val playbackGeneration = AtomicLong(0L)
+    private var activePlaybackCallback: ((Boolean) -> Unit)? = null
 
     init { recognizer?.setRecognitionListener(this) }
 
     suspend fun speak(text: String, apiKey: String, onPlaybackState: (Boolean) -> Unit) {
         require(apiKey.isNotBlank()) { "ElevenLabs API Key не задан" }
         if (text.isBlank()) return
+        val generation = playbackGeneration.incrementAndGet()
+        withContext(Dispatchers.Main) {
+            activePlaybackCallback?.invoke(false)
+            activePlaybackCallback = null
+            runCatching { player?.stop() }
+            player?.release()
+            player = null
+            currentAudioFile?.delete()
+            currentAudioFile = null
+        }
         val audioFile = withContext(Dispatchers.IO) {
             val endpoint = URL("https://api.elevenlabs.io/v1/text-to-speech/$VOICE_ID?output_format=mp3_44100_128")
             val connection = endpoint.openConnection() as HttpURLConnection
@@ -271,42 +284,57 @@ class LocalizedVoiceController(
         }
         try {
             withContext(Dispatchers.Main) {
-                runCatching { player?.stop() }
-                player?.release()
-                currentAudioFile?.delete()
+                if (generation != playbackGeneration.get()) {
+                    audioFile.delete()
+                    onPlaybackState(false)
+                    return@withContext
+                }
                 currentAudioFile = audioFile
-
                 val next = android.media.MediaPlayer()
                 player = next
+                activePlaybackCallback = onPlaybackState
+
                 next.setOnCompletionListener { completed ->
-                    onPlaybackState(false)
                     completed.release()
                     audioFile.delete()
                     if (player === completed) {
                         player = null
                         if (currentAudioFile === audioFile) currentAudioFile = null
+                        if (activePlaybackCallback === onPlaybackState) {
+                            activePlaybackCallback = null
+                            onPlaybackState(false)
+                        }
                     }
                 }
                 next.setOnErrorListener { failed, _, _ ->
-                    onPlaybackState(false)
                     failed.release()
                     audioFile.delete()
                     if (player === failed) {
                         player = null
                         if (currentAudioFile === audioFile) currentAudioFile = null
+                        if (activePlaybackCallback === onPlaybackState) {
+                            activePlaybackCallback = null
+                            onPlaybackState(false)
+                        }
                     }
                     true
                 }
                 try {
                     next.setDataSource(audioFile.absolutePath)
                     next.setOnPreparedListener { prepared ->
-                        onPlaybackState(true)
-                        prepared.start()
+                        if (player === prepared && generation == playbackGeneration.get()) {
+                            onPlaybackState(true)
+                            prepared.start()
+                        } else {
+                            runCatching { prepared.release() }
+                            audioFile.delete()
+                        }
                     }
                     next.prepareAsync()
                 } catch (error: Exception) {
                     if (player === next) player = null
-                    currentAudioFile = if (currentAudioFile === audioFile) null else currentAudioFile
+                    if (currentAudioFile === audioFile) currentAudioFile = null
+                    if (activePlaybackCallback === onPlaybackState) activePlaybackCallback = null
                     runCatching { next.release() }
                     audioFile.delete()
                     throw error
@@ -362,6 +390,9 @@ class LocalizedVoiceController(
 
     fun release() {
         onListeningChanged(false)
+        playbackGeneration.incrementAndGet()
+        activePlaybackCallback?.invoke(false)
+        activePlaybackCallback = null
         runCatching { recognizer?.cancel() }
         recognizer?.destroy()
         runCatching { player?.stop() }
