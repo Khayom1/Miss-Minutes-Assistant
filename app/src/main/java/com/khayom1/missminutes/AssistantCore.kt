@@ -296,8 +296,18 @@ class LocalizedVoiceController(
         val engine = recognizer ?: return
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (language == "ru") "ru-RU" else "en-US")
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, if (language == "ru") "ru-RU" else "en-US")
+            // Android 14+ can switch between Russian and English during one session.
+            // The recognizer may ignore these extras when its service lacks the feature.
+            if (Build.VERSION.SDK_INT >= 34) {
+                putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_BALANCED)
+                putStringArrayListExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES,
+                    arrayListOf("ru-RU", "en-US")
+                )
+            } else {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (language == "ru") "ru-RU" else "en-US")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, if (language == "ru") "ru-RU" else "en-US")
+            }
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
