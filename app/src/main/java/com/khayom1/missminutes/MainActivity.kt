@@ -293,6 +293,7 @@ private fun MissMinutesRoot(activity: Activity) {
             try {
                 val key = withContext(Dispatchers.IO) { secrets.read("deepseek_api_key") }
                 if (key.isNullOrBlank()) {
+                    status = "DEEPSEEK / API KEY REQUIRED"
                     val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь DeepSeek API Key. И не вздумай записывать его на табличке у входа в TVA!"
                     appendMessage(messages, ChatLine("assistant", response))
                     withContext(Dispatchers.IO) {
