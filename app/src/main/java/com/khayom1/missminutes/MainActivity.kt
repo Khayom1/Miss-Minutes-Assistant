@@ -122,6 +122,7 @@ private fun MissMinutesRoot(activity: Activity) {
     var elevenLabsKeyDraft by remember { mutableStateOf(secrets.read("elevenlabs_api_key").orEmpty()) }
     var input by remember { mutableStateOf("") }
     var currentMotion by remember { mutableStateOf(MotionIntent.neutral()) }
+    var isSpeaking by remember { mutableStateOf(false) }
     var isThinking by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("TVA SYSTEM / READY") }
     var recognizedText by remember { mutableStateOf<String?>(null) }
@@ -144,9 +145,10 @@ private fun MissMinutesRoot(activity: Activity) {
         scope.launch {
             try {
                 voice.speak(text, elevenLabsKey) { isPlaying ->
-                    if (isPlaying) currentMotion = currentMotion.copy(energy = currentMotion.energy.coerceAtLeast(0.35f))
+                    isSpeaking = isPlaying
                 }
             } catch (error: Exception) {
+                isSpeaking = false
                 currentMotion = MotionIntent.neutral()
                 status = "ELEVENLABS / ERROR"
                 messages.add(ChatLine("assistant", "ElevenLabs: " + (error.message ?: "unknown error")))
@@ -253,7 +255,7 @@ private fun MissMinutesRoot(activity: Activity) {
             status = status,
             messages = messages,
             input = input,
-            motion = currentMotion,
+            motion = if (isSpeaking) currentMotion.copy(gesture = "talk") else currentMotion,
             isThinking = isThinking,
             onInputChange = { input = it },
             onSend = { send(input) },
