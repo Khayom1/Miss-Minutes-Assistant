@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-ci-\${{ github.ref }}
+  group: android-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -45,6 +45,15 @@ jobs:
         run: node tools/validate-model.mjs app/src/main/assets/models/miss-minutes.glb
       - name: Run tests and assemble APK
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
+      - name: Run Android runtime tests on API 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: gradle --no-daemon connectedDebugAndroidTest
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
