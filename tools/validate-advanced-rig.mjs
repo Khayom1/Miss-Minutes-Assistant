@@ -91,11 +91,15 @@ function hasAllNames(nodes, fragments) {
 function validateHierarchy(json) {
   const nodes = json.nodes ?? [];
   const parentCount = new Array(nodes.length).fill(0);
+  const parentByNode = new Array(nodes.length).fill(-1);
   let invalidChild = false;
-  for (const node of nodes) {
-    for (const child of node.children ?? []) {
+  for (let parent = 0; parent < nodes.length; parent++) {
+    for (const child of nodes[parent].children ?? []) {
       if (!Number.isInteger(child) || child < 0 || child >= nodes.length) invalidChild = true;
-      else parentCount[child]++;
+      else {
+        parentCount[child]++;
+        parentByNode[child] = parent;
+      }
     }
   }
   const multipleParents = parentCount.filter(count => count > 1).length;
@@ -119,8 +123,20 @@ function validateHierarchy(json) {
     multipleParents,
     reachableNodes: visited.size,
     totalNodes: nodes.length,
+    parentByNode,
     cycle
   };
+}
+
+function isAncestor(ancestorIndex, nodeIndex, parentByNode) {
+  let current = parentByNode[nodeIndex];
+  const visited = new Set();
+  while (current >= 0 && !visited.has(current)) {
+    if (current === ancestorIndex) return true;
+    visited.add(current);
+    current = parentByNode[current];
+  }
+  return false;
 }
 
 try {
@@ -253,10 +269,11 @@ try {
       );
       const chainIndices = [baseIndex, ...(finger === "thumb" ? [] : [tipIndex])];
       const chainFound = chainIndices.every(index => index >= 0);
-      const chainWeighted = chainFound && chainIndices.every(index => weightedJointNodeIndices.has(index));
+      const chainConnected = chainFound && (finger === "thumb" || isAncestor(baseIndex, tipIndex, hierarchy.parentByNode));
+      const chainWeighted = chainConnected && chainIndices.every(index => weightedJointNodeIndices.has(index));
       check(
-        chainFound && chainWeighted,
-        `${side.toUpperCase()} ${finger} finger chain: ${chainFound ? (chainWeighted ? "present and weighted" : "present but unweighted") : "missing"}`
+        chainFound && chainConnected && chainWeighted,
+        `${side.toUpperCase()} ${finger} finger chain: ${!chainFound ? "missing" : !chainConnected ? "joints are not connected in the skeleton hierarchy" : chainWeighted ? "present, connected and weighted" : "present but unweighted"}`
       );
     }
     const brow = names.some(name => name.includes(`brow_${side}`) || name.includes(`eyebrow_${side}`));
