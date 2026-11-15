@@ -91,9 +91,25 @@ class MainActivity : ComponentActivity() {
 
 private data class ChatLine(val role: String, val text: String)
 
+private fun resolveAssistantLanguage(context: android.content.Context): String {
+    val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        context.resources.configuration.locales[0] ?: Locale.getDefault()
+    } else {
+        @Suppress("DEPRECATION") context.resources.configuration.locale ?: Locale.getDefault()
+    }
+    return if (locale.language.equals("ru", ignoreCase = true)) "ru" else "en"
+}
+
+private fun localizedGreeting(language: String): String = if (language == "ru") {
+    "Так-так! Ну здравствуй, Хранитель Времени. Надеюсь, сегодня без очередного апокалипсиса временной линии?"
+} else {
+    "Tick-tock! Well, hello, Time-Keeper. I do hope we're avoiding another little timeline apocalypse today?"
+}
+
 @Composable
 private fun MissMinutesRoot(activity: Activity) {
     val context = LocalContext.current
+    val assistantLanguage = remember { resolveAssistantLanguage(context) }
     val prefs = remember { context.getSharedPreferences("tva_session", Activity.MODE_PRIVATE) }
     val memory = remember { MemoryDatabase(context.applicationContext) }
     val secrets = remember { SecretStore(context.applicationContext) }
@@ -110,11 +126,11 @@ private fun MissMinutesRoot(activity: Activity) {
 
     val messages = remember {
         mutableStateListOf(
-            ChatLine("assistant", "Так-так! Ну здравствуй, Хранитель Времени. Надеюсь, сегодня без очередного апокалипсиса временной линии?")
+            ChatLine("assistant", localizedGreeting(assistantLanguage))
         )
     }
 
-    val voice = remember(activity) { RussianVoiceController(activity) { recognizedText = it } }
+    val voice = remember(activity, assistantLanguage) { LocalizedVoiceController(activity, assistantLanguage) { recognizedText = it } }
     DisposableEffect(voice) { onDispose { voice.release() } }
 
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -171,7 +187,7 @@ private fun MissMinutesRoot(activity: Activity) {
         status = "TEMPORAL LINK / CONNECTING"
         scope.launch {
             try {
-                val prompt = PersonalityEngine.buildSystemPrompt(memory.buildPromptContext())
+                val prompt = PersonalityEngine.buildSystemPrompt(memory.buildPromptContext(), assistantLanguage)
                 val response = DeepSeekClient.reply(key, prompt, message)
                 messages.add(ChatLine("assistant", response))
                 memory.saveConversation("assistant", response)
