@@ -49,6 +49,8 @@ jobs:
         run: node --check tools/validate-advanced-rig.mjs
       - name: Check model build tooling syntax
         run: node --check tools/build-model.mjs
+      - name: Verify source-rig audit artifacts
+        run: test -s docs/ENGINEERING_STATUS.md && test -s assets/models/source-rig-audit.json
       - name: Run tests and assemble APK
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
       - name: Upload installable debug APK
