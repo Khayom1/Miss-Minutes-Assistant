@@ -23,16 +23,17 @@ Run: node tools/validate-advanced-rig.mjs assets/models/miss-minutes.glb
 The release gate must return exit code 0. It is intentionally not wired into CI until the replacement asset passes, so the current app build is not broken while the rig is being authored.
 
 ## Current supplied GLB audit
-The supplied Rig - Miss Minutes.glb is a valid GLB 2.0 file (2,732,724 bytes) with 245 nodes, 88 meshes/primitives, 53 skin objects and 4 materials. It has skinned primitives and contains body, eyes, pupils, eyelids, lips, teeth, tongue, clock dial and clock-hand geometry.
+The supplied `Rig - Miss Minutes.glb` is a valid GLB 2.0 file (2,732,724 bytes) with 245 nodes, 88 mesh definitions, 53 skin objects and 4 materials. Its hierarchy contains 138 joint references per skin and includes the body, arms, legs, feet, hands, eyes, pupils, eyelids, lips, teeth, tongue and clock geometry. The visible hand hierarchy includes thumb, index, middle and pinky chains; the ring finger is absent. Both eye assemblies contain separate upper/lower eyelid control geometry. The clock is currently represented by a combined hands mesh.
 
-It currently fails the final release contract:
-- Ring-finger chains are absent from the exported node hierarchy.
-- Independent eyebrow controls are absent from the exported node hierarchy.
-- Separate hour-hand and minute-hand controls are absent from the exported node hierarchy.
-- No morph targets are exported.
-- No embedded images are present; vertex colors are present, so this alone is not a blocker.
+A structural audit of the supplied export confirms these release blockers:
+- **Hands:** left and right ring-finger chains are missing; existing finger coverage is not a complete five-digit hand rig.
+- **Face:** no independent eyebrow controls are present.
+- **Clock:** hour and minute hands do not have independently addressable controls in the exported hierarchy.
+- **Facial deformation:** no glTF morph targets are exported. Separate eyelid and lip bones/meshes exist, but the required expression/phoneme set is not yet proven.
+- **Appearance:** no embedded images are present; vertex colors and materials are present, so this is not by itself a blocker.
+- **Runtime:** the GLB contains no animation clips. This is acceptable only if the Android runtime drives the rig procedurally; that connection is not yet implemented or device-verified.
 
-The GLB contains no animation clips. This is acceptable for the intended procedural-motion architecture.
+The editable `.blend` source must be treated as the authoring source. The GLB is an export, not a substitute for the source rig. No destructive edits should be made until the Blender scene is inspected and its armature, mesh ownership, vertex groups and bone parenting are mapped.
 
 ## Definition of done
 Do not label the asset production-ready until the release gate passes, the Blender source has been reopened and checked, the exported GLB has loaded in the Android renderer, and hand/foot/face/clock controls have passed visual deformation tests on the target Android device.
