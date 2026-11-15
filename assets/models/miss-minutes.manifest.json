@@ -1,5 +1,5 @@
 {
-  "title": "Miss Minutes — Animated 3D Character",
+  "title": "Miss Minutes — Android runtime character asset",
   "asset": "assets/models/miss-minutes.glb",
   "format": "glTF 2.0 binary (GLB)",
   "coordinateSystem": {
@@ -7,7 +7,24 @@
     "forward": "+Z",
     "units": "character-relative"
   },
-  "rig": "Hierarchical transform rig: body, shoulders, elbows, wrists, hands, hips, knees, ankles, eyes, brows, and mouth controls.",
+  "currentAssetAudit": {
+    "nodes": 120,
+    "meshDefinitions": 24,
+    "materials": 15,
+    "embeddedTextures": 0,
+    "skins": 0,
+    "skinnedPrimitives": 0,
+    "morphTargetPrimitives": 0,
+    "animationClips": 17,
+    "animationChannels": 61,
+    "triangles": 24680,
+    "note": "These are the measured values from the CI validator for the exact runtime asset currently staged into the Android app."
+  },
+  "rig": {
+    "type": "Animated node-transform hierarchy",
+    "skinning": "Not present in the current Android runtime GLB; no glTF skin objects or JOINTS_0/WEIGHTS_0.",
+    "facialDeformation": "No morph targets. Facial states are not yet independently deformable."
+  },
   "animations": [
     {
       "name": "Idle_Breathe",
@@ -78,19 +95,10 @@
       "loop": false
     }
   ],
-  "facialControls": [
-    "Mouth_Smile_CTRL",
-    "Mouth_Talk_CTRL",
-    "Mouth_Surprise_CTRL",
-    "Mouth_Frown_CTRL",
-    "Eye_L_CTRL",
-    "Eye_R_CTRL",
-    "Brow_L_CTRL",
-    "Brow_R_CTRL"
-  ],
-  "sourceGenerator": "tools/build-model.mjs",
-  "validation": "tools/validate-model.mjs",
-  "notes": "Unofficial fan-made recreation. GLB contains 120 nodes, 24 meshes, 15 materials and 17 animation clips.",
+  "runtime": {
+    "behavior": "AI returns semantic mood/gaze/gesture/energy; Android maps that intent to one of the validated named clips.",
+    "limitations": "No live bone-pose solver, no morph-weight driver, no phoneme-level lip sync, no layered animation blending."
+  },
   "voiceProfile": {
     "provider": "ElevenLabs",
     "name": "Miss minutes",
@@ -100,7 +108,16 @@
       "en",
       "ru"
     ],
-    "playback": "The Android app drives Talk_Loop while speech is playing and returns the character to Idle_Breathe when playback completes.",
-    "apiKeyStorage": "Android Keystore; credentials are never committed."
+    "playback": "Android selects Talk_Loop during ElevenLabs playback and returns to the AI-selected motion afterward.",
+    "apiKeyStorage": "Android Keystore; credentials are not committed."
+  },
+  "releaseStatus": {
+    "productionReady": false,
+    "blockers": [
+      "Replace the current transform-only runtime GLB with the audited skinned source model after completing its missing rig controls.",
+      "Create and validate independent finger, eyebrow, eyelid, mouth, jaw, and clock-hand controls.",
+      "Implement runtime bone/morph driving and phoneme-timed speech synchronization.",
+      "Run Android build and device visual/performance tests."
+    ]
   }
 }
