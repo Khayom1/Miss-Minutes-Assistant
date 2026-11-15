@@ -5,18 +5,18 @@ import org.junit.Test
 
 class CharacterBehaviorModeTest {
     @Test
-    fun directInteractionTakesPriorityOverPassiveAndSpeechStates() {
+    fun speechTakesPriorityOverDirectInteraction() {
         assertEquals(
-            BehaviorMode.INTERACTING,
+            BehaviorMode.SPEAKING,
             resolveBehaviorMode(isListening = true, isThinking = true, isSpeaking = true, isInteracting = true)
         )
     }
 
     @Test
-    fun speechTakesPriorityOverThinkingAndListening() {
+    fun directInteractionTakesPriorityOverThinkingAndListening() {
         assertEquals(
-            BehaviorMode.SPEAKING,
-            resolveBehaviorMode(isListening = true, isThinking = true, isSpeaking = true)
+            BehaviorMode.INTERACTING,
+            resolveBehaviorMode(isListening = true, isThinking = true, isSpeaking = false, isInteracting = true)
         )
     }
 
@@ -38,5 +38,12 @@ class CharacterBehaviorModeTest {
             BehaviorMode.IDLE,
             resolveBehaviorMode(isListening = false, isThinking = false, isSpeaking = false)
         )
+    }
+
+    @Test
+    fun priorityValuesMatchTheResolverOrder() {
+        assertEquals(true, BehaviorMode.SPEAKING.priority > BehaviorMode.INTERACTING.priority)
+        assertEquals(true, BehaviorMode.INTERACTING.priority > BehaviorMode.THINKING.priority)
+        assertEquals(true, BehaviorMode.HIDDEN.priority > BehaviorMode.SPEAKING.priority)
     }
 }

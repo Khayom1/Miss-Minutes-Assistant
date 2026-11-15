@@ -46,8 +46,8 @@ internal fun resolveBehaviorMode(
     isSpeaking: Boolean,
     isInteracting: Boolean = false
 ): BehaviorMode = when {
-    isInteracting -> BehaviorMode.INTERACTING
     isSpeaking -> BehaviorMode.SPEAKING
+    isInteracting -> BehaviorMode.INTERACTING
     isThinking -> BehaviorMode.THINKING
     isListening -> BehaviorMode.LISTENING
     else -> BehaviorMode.IDLE

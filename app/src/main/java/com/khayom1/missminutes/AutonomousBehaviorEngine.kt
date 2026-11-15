@@ -9,8 +9,8 @@ enum class BehaviorMode(val priority: Int) {
     IDLE(0),
     LISTENING(1),
     THINKING(2),
-    SPEAKING(3),
-    INTERACTING(4),
+    INTERACTING(3),
+    SPEAKING(4),
     HIDDEN(5)
 }
 
