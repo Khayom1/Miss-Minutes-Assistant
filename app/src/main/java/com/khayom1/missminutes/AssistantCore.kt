@@ -266,7 +266,8 @@ class LocalizedVoiceController(
     context: Context,
     private val language: String,
     private val onRecognized: (String) -> Unit,
-    private val onListeningChanged: (Boolean) -> Unit = {}
+    private val onListeningChanged: (Boolean) -> Unit = {},
+    private val onRecognitionError: (String) -> Unit = {}
 ) : RecognitionListener {
     private val appContext = context.applicationContext
     private val recognizer = if (SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -276,6 +277,7 @@ class LocalizedVoiceController(
     private var currentAudioFile: File? = null
     private val playbackGeneration = AtomicLong(0L)
     private var activePlaybackCallback: ((Boolean) -> Unit)? = null
+    private var recognitionActive = false
 
     init { recognizer?.setRecognitionListener(this) }
 
@@ -397,6 +399,7 @@ class LocalizedVoiceController(
 
     /** Stop microphone capture when the host activity leaves the foreground. */
     fun cancelListening() {
+        recognitionActive = false
         runCatching { recognizer?.cancel() }
         onListeningChanged(false)
     }
@@ -405,8 +408,14 @@ class LocalizedVoiceController(
         val engine = recognizer
         if (engine == null) {
             onListeningChanged(false)
+            onRecognitionError("SPEECH RECOGNITION / UNAVAILABLE")
             return
         }
+        if (recognitionActive) {
+            cancelListening()
+            return
+        }
+        recognitionActive = true
         onListeningChanged(true)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -426,10 +435,15 @@ class LocalizedVoiceController(
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
         runCatching { engine.startListening(intent) }
-            .onFailure { onListeningChanged(false) }
+            .onFailure {
+                recognitionActive = false
+                onListeningChanged(false)
+                onRecognitionError("SPEECH RECOGNITION / START FAILED")
+            }
     }
 
     override fun onResults(results: Bundle?) {
+        recognitionActive = false
         onListeningChanged(false)
         val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
         if (!spoken.isNullOrBlank()) onRecognized(spoken)
@@ -439,12 +453,16 @@ class LocalizedVoiceController(
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
     override fun onEndOfSpeech() { onListeningChanged(true) }
-    override fun onError(error: Int) { onListeningChanged(false) }
+    override fun onError(error: Int) {
+        recognitionActive = false
+        onListeningChanged(false)
+        onRecognitionError(recognitionErrorMessage(error))
+    }
     override fun onPartialResults(partialResults: Bundle?) = Unit
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
     fun release() {
-        onListeningChanged(false)
+        cancelListening()
         playbackGeneration.incrementAndGet()
         activePlaybackCallback?.invoke(false)
         activePlaybackCallback = null
@@ -455,6 +473,19 @@ class LocalizedVoiceController(
         player = null
         currentAudioFile?.delete()
         currentAudioFile = null
+    }
+
+    private fun recognitionErrorMessage(error: Int): String = when (error) {
+        SpeechRecognizer.ERROR_AUDIO -> "MICROPHONE / AUDIO ERROR"
+        SpeechRecognizer.ERROR_CLIENT -> "SPEECH RECOGNITION / CLIENT ERROR"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "MICROPHONE / PERMISSION DENIED"
+        SpeechRecognizer.ERROR_NETWORK -> "SPEECH RECOGNITION / NETWORK ERROR"
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "SPEECH RECOGNITION / NETWORK TIMEOUT"
+        SpeechRecognizer.ERROR_NO_MATCH -> "SPEECH RECOGNITION / NO MATCH"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "SPEECH RECOGNITION / BUSY"
+        SpeechRecognizer.ERROR_SERVER -> "SPEECH RECOGNITION / SERVER ERROR"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "SPEECH RECOGNITION / TIMEOUT"
+        else -> "SPEECH RECOGNITION / ERROR $error"
     }
 
     companion object {

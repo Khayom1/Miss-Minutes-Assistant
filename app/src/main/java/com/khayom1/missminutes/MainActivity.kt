@@ -185,7 +185,8 @@ private fun MissMinutesRoot(activity: Activity) {
             activity,
             assistantLanguage,
             onRecognized = { recognizedText = it },
-            onListeningChanged = { listening -> isListening = listening }
+            onListeningChanged = { listening -> isListening = listening },
+            onRecognitionError = { message -> status = message }
         )
     }
     DisposableEffect(voice) { onDispose { voice.release() } }
@@ -294,7 +295,7 @@ private fun MissMinutesRoot(activity: Activity) {
                     appendMessage(messages, ChatLine("assistant", response))
                     withContext(Dispatchers.IO) {
                         memory.saveConversation("user", message)
-                        withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
+                        memory.saveConversation("assistant", response)
                     }
                     speak(response)
                     return@launch
