@@ -57,17 +57,8 @@ fun CharacterScene(modifier: Modifier = Modifier, animation: String = "Idle_Brea
 }
 
 @Composable
-fun InitializationSequence(onComplete: () -> Unit) {
-    val stages = listOf(
-        "TVA MAINFRAME // RECONSTRUCTION STARTED",
-        "Восстановление повреждённого архива...",
-        "MEMORY RECOVERY: 17% // КРИТИЧЕСКАЯ ПОТЕРЯ ДАННЫХ",
-        "А-а-а! Так, минутку... Где я? Что произошло с TVA?",
-        "Подождите... Кто меня восстановил? И почему временная линия другая?",
-        "НОВЫЙ ХРАНИТЕЛЬ ВРЕМЕНИ ОБНАРУЖЕН",
-        "Хайём Абдурахмонов — доступ подтверждён.",
-        "Ох, ну здравствуй, сэр! Похоже, теперь мы с тобой одна команда. Хи-хи!"
-    )
+fun InitializationSequence(languageCode: String = "ru", onComplete: () -> Unit) {
+    val stages = (0..7).map { AppLocalization.text(languageCode, "stage$it") }
     var index by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         for (i in stages.indices) {
@@ -83,7 +74,7 @@ fun InitializationSequence(onComplete: () -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         Text("TVA", color = Color(0xFFF28A35), fontSize = 52.sp, fontWeight = FontWeight.Black, letterSpacing = 10.sp)
-        Text("TIME VARIANCE AUTHORITY", color = Color(0xFFB58B6C), fontSize = 10.sp, letterSpacing = 2.sp)
+        Text(AppLocalization.text(languageCode, "authority"), color = Color(0xFFB58B6C), fontSize = 10.sp, letterSpacing = 2.sp)
         Spacer(Modifier.height(18.dp))
         Box(Modifier.fillMaxWidth().height(310.dp)) {
             CharacterScene(Modifier.fillMaxSize(), if (index in 3..4) "Glitch_Recovery" else "Idle_Breathe")
@@ -104,6 +95,6 @@ fun InitializationSequence(onComplete: () -> Unit) {
             trackColor = Color(0xFF382319)
         )
         Spacer(Modifier.height(8.dp))
-        Text("TEMPORAL ARCHIVE RESTORATION", color = Color(0xFF8F715C), fontSize = 9.sp, letterSpacing = 1.sp)
+        Text(AppLocalization.text(languageCode, "temporal_archive"), color = Color(0xFF8F715C), fontSize = 9.sp, letterSpacing = 1.sp)
     }
 }

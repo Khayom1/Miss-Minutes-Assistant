@@ -19,6 +19,14 @@ class AndroidActionsTest {
         assertEquals(LocalCommandType.NONE, classifyLocalCommand("как работает таймер?"))
         assertEquals(LocalCommandType.NONE, classifyLocalCommand("расскажи про будильник"))
     }
+    @Test fun localCommandsAreRecognizedInTajikAndEnglish() {
+        assertEquals(LocalCommandType.HOME, classifyLocalCommand("go home", "en"))
+        assertEquals(LocalCommandType.BACK, classifyLocalCommand("ақиб", "tg"))
+        assertEquals(LocalCommandType.TIMER, classifyLocalCommand("таймер мон барои 5 дақиқа", "tg"))
+        assertEquals(LocalCommandType.ALARM, classifyLocalCommand("set an alarm for 07:30", "en"))
+        assertEquals(LocalCommandType.OPEN_APP, classifyLocalCommand("open YouTube", "en"))
+        assertEquals(LocalCommandType.OPEN_APP, classifyLocalCommand("кушо YouTube", "tg"))
+    }
     @Test fun appLaunchMustBeAnImperativeCommand() {
         assertEquals(LocalCommandType.OPEN_APP, classifyLocalCommand("открой YouTube"))
         assertEquals(LocalCommandType.OPEN_APP, classifyLocalCommand("запусти календарь"))

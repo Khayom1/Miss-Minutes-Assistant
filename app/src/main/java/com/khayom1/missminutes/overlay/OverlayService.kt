@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.setViewTreeLifecycleOwner
+import com.khayom1.missminutes.AppLocalization
 import com.khayom1.missminutes.CharacterScene
 import com.khayom1.missminutes.MainActivity
 import kotlinx.coroutines.delay
@@ -58,6 +59,8 @@ class OverlayService : LifecycleService() {
     private lateinit var frame: DraggableFrame
     private lateinit var layout: WindowManager.LayoutParams
     private var attached = false
+    private val appLanguage: String
+        get() = AppLocalization.normalize(getSharedPreferences("tva_session", Context.MODE_PRIVATE).getString("app_language", "ru"))
 
     override fun onCreate() {
         super.onCreate()
@@ -88,6 +91,7 @@ class OverlayService : LifecycleService() {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
                 OverlayCharacter(
+                    languageCode = appLanguage,
                     onStop = { stopSelf() },
                     onCompact = { compact ->
                         layout.width = ((if (compact) 78 else 218) * density).toInt()
@@ -124,7 +128,7 @@ class OverlayService : LifecycleService() {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Miss Minutes overlay", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, AppLocalization.text(appLanguage, "overlay_channel"), NotificationManager.IMPORTANCE_LOW)
             )
         }
     }
@@ -140,11 +144,11 @@ class OverlayService : LifecycleService() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("Мисс Минутс активна")
-            .setContentText("Перетащи персонажа по экрану.")
+            .setContentTitle(AppLocalization.text(appLanguage, "overlay_title"))
+            .setContentText(AppLocalization.text(appLanguage, "overlay_body"))
             .setContentIntent(open)
             .setOngoing(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Остановить", stop)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, AppLocalization.text(appLanguage, "stop"), stop)
             .build()
     }
 
@@ -191,7 +195,7 @@ class OverlayService : LifecycleService() {
 }
 
 @Composable
-private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
+private fun OverlayCharacter(languageCode: String, onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
     var compact by remember { mutableStateOf(false) }
     var clip by remember { mutableStateOf("Idle_Breathe") }
 
@@ -215,7 +219,7 @@ private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
                 IconButton(
                     onClick = { compact = false; onCompact(false) },
                     modifier = Modifier.align(Alignment.BottomEnd).size(28.dp)
-                ) { Icon(Icons.Default.OpenInFull, contentDescription = "Развернуть", tint = Color.White) }
+                ) { Icon(Icons.Default.OpenInFull, contentDescription = AppLocalization.text(languageCode, "expand"), tint = Color.White) }
             }
         }
     } else {
@@ -229,15 +233,15 @@ private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
                     Text("TVA / MM", color = Color(0xFFFFB46D), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Row {
                         IconButton(onClick = { compact = true; onCompact(true) }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Remove, contentDescription = "Свернуть", tint = Color.White)
+                            Icon(Icons.Default.Remove, contentDescription = AppLocalization.text(languageCode, "collapse"), tint = Color.White)
                         }
                         IconButton(onClick = onStop, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Закрыть", tint = Color.White)
+                            Icon(Icons.Default.Close, contentDescription = AppLocalization.text(languageCode, "close"), tint = Color.White)
                         }
                     }
                 }
                 CharacterScene(Modifier.fillMaxWidth().height(205.dp), clip)
-                Text("Так-так, я здесь!", color = Color(0xFFFFE8D2), fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
+                Text(AppLocalization.text(languageCode, "overlay_greeting"), color = Color(0xFFFFE8D2), fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
             }
         }
     }
