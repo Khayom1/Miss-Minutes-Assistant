@@ -12,7 +12,8 @@ class SupabaseAuthRepository(
     private val supabaseUrl: String,
     private val publishableKey: String,
     private val transport: HttpPostTransport,
-    private val sessionStore: SessionStore
+    private val sessionStore: SessionStore,
+    private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000L }
 ) : AuthRepository {
 
     override suspend fun signIn(email: String, password: String): AuthResult =
@@ -22,11 +23,17 @@ class SupabaseAuthRepository(
         authenticate(email, password, signUp = true)
 
     override suspend fun signOut(): AuthResult {
-        val session = sessionStore.currentSession ?: return AuthResult.NeedsEmailConfirmation
+        val session = sessionStore.currentSession ?: run {
+            sessionStore.clear()
+            return AuthResult.SignedOut
+        }
         val base = SupabaseEndpointPolicy.parse(supabaseUrl)
-            ?: return AuthResult.Failure(AuthErrorCode.NOT_CONFIGURED)
-        val endpoint = base.newBuilder().encodedPath("/auth/v1/logout").build()
+        if (base == null || publishableKey.isBlank()) {
+            sessionStore.clear()
+            return AuthResult.Failure(AuthErrorCode.NOT_CONFIGURED)
+        }
 
+        val endpoint = base.newBuilder().encodedPath("/auth/v1/logout").build()
         val response = try {
             transport.post(
                 endpoint,
@@ -43,7 +50,7 @@ class SupabaseAuthRepository(
 
         sessionStore.clear()
         return if (response.failure == null && response.statusCode in 200..299) {
-            AuthResult.NeedsEmailConfirmation
+            AuthResult.SignedOut
         } else {
             AuthResult.Failure(AuthErrorCode.NETWORK)
         }
@@ -96,17 +103,20 @@ class SupabaseAuthRepository(
         val accessToken = decoded.accessToken?.takeIf { it.isNotBlank() }
         val refreshToken = decoded.refreshToken?.takeIf { it.isNotBlank() }
         if (accessToken == null || refreshToken == null) {
-            return if (signUp && decoded.user?.email != null) {
-                AuthResult.NeedsEmailConfirmation
-            } else {
-                AuthResult.Failure(AuthErrorCode.INVALID_RESPONSE)
+            if (signUp && decoded.user?.email != null) {
+                sessionStore.clear()
+                return AuthResult.NeedsEmailConfirmation
             }
+            return AuthResult.Failure(AuthErrorCode.INVALID_RESPONSE)
         }
 
+        val expiresAt = decoded.expiresAt
+            ?: (nowEpochSeconds() + (decoded.expiresIn ?: 3_600))
         val session = AuthSession(
             accessToken = accessToken,
             refreshToken = refreshToken,
-            email = decoded.user?.email ?: normalizedEmail
+            email = decoded.user?.email ?: normalizedEmail,
+            expiresAtEpochSeconds = expiresAt
         )
         sessionStore.save(session)
         return AuthResult.SignedIn(session)
@@ -128,6 +138,8 @@ private data class AuthRequestDto(
 private data class AuthResponseDto(
     @SerialName("access_token") val accessToken: String? = null,
     @SerialName("refresh_token") val refreshToken: String? = null,
+    @SerialName("expires_in") val expiresIn: Long? = null,
+    @SerialName("expires_at") val expiresAt: Long? = null,
     val user: AuthUserDto? = null
 )
 
