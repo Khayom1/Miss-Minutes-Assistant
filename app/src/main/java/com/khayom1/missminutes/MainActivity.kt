@@ -316,7 +316,7 @@ private fun MissMinutesRoot(activity: Activity) {
                     try {
                         require(nameToSave.isNotBlank()) { "Provider name is required" }
                         require(modelToSave.isNotBlank()) { "Model ID is required" }
-                        resolveOpenAiChatEndpoint(baseUrlToSave)
+                        resolveProviderEndpoint(ProviderConfig("primary", nameToSave, baseUrlToSave, modelToSave))
                         withContext(Dispatchers.IO) {
                             secrets.save("ai_primary_api_key", keyToSave)
                             secrets.save("deepseek_api_key", "")
@@ -510,7 +510,7 @@ private fun SettingsDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Профиль OpenAI-совместимого провайдера", color = TvaOrange, fontWeight = FontWeight.Bold)
+                Text("Профиль AI-провайдера: OpenAI-compatible, Gemini или Anthropic", color = TvaOrange, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = providerName,
                     onValueChange = onProviderNameChange,
@@ -542,7 +542,7 @@ private fun SettingsDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     placeholder = { Text("API Key") }
                 )
-                Text("Ключ шифруется через Android Keystore. Используется протокол OpenAI Chat Completions через HTTPS.", fontSize = 11.sp)
+                Text("Ключ шифруется Android Keystore. Протокол определяется по официальному HTTPS-адресу: Gemini, Anthropic или OpenAI-compatible.", fontSize = 11.sp)
                 OutlinedButton(onClick = onNotificationSettings, modifier = Modifier.fillMaxWidth()) {
                     Text("Разрешить чтение уведомлений")
                 }
