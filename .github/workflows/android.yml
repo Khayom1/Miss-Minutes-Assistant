@@ -55,8 +55,28 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Test authenticated Supabase AI function
+      - name: Run Supabase AI gateway unit tests
         run: deno test supabase/functions/miss-minutes-ai/index_test.ts
+
+      - name: Verify deployed gateway rejects unauthenticated requests
+        env:
+          SUPABASE_URL: https://bgfcpnlxztziigrsyuqp.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_EZp3LgM4zcqtFKBUkphGaQ_FmWpyOWz
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --connect-timeout 10 --max-time 20 \
+            --request POST "$SUPABASE_URL/functions/v1/miss-minutes-ai" \
+            --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            --header "Content-Type: application/json" \
+            --data '{"messages":[{"role":"user","content":"CI unauthenticated gateway smoke test"}]}')"
+          if [ "$status" != "401" ]; then
+            echo "Expected HTTP 401 without a user JWT, received HTTP $status."
+            cat "$response_file"
+            exit 1
+          fi
+          echo "Unauthenticated request correctly rejected with HTTP 401."
 
       - name: Run unit tests, build APK and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
