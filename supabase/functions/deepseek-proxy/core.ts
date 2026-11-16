@@ -3,7 +3,7 @@ export type ChatMessage = {
   content: string;
 };
 
-type Dependencies = {
+export type DeepSeekProxyDependencies = {
   userId?: string;
   providerKey?: string;
   consumeRateLimit: (userId: string) => Promise<boolean>;
@@ -86,7 +86,7 @@ function validateMessages(value: unknown): ChatMessage[] | null {
   return hasUserMessage ? messages : null;
 }
 
-export function createDeepSeekProxyHandler(dependencies: Dependencies) {
+export function createDeepSeekProxyHandler(dependencies: DeepSeekProxyDependencies) {
   const fetchImpl = dependencies.fetchImpl ?? fetch;
 
   return async (request: Request): Promise<Response> => {
