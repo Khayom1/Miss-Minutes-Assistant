@@ -122,6 +122,9 @@ private fun MissMinutesRoot(activity: Activity) {
     DisposableEffect(memory) { onDispose { memory.close() } }
     val secrets = remember { SecretStore(context.applicationContext) }
     val scope = rememberCoroutineScope()
+    fun setBehaviorMode(mode: BehaviorMode) {
+        prefs.edit().putString("behavior_mode", mode.name).apply()
+    }
 
     var firstRun by remember { mutableStateOf(!prefs.getBoolean("initialization_complete", false)) }
     var showSettings by remember { mutableStateOf(false) }
@@ -155,20 +158,23 @@ private fun MissMinutesRoot(activity: Activity) {
     LaunchedEffect(languageCode) { voice.setLanguage(AppLocalization.languageTag(languageCode)) }
 
     fun speak(text: String) {
+        setBehaviorMode(BehaviorMode.SPEAKING)
         scope.launch {
             val elevenKey = withContext(Dispatchers.IO) { secrets.read("elevenlabs_api_key") }
+            val onComplete = { setBehaviorMode(BehaviorMode.IDLE) }
             if (elevenKey.isNullOrBlank()) {
-                voice.speak(text)
+                voice.speak(text, onComplete)
             } else {
-                runCatching {
+                try {
                     elevenLabs.speak(
                         elevenKey,
                         prefs.getString("elevenlabs_voice_id", "3ooIiYiDLwKz4dFFc7WM") ?: "3ooIiYiDLwKz4dFFc7WM",
-                        text
+                        text,
+                        onComplete
                     )
-                }.onFailure {
+                } catch (_: Exception) {
                     status = "ELEVENLABS / FALLBACK TO DEVICE TTS"
-                    voice.speak(text)
+                    voice.speak(text, onComplete)
                 }
             }
         }
@@ -176,14 +182,19 @@ private fun MissMinutesRoot(activity: Activity) {
     val activityLifecycle = (activity as? LifecycleOwner)?.lifecycle
     DisposableEffect(voice, activityLifecycle) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) voice.cancelListening()
+            if (event == Lifecycle.Event.ON_STOP) {
+                voice.cancelListening()
+                if (prefs.getString("behavior_mode", "IDLE") == BehaviorMode.LISTENING.name) {
+                    setBehaviorMode(BehaviorMode.IDLE)
+                }
+            }
         }
         activityLifecycle?.addObserver(observer)
         onDispose { activityLifecycle?.removeObserver(observer) }
     }
 
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) voice.listen() else status = "MICROPHONE / PERMISSION DENIED"
+        if (granted) { setBehaviorMode(BehaviorMode.LISTENING); voice.listen() } else status = "MICROPHONE / PERMISSION DENIED"
     }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startOverlay(activity) else status = "OVERLAY / NOTIFICATION PERMISSION DENIED"
@@ -211,10 +222,12 @@ private fun MissMinutesRoot(activity: Activity) {
         val message = text.trim()
         if (message.isEmpty() || isThinking) return
         input = ""
+        setBehaviorMode(BehaviorMode.THINKING)
         appendMessage(messages, ChatLine("user", message))
         scope.launch(Dispatchers.IO) { memory.saveConversation("user", message) }
         val localAction = AndroidActions.tryHandle(activity, message, languageCode)
         if (localAction != null) {
+            setBehaviorMode(BehaviorMode.INTERACTING)
             appendMessage(messages, ChatLine("assistant", localAction))
             scope.launch(Dispatchers.IO) { memory.saveConversation("assistant", localAction) }
             speak(localAction)
@@ -270,6 +283,7 @@ private fun MissMinutesRoot(activity: Activity) {
             } catch (error: Exception) {
                 val response = AppLocalization.text(languageCode, "provider_error")
                 appendMessage(messages, ChatLine("assistant", response))
+                setBehaviorMode(BehaviorMode.IDLE)
                 status = "TEMPORAL LINK / ERROR"
             } finally { isThinking = false }
         }
@@ -336,7 +350,10 @@ private fun MissMinutesRoot(activity: Activity) {
             onListen = {
                 if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) ==
                     android.content.pm.PackageManager.PERMISSION_GRANTED
-                ) voice.listen() else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                ) {
+                    setBehaviorMode(BehaviorMode.LISTENING)
+                    voice.listen()
+                } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
             },
             onSpeak = { text -> speak(text) },
             onNotificationSettings = { activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },

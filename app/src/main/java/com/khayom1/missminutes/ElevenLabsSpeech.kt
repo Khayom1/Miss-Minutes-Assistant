@@ -19,19 +19,43 @@ import kotlin.coroutines.resumeWithException
 class ElevenLabsSpeechClient(context: Context) {
     private val appContext = context.applicationContext
     private var player: MediaPlayer? = null
+    private var activeFile: File? = null
+    private var playbackFinished: (() -> Unit)? = null
 
-    suspend fun speak(apiKey: String, voiceId: String, text: String) {
+    suspend fun speak(apiKey: String, voiceId: String, text: String, onPlaybackFinished: () -> Unit = {}) {
         require(apiKey.isNotBlank()) { "ElevenLabs API key is required" }
         validateVoiceId(voiceId)
         require(text.isNotBlank() && text.length <= MAX_TEXT_CHARS) { "Speech text is empty or too long" }
         val audio = withContext(Dispatchers.IO) { synthesize(apiKey, voiceId, text) }
-        withContext(Dispatchers.Main.immediate) { play(audio) }
+        withContext(Dispatchers.Main.immediate) { play(audio, onPlaybackFinished) }
     }
 
     fun release() {
-        runCatching { player?.stop() }
-        runCatching { player?.release() }
+        stopCurrentPlayback()
+    }
+
+    private fun stopCurrentPlayback(notifyCompletion: Boolean = true) {
+        val active = player
         player = null
+        runCatching { active?.stop() }
+        runCatching { active?.release() }
+        activeFile?.delete()
+        activeFile = null
+        val callback = playbackFinished
+        playbackFinished = null
+        if (notifyCompletion) callback?.invoke()
+    }
+
+    private fun finishPlayback(media: MediaPlayer, file: File) {
+        if (player === media) {
+            player = null
+            runCatching { media.release() }
+            file.delete()
+            activeFile = null
+            val callback = playbackFinished
+            playbackFinished = null
+            callback?.invoke()
+        }
     }
 
     private fun synthesize(apiKey: String, voiceId: String, text: String): File {
@@ -46,7 +70,7 @@ class ElevenLabsSpeechClient(context: Context) {
         connection.setRequestProperty("Content-Type", "application/json")
         connection.setRequestProperty("Accept", "audio/mpeg")
         val request = buildRequest(text)
-        try {
+        return try {
             connection.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
             val status = connection.responseCode
             if (status !in 200..299) {
@@ -73,47 +97,38 @@ class ElevenLabsSpeechClient(context: Context) {
         }
     }
 
-    private suspend fun play(file: File) = suspendCancellableCoroutine<Unit> { continuation ->
-        release()
+    private suspend fun play(file: File, onPlaybackFinished: () -> Unit) = suspendCancellableCoroutine<Unit> { continuation ->
+        stopCurrentPlayback(notifyCompletion = false)
         val media = MediaPlayer()
         player = media
+        activeFile = file
+        playbackFinished = onPlaybackFinished
         media.setOnPreparedListener { prepared ->
             runCatching { prepared.start() }.onSuccess {
                 if (continuation.isActive) continuation.resume(Unit)
             }.onFailure {
-                prepared.release()
-                if (player === prepared) player = null
-                file.delete()
+                finishPlayback(prepared, file)
                 if (continuation.isActive) continuation.resumeWithException(it)
             }
         }
         media.setOnCompletionListener { completed ->
-            completed.release()
-            if (player === completed) player = null
-            file.delete()
+            finishPlayback(completed, file)
         }
         media.setOnErrorListener { failed, what, extra ->
-            failed.release()
-            if (player === failed) player = null
-            file.delete()
+            finishPlayback(failed, file)
             if (continuation.isActive) continuation.resumeWithException(
                 IllegalStateException("Audio playback failed ($what/$extra)")
             )
             true
         }
         continuation.invokeOnCancellation {
-            runCatching { media.stop() }
-            runCatching { media.release() }
-            if (player === media) player = null
-            file.delete()
+            if (player === media) stopCurrentPlayback()
         }
         try {
             media.setDataSource(file.absolutePath)
             media.prepareAsync()
         } catch (error: Exception) {
-            media.release()
-            if (player === media) player = null
-            file.delete()
+            finishPlayback(media, file)
             if (continuation.isActive) continuation.resumeWithException(error)
         }
     }

@@ -266,6 +266,7 @@ class RussianVoiceController(context: Context, private val onRecognized: (String
     } else null
     private var ready = false
     @Volatile private var languageTag = "ru-RU"
+    @Volatile private var speechCompletion: (() -> Unit)? = null
 
     init { recognizer?.setRecognitionListener(this) }
 
@@ -276,8 +277,12 @@ class RussianVoiceController(context: Context, private val onRecognized: (String
             tts.setPitch(1.10f)
             tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) = Unit
-                override fun onDone(utteranceId: String?) = Unit
-                override fun onError(utteranceId: String?) = Unit
+                override fun onDone(utteranceId: String?) {
+                    speechCompletion?.also { speechCompletion = null }?.invoke()
+                }
+                override fun onError(utteranceId: String?) {
+                    speechCompletion?.also { speechCompletion = null }?.invoke()
+                }
             })
         }
     }
@@ -297,8 +302,16 @@ class RussianVoiceController(context: Context, private val onRecognized: (String
         }
     }
 
-    fun speak(text: String) {
-        if (ready && text.isNotBlank()) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "miss-minutes-response")
+    fun speak(text: String, onComplete: () -> Unit = {}) {
+        if (!ready || text.isBlank()) {
+            onComplete()
+            return
+        }
+        speechCompletion = onComplete
+        val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "miss-minutes-response")
+        if (result == TextToSpeech.ERROR) {
+            speechCompletion?.also { speechCompletion = null }?.invoke()
+        }
     }
 
     fun listen() {
@@ -332,6 +345,7 @@ class RussianVoiceController(context: Context, private val onRecognized: (String
         cancelListening()
         recognizer?.destroy()
         tts.stop()
+        speechCompletion?.also { speechCompletion = null }?.invoke()
         tts.shutdown()
     }
 }
