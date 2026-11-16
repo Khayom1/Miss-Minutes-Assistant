@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Miss Minutes — TVA</string>
-    <string name="notification_listener_name">Miss Minutes — notification access</string>
-    <string name="accessibility_service_name">Miss Minutes — system actions</string>
-    <string name="accessibility_service_description">Only system actions explicitly requested by the user.</string>
-</resources>

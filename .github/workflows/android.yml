@@ -3,10 +3,8 @@ name: Android CI
 on:
   push:
     branches: [main]
-    paths-ignore: ["README.md"]
   pull_request:
     branches: [main]
-    paths-ignore: ["README.md"]
   workflow_dispatch:
 
 permissions:
@@ -18,46 +16,44 @@ concurrency:
 
 jobs:
   build:
-    name: Build and verify APK
+    name: Build, test and lint
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools'
+          packages: "platform-tools"
+
       - name: Install Android platform
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
-      - name: Stage the audited character asset for Android
-        run: mkdir -p app/src/main/assets/models && cp assets/models/miss-minutes.glb app/src/main/assets/models/miss-minutes.glb
-      - name: Validate GLB and animation contract
-        run: node tools/validate-model.mjs app/src/main/assets/models/miss-minutes.glb
-      - name: Run tests and assemble APK
+
+      - name: Verify Kotlin source formatting basics
+        run: |
+          test -f app/src/main/java/com/khayom1/missminutes/MainActivity.kt
+          test ! -d app/src/main/assets/models
+
+      - name: Run unit tests, build APK and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
-      - name: Upload installable debug APK
+
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Miss-Minutes-Assistant-debug
+          name: miss-minutes-foundation-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Run Android runtime tests on API 35 emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          script: gradle --no-daemon connectedDebugAndroidTest

@@ -1,6 +1,0 @@
-<resources>
-    <string name="app_name">Miss Minutes — TVA</string>
-    <string name="notification_listener_name">Miss Minutes — чтение уведомлений</string>
-    <string name="accessibility_service_name">Miss Minutes — системные действия</string>
-    <string name="accessibility_service_description">Только явно запрошенные пользователем системные действия.</string>
-</resources>
