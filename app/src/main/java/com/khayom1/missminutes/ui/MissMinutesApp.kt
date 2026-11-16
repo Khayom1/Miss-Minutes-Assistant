@@ -298,10 +298,11 @@ fun MissMinutesApp(
     var authPassword by remember { mutableStateOf("") }
     var isSignUp by rememberSaveable { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(true) }
-    var isAuthenticated by rememberSaveable { mutableStateOf(false) }
+    // Authentication is restored from the encrypted session store, never from saved UI state.
+    var isAuthenticated by remember { mutableStateOf(false) }
     var authBusy by remember { mutableStateOf(false) }
     var authMessage by remember { mutableStateOf<String?>(null) }
-    var userEmail by rememberSaveable { mutableStateOf("") }
+    var userEmail by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
@@ -311,6 +312,10 @@ fun MissMinutesApp(
     val copy = copyFor(language)
 
     LaunchedEffect(sessionManager) {
+        // Saved Compose state can outlive a revoked/expired session. Start fail-closed
+        // and derive authenticated UI exclusively from the Keystore-backed session.
+        isAuthenticated = false
+        userEmail = ""
         try {
             val session = sessionManager.restoreSession()
             if (session != null) {
