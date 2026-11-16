@@ -28,7 +28,7 @@ object BackendEndpointPolicy {
 }
 
 object LocalInferenceEndpointPolicy {
-    private val loopbackHosts = setOf("127.0.0.1", "localhost", "::1")
+    private val loopbackHosts = setOf("127.0.0.1", "localhost")
 
     fun parse(value: String?): HttpUrl? {
         val url = value?.trim()?.toHttpUrlOrNull() ?: return null
