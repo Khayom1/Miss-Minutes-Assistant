@@ -258,7 +258,11 @@ object DeepSeekClient {
         } finally { connection.disconnect() }
     }
 }
-class RussianVoiceController(context: Context, private val onRecognized: (String) -> Unit) :
+class RussianVoiceController(
+    context: Context,
+    private val onRecognized: (String) -> Unit,
+    private val onListeningError: () -> Unit = {}
+) :
     TextToSpeech.OnInitListener, RecognitionListener {
     private val tts = TextToSpeech(context.applicationContext, this)
     private val recognizer = if (SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -335,7 +339,7 @@ class RussianVoiceController(context: Context, private val onRecognized: (String
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
     override fun onEndOfSpeech() = Unit
-    override fun onError(error: Int) = Unit
+    override fun onError(error: Int) { onListeningError() }
     override fun onPartialResults(partialResults: Bundle?) = Unit
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
 

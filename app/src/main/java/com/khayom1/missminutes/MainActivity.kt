@@ -147,7 +147,7 @@ private fun MissMinutesRoot(activity: Activity) {
         )
     }
 
-    val voice = remember(activity) { RussianVoiceController(activity) { recognizedText = it } }
+    val voice = remember(activity) { RussianVoiceController(activity, { recognizedText = it }) { setBehaviorMode(BehaviorMode.IDLE) } }
     val elevenLabs = remember(context) { ElevenLabsSpeechClient(context.applicationContext) }
     DisposableEffect(voice, elevenLabs) {
         onDispose {
@@ -201,6 +201,7 @@ private fun MissMinutesRoot(activity: Activity) {
     }
 
     LaunchedEffect(Unit) {
+        setBehaviorMode(BehaviorMode.IDLE)
         providerNameDraft = prefs.getString("ai_provider_name", "DeepSeek") ?: "DeepSeek"
         providerBaseUrlDraft = prefs.getString("ai_provider_base_url", "https://api.deepseek.com") ?: "https://api.deepseek.com"
         providerModelDraft = prefs.getString("ai_provider_model", "deepseek-flash") ?: "deepseek-flash"
@@ -233,7 +234,7 @@ private fun MissMinutesRoot(activity: Activity) {
             speak(localAction)
             return
         }
-        if (message.contains("уведомлен", ignoreCase = true)) {
+        if (listOf("уведомлен", "notification", "огоҳинома").any { message.contains(it, ignoreCase = true) }) {
             scope.launch {
                 val notifications = withContext(Dispatchers.IO) { memory.recentNotifications() }
                 val response = if (notifications.isBlank()) {
