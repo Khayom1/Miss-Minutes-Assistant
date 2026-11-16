@@ -17,6 +17,9 @@ val supabasePublishableKey = providers.gradleProperty("supabasePublishableKey")
 val backendProxyUrl = providers.gradleProperty("backendProxyUrl")
     .orElse("${supabaseUrl.trimEnd('/')}/functions/v1/deepseek-proxy")
     .get()
+val localModelUrl = providers.gradleProperty("localModelUrl")
+    .orElse("http://127.0.0.1:5000/v1/chat/completions")
+    .get()
 
 require(supabaseUrl.startsWith("https://")) { "supabaseUrl must use HTTPS" }
 require(backendProxyUrl.startsWith("https://")) { "backendProxyUrl must use HTTPS" }
@@ -36,6 +39,7 @@ android {
         buildConfigField("String", "SUPABASE_URL", supabaseUrl.asBuildConfigString())
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", supabasePublishableKey.asBuildConfigString())
         buildConfigField("String", "BACKEND_PROXY_URL", backendProxyUrl.asBuildConfigString())
+        buildConfigField("String", "LOCAL_MODEL_URL", localModelUrl.asBuildConfigString())
     }
 
     buildFeatures {
