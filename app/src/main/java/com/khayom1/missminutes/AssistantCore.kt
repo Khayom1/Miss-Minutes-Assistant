@@ -419,21 +419,12 @@ object AndroidActions {
             LocalCommandType.BACK -> return if (DeviceAccessibilityService.performBack()) message("action_back_success")
                 else message("action_accessibility_needed")
             LocalCommandType.TIMER -> {
-                val match = Regex("(\\\\d{1,3})\\\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?|сония(?:ҳо)?|дақиқа(?:ҳо)?|соат(?:ҳо)?|секунд|секунды|секунду|сек|минут|минуты|минуту|мин|час|часа|часов)").find(text)
-                    ?: return message("action_timer_usage")
-                val amount = match.groupValues[1].toIntOrNull() ?: return message("action_time_invalid")
-                val unit = match.groupValues[2]
-                val seconds = when {
-                    unit.startsWith("сек") || unit.startsWith("сон") -> amount
-                    unit.startsWith("hour") || unit.startsWith("hr") || unit.startsWith("час") || unit.startsWith("соат") -> amount * 3600
-                    else -> amount * 60
-                }
-                if (seconds <= 0 || seconds > 86_400) return message("action_time_invalid")
+                val seconds = parseTimerDurationSeconds(text) ?: return message("action_timer_usage")
                 val intent = Intent(AlarmClock.ACTION_SET_TIMER)
                     .putExtra(AlarmClock.EXTRA_LENGTH, seconds)
                     .putExtra(AlarmClock.EXTRA_MESSAGE, "Miss Minutes — reminder")
                     .putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-                return launch(context, intent, message("action_timer_success"))
+                return launch(context, intent, message("action_timer_success"), message("action_clock_unsupported"))
             }
             LocalCommandType.ALARM -> {
                 val match = Regex("\\b([01]?\\d|2[0-3]):([0-5]\\d)\\b").find(text)
@@ -443,7 +434,7 @@ object AndroidActions {
                     .putExtra(AlarmClock.EXTRA_MINUTES, match.groupValues[2].toInt())
                     .putExtra(AlarmClock.EXTRA_MESSAGE, "Miss Minutes")
                     .putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-                return launch(context, intent, message("action_alarm_success", match.value))
+                return launch(context, intent, message("action_alarm_success", match.value), message("action_clock_unsupported"))
             }
             LocalCommandType.OPEN_APP -> {
                 val prefix = when (code) {
@@ -473,12 +464,12 @@ object AndroidActions {
         }
     }
 
-    private fun launch(context: Context, intent: Intent, success: String): String = try {
+    private fun launch(context: Context, intent: Intent, success: String, failure: String): String = try {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
         success
     } catch (_: Exception) {
-        AppLocalization.text("en", "action_clock_unsupported")
+        failure
     }
 }
 class NotificationReaderService : NotificationListenerService() {

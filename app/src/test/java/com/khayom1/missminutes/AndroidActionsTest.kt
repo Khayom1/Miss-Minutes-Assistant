@@ -11,7 +11,7 @@ class AndroidActionsTest {
         assertEquals(LocalCommandType.NONE, classifyLocalCommand("я хочу домой"))
         assertEquals(LocalCommandType.NONE, classifyLocalCommand("что означает слово назад?"))
     }
-    @Test fun timerAndAlarmRequireAnExplicitCommand() {
+    @Test fun timerDurationParserHandlesAllLocalizedUnitsAndBounds() {\n        assertEquals(300, parseTimerDurationSeconds("таймер мон барои 5 дақиқа"))\n        assertEquals(30, parseTimerDurationSeconds("set a timer for 30 seconds"))\n        assertEquals(7200, parseTimerDurationSeconds("поставь таймер на 2 часа"))\n        assertEquals(null, parseTimerDurationSeconds("таймер мон"))\n        assertEquals(null, parseTimerDurationSeconds("set timer for 999 hours"))\n    }\n\n    @Test fun timerAndAlarmRequireAnExplicitCommand() {
         assertEquals(LocalCommandType.TIMER, classifyLocalCommand("поставь таймер на 5 минут"))
         assertEquals(LocalCommandType.TIMER, classifyLocalCommand("таймер на 5 минут"))
         assertEquals(LocalCommandType.ALARM, classifyLocalCommand("будильник на 07:30"))
