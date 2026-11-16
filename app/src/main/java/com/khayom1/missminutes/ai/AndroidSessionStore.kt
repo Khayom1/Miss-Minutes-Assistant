@@ -43,7 +43,7 @@ class AndroidSessionStore(
             val ciphertext = payload.copyOfRange(IV_LENGTH, payload.size)
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
-            cipher.updateAAD(AAD)
+            cipher.updateAAD(AAD_BYTES)
             val plaintext = cipher.doFinal(ciphertext).toString(Charsets.UTF_8)
             val stored = json.decodeFromString(StoredSession.serializer(), plaintext)
 
@@ -81,6 +81,7 @@ class AndroidSessionStore(
         require(session.accessToken.isNotBlank())
         require(session.refreshToken.isNotBlank())
         require(session.userId.isNotBlank())
+        require(session.expiresAtEpochSeconds > 0)
 
         val stored = StoredSession(
             accessToken = session.accessToken,
@@ -93,7 +94,7 @@ class AndroidSessionStore(
             .toByteArray(Charsets.UTF_8)
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        cipher.updateAAD(AAD)
+        cipher.updateAAD(AAD_BYTES)
         val ciphertext = cipher.doFinal(plaintext)
         val payload = cipher.iv + ciphertext
         val encoded = Base64.encodeToString(payload, Base64.NO_WRAP)
@@ -151,6 +152,6 @@ class AndroidSessionStore(
         const val IV_LENGTH = 12
         const val GCM_TAG_BITS = 128
         const val GCM_TAG_LENGTH_BYTES = GCM_TAG_BITS / 8
-        const val AAD = "com.khayom1.missminutes.session.v1"
+        val AAD_BYTES = "com.khayom1.missminutes.session.v1".toByteArray(Charsets.UTF_8)
     }
 }
