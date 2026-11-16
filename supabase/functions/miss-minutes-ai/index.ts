@@ -160,6 +160,51 @@ export function createHandler({ env, fetcher }: Dependencies): (request: Request
       return jsonResponse(401, { error: "invalid_session" });
     }
 
+    let authenticatedUser: unknown;
+    try {
+      authenticatedUser = await authResponse.json();
+    } catch {
+      return jsonResponse(401, { error: "invalid_session" });
+    }
+    const userId = (authenticatedUser as { id?: unknown } | null)?.id;
+    if (typeof userId !== "string" || userId.length === 0) {
+      return jsonResponse(401, { error: "invalid_session" });
+    }
+
+    const serviceKey = getServiceKey(env);
+    if (!serviceKey) {
+      return jsonResponse(503, { error: "backend_quota_not_configured" });
+    }
+
+    let quotaResponse: Response;
+    try {
+      quotaResponse = await fetcher(new URL("/rest/v1/rpc/consume_miss_minutes_ai_rate_limit", supabaseUrl), {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ p_user_id: userId, p_limit: 12 }),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch {
+      return jsonResponse(503, { error: "rate_limit_service_unavailable" });
+    }
+    if (!quotaResponse.ok) {
+      return jsonResponse(503, { error: "rate_limit_service_unavailable" });
+    }
+
+    let quotaAllowed: unknown;
+    try {
+      quotaAllowed = await quotaResponse.json();
+    } catch {
+      return jsonResponse(503, { error: "rate_limit_service_unavailable" });
+    }
+    if (quotaAllowed !== true) {
+      return jsonResponse(429, { error: "user_rate_limited", retry_after_seconds: 60 });
+    }
+
     const deepseekKey = env("DEEPSEEK_API_KEY");
     if (!deepseekKey) {
       return jsonResponse(503, { error: "ai_provider_not_configured" });
