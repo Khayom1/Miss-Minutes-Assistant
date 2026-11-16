@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -76,7 +77,7 @@ class MainActivityTest {
     @Test
     fun settingsCanToggleDarkTheme() {
         composeRule.onNodeWithText("Settings").performClick()
-        val themeSwitch = composeRule.onNodeWithTag("dark_mode_switch")
+        val themeSwitch = composeRule.onNodeWithTag("dark_mode_switch").performScrollTo()
         themeSwitch.assertIsOff()
         themeSwitch.performClick()
         themeSwitch.assertIsOn()
@@ -86,11 +87,11 @@ class MainActivityTest {
     fun settingsSwitchesBetweenSupportedLanguages() {
         composeRule.onNodeWithText("Settings").performClick()
 
-        composeRule.onNodeWithText("Русский").performClick()
+        composeRule.onNodeWithText("Русский").performScrollTo().performClick()
         composeRule.onNodeWithText("Настройки приложения").assertIsDisplayed()
         composeRule.onNodeWithText("Язык").assertIsDisplayed()
 
-        composeRule.onNodeWithText("Тоҷикӣ").performClick()
+        composeRule.onNodeWithText("Тоҷикӣ").performScrollTo().performClick()
         composeRule.onNodeWithText("Танзимоти барнома").assertIsDisplayed()
         composeRule.onNodeWithText("Забон").assertIsDisplayed()
     }
