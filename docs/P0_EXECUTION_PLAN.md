@@ -10,10 +10,10 @@ Replace the legacy character prototype with a clean, buildable foundation for th
 2. Close obsolete PRs so the former 3D implementation cannot be merged accidentally. **Complete.** PR #1 closed; PRs #2–#4 are also closed.
 3. Replace the tracked main tree with a clean Android foundation and P0 architecture/security/test documentation. **Complete.** The active main tree contains no model assets, SceneView dependency or legacy device-control services.
 4. Reconcile pre-existing development branches to the new clean baseline. **Complete.** Six pre-existing non-main branches were reconciled to the verified main SHA using expected-head leases. The new `phase/p1-chat-ui` branch is intentionally separate P1 work in draft PR #5.
-5. Trigger Android CI and verify unit tests, APK assembly and lint. **Complete.** CI #114 passed all three in the combined Gradle verification step.
-6. Inspect every failing CI job and correct the foundation until all P0 gates pass. **Complete.** CI #111 and #112 exposed emulator boot/device-service failures. The workflow now enables KVM before launching the emulator and explicitly keeps Linux hardware acceleration enabled. CI #114 then passed API 35 instrumentation.
+5. Trigger Android CI and verify unit tests, APK assembly and lint. **Complete.** CI #116 passed all three in the combined Gradle verification step.
+6. Inspect every failing CI job and correct the foundation until all P0 gates pass. **Complete.** CI #111 and #112 exposed emulator boot/device-service failures. The workflow now enables KVM before launching the emulator and explicitly keeps Linux hardware acceleration enabled. CI #116 then passed API 35 instrumentation.
 7. Record final commit SHA, branch state, CI run, artifact and unresolved platform limitations. **Complete.** See evidence below and `P0_ACCEPTANCE.md`.
-8. Mark P0 complete only after all mandatory acceptance criteria pass. **Complete.** Every mandatory P0 checkbox is verified against commit `f859169b0f1648424a7d40343f4b2f259db1e757` and CI #114.
+8. Mark P0 complete only after all mandatory acceptance criteria pass. **Complete.** Every mandatory P0 checkbox is verified against commit `de5c2bbdbe2479845a3900e7c12418046a5bd3ee` and CI #116.
 
 ## Commit discipline
 
@@ -34,12 +34,12 @@ P0 changes are committed directly to `main` as coherent commits. Subsequent prod
 
 ## Final P0 evidence
 
-- Verified main commit: `f859169b0f1648424a7d40343f4b2f259db1e757`.
-- CI run #114: https://github.com/Khayom1/Miss-Minutes-Assistant/actions/runs/43921131956
+- Verified main commit: `de5c2bbdbe2479845a3900e7c12418046a5bd3ee`.
+- CI run #114: https://github.com/Khayom1/Miss-Minutes-Assistant/actions/runs/43922613630
 - CI conclusion: `success`; all steps passed, including Gitleaks, unit/build/lint, KVM setup, API 35 instrumentation and debug APK upload.
-- Artifact ID: `14255190082`; artifact name: `miss-minutes-foundation-debug`.
-- APK SHA-256: `cf0be05b6076b3b20da84125d81ca870c47cc976e9023bd32776024d8aa670dc`.
-- Artifact ZIP SHA-256: `646d90b634ad320269b7bd50d78c608a309a882df0f20c3e4f1af85b7531cf8d`.
+- Artifact ID: `14253864655`; artifact name: `miss-minutes-foundation-debug`.
+- APK SHA-256: `not recalculated for this checkpoint`.
+- Artifact ZIP SHA-256: `not recalculated for this checkpoint`.
 
 ## Platform limitations carried forward
 
@@ -47,4 +47,4 @@ P0 changes are committed directly to `main` as coherent commits. Subsequent prod
 - Provider keys, real DeepSeek/ElevenLabs calls, cloud provisioning, persistent cloud memory, Android control, plugin execution and multi-step agents are not part of P0.
 - No unrestricted root or AccessibilityService-based autonomous control is permitted by this architecture.
 
-P0 is closed for the defined foundation scope. P1 is staged independently in draft PR #5; it must pass its own build, instrumentation and review gates before merge.
+P0 is closed for the defined foundation scope. P1 was staged independently in PR #5 and merged only after its own PR-head CI and post-merge main CI passed.

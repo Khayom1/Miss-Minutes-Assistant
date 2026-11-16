@@ -118,6 +118,20 @@ class SupabaseAuthRepositoryTest {
     }
 
     @Test
+    fun signInAcceptsAnExistingShortPasswordWhileSignUpRequiresEightCharacters() = runBlocking {
+        val transport = FakeTransport(AiHttpResponse(200, sessionJson))
+        repository(transport).signIn("user@example.test", "short")
+        assertEquals(1, transport.calls)
+
+        val signUpTransport = FakeTransport(AiHttpResponse(200, sessionJson))
+        val error = runCatching {
+            repository(signUpTransport).signUp("user@example.test", "short")
+        }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+        assertEquals(0, signUpTransport.calls)
+    }
+
+    @Test
     fun invalidEmailAndShortPasswordAreRejectedBeforeNetwork() = runBlocking {
         val transport = FakeTransport(AiHttpResponse(200, sessionJson))
         val repo = repository(transport)

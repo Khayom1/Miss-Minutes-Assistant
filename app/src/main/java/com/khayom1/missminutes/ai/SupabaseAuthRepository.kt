@@ -12,7 +12,10 @@ data class SupabaseAuthSession(
     val expiresAtEpochSeconds: Long,
     val userId: String,
     val email: String?
-)
+) {
+    override fun toString(): String =
+        "SupabaseAuthSession(tokens=<redacted>, identity=<redacted>, expiresAtEpochSeconds=$expiresAtEpochSeconds)"
+}
 
 data class AuthFlowResult(
     val session: SupabaseAuthSession?,
@@ -41,12 +44,16 @@ interface SupabaseAuthRepository {
 private data class CredentialsBody(
     val email: String,
     val password: String
-)
+) {
+    override fun toString(): String = "CredentialsBody(email=<redacted>, password=<redacted>)"
+}
 
 @Serializable
 private data class RefreshBody(
     @SerialName("refresh_token") val refreshToken: String
-)
+) {
+    override fun toString(): String = "RefreshBody(refreshToken=<redacted>)"
+}
 
 @Serializable
 private data class AuthApiUser(
@@ -60,7 +67,10 @@ private data class AuthApiResponse(
     @SerialName("refresh_token") val refreshToken: String? = null,
     @SerialName("expires_in") val expiresIn: Long? = null,
     val user: AuthApiUser? = null
-)
+) {
+    override fun toString(): String =
+        "AuthApiResponse(tokens=<redacted>, expiresIn=$expiresIn, user=<redacted>)"
+}
 
 /**
  * Uses the public Supabase Auth API. Only the public publishable key and
@@ -79,14 +89,16 @@ class DefaultSupabaseAuthRepository(
     }
 
     override suspend fun signIn(email: String, password: String): SupabaseAuthSession {
-        validateCredentials(email, password)
+        validateEmail(email)
+        validatePassword(password, minimumLength = 1)
         val body = encode(CredentialsBody(email.trim(), password))
         val response = post("/auth/v1/token?grant_type=password", body)
         return parseSession(response) ?: throw SupabaseAuthException.InvalidResponse()
     }
 
     override suspend fun signUp(email: String, password: String): AuthFlowResult {
-        validateCredentials(email, password)
+        validateEmail(email)
+        validatePassword(password, minimumLength = 8)
         val body = encode(CredentialsBody(email.trim(), password))
         val response = post("/auth/v1/signup", body)
         val session = parseSession(response)
@@ -179,13 +191,17 @@ class DefaultSupabaseAuthRepository(
     private fun endpoint(path: String): String =
         projectUrl.trimEnd('/') + path
 
-    private fun validateCredentials(email: String, password: String) {
+    private fun validateEmail(email: String) {
         val normalizedEmail = email.trim()
         require(normalizedEmail.length in 3..254 && normalizedEmail.contains('@')) {
             "Enter a valid email address."
         }
-        require(password.length in 8..128) {
-            "Password must contain 8–128 characters."
+    }
+
+    private fun validatePassword(password: String, minimumLength: Int) {
+        require(password.length in minimumLength..128) {
+            if (minimumLength == 1) "Password is required."
+            else "Password must contain 8–128 characters."
         }
     }
 }

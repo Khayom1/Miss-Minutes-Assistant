@@ -106,11 +106,17 @@ class AndroidSessionStore(
 
     @Synchronized
     override fun clear() {
-        preferences.edit().remove(SESSION_KEY).commit()
-        runCatching {
+        // Invalidate the Keystore key first. If preference deletion then fails,
+        // the remaining ciphertext is still cryptographically unusable.
+        val keyInvalidated = runCatching {
             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
             keyStore.load(null)
             if (keyStore.containsAlias(KEY_ALIAS)) keyStore.deleteEntry(KEY_ALIAS)
+            true
+        }.getOrDefault(false)
+        val ciphertextRemoved = preferences.edit().remove(SESSION_KEY).commit()
+        check(keyInvalidated || ciphertextRemoved) {
+            "Unable to invalidate the encrypted session."
         }
     }
 

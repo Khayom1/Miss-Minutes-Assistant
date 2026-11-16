@@ -2,6 +2,7 @@ package com.khayom1.missminutes.ai
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -121,6 +122,23 @@ class SessionManagerTest {
         assertNull(store.value)
         assertEquals(1, store.clearCalls)
         assertEquals(1, repository.signOutCalls)
+    }
+
+    @Test
+    fun sessionStringRedactsTokensAndIdentity() {
+        val value = SupabaseAuthSession(
+            accessToken = "private-access-token",
+            refreshToken = "private-refresh-token",
+            expiresAtEpochSeconds = 5_000L,
+            userId = "private-user-id",
+            email = "private@example.test"
+        ).toString()
+
+        assertFalse(value.contains("private-access-token"))
+        assertFalse(value.contains("private-refresh-token"))
+        assertFalse(value.contains("private-user-id"))
+        assertFalse(value.contains("private@example.test"))
+        assertTrue(value.contains("<redacted>"))
     }
 
     @Test

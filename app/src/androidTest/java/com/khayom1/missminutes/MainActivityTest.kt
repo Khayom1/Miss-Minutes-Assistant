@@ -19,7 +19,7 @@ import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.SessionStore
 import com.khayom1.missminutes.ai.SupabaseAuthRepository
 import com.khayom1.missminutes.ai.SupabaseAuthSession
-import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -116,6 +116,7 @@ class MainActivityTest {
         signIn()
 
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+        composeRule.onNodeWithText("Dashboard").performClick()
         composeRule.onNodeWithText("user@example.test").assertIsDisplayed()
     }
 
@@ -147,10 +148,13 @@ class MainActivityTest {
 
         composeRule.onNodeWithText("Check the authenticated chat").assertIsDisplayed()
         composeRule.onNodeWithText("Mock AI response").assertIsDisplayed()
-        assert(aiProvider.lastRequest?.messages?.last() == AiMessage(
-            com.khayom1.missminutes.ai.AiRole.USER,
-            "Check the authenticated chat"
-        ))
+        assertEquals(
+            AiMessage(
+                com.khayom1.missminutes.ai.AiRole.USER,
+                "Check the authenticated chat"
+            ),
+            aiProvider.lastRequest?.messages?.last()
+        )
     }
 
     @Test

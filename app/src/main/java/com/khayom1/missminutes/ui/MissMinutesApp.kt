@@ -304,7 +304,7 @@ fun MissMinutesApp(
     var userEmail by rememberSaveable { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
-    var aiHasResponded by rememberSaveable { mutableStateOf(false) }
+    var aiHasResponded by remember { mutableStateOf(false) }
     var nextMessageId by remember { mutableStateOf(0L) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val language = AppLanguage.valueOf(selectedLanguageName)
@@ -374,6 +374,8 @@ fun MissMinutesApp(
             scope.launch {
                 try {
                     sessionManager.signOut()
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (_: Exception) {
                     // Local credentials are cleared by SessionManager even if revocation fails.
                 } finally {
@@ -463,7 +465,7 @@ fun MissMinutesApp(
                 isBusy = authBusy,
                 message = authMessage,
                 onEmailChange = { authEmail = it },
-                onPasswordChange = { authPassword = it },
+                onPasswordChange = { if (it.length <= 128) authPassword = it },
                 onModeChange = {
                     isSignUp = !isSignUp
                     authMessage = null
@@ -627,7 +629,7 @@ private fun AuthScreen(
         }
         Button(
             onClick = onSubmit,
-            enabled = !isBusy && email.isNotBlank() && password.length >= 8,
+            enabled = !isBusy && email.isNotBlank() && (if (isSignUp) password.length >= 8 else password.isNotBlank()),
             modifier = Modifier.fillMaxWidth().padding(top = 20.dp).testTag("auth_submit")
         ) {
             Text(

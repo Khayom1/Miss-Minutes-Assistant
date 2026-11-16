@@ -46,14 +46,18 @@ function fakeFetcher(
   return async (input, init) => {
     const url = String(input);
     if (url === "https://supabase.example/auth/v1/user") {
-      equal(new Headers(init?.headers).get("apikey"), "sb_publishable_test", "Auth apikey");
+      const headers = new Headers(init?.headers);
+      equal(headers.get("apikey"), "sb_publishable_test", "Auth apikey");
+      equal(headers.get("authorization"), "Bearer test-user-jwt", "User JWT remains in Authorization");
       return Response.json({ id: "test-user" }, { status: 200 });
     }
     if (url === "https://supabase.example/rest/v1/rpc/consume_miss_minutes_ai_rate_limit") {
+      const headers = new Headers(init?.headers);
+      equal(headers.get("apikey"), "sb_secret_test-only", "Supabase secret key uses apikey");
       equal(
-        new Headers(init?.headers).get("authorization"),
-        "Bearer sb_secret_test-only",
-        "Service key must stay server-side",
+        headers.get("authorization"),
+        null,
+        "Non-JWT Supabase secret keys must not be sent as Bearer tokens",
       );
       const quotaRequest = JSON.parse(String(init?.body));
       equal(quotaRequest.p_user_id, "test-user", "Rate limit user identity");
@@ -104,14 +108,62 @@ Deno.test("rejects system/tool roles and empty conversations", async () => {
   equal(empty.status, 400, "Empty-message status");
 });
 
-Deno.test("requires the DeepSeek key to exist only in server environment", async () => {
+Deno.test("requires the DeepSeek key before consuming a user quota", async () => {
+  let quotaCalls = 0;
+  const fetcher: Fetcher = async (input) => {
+    const url = String(input);
+    if (url === "https://supabase.example/auth/v1/user") {
+      return Response.json({ id: "test-user" }, { status: 200 });
+    }
+    if (url === "https://supabase.example/rest/v1/rpc/consume_miss_minutes_ai_rate_limit") {
+      quotaCalls++;
+      return Response.json(true);
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
   const handler = createHandler({
     env: testEnvironment({ DEEPSEEK_API_KEY: "" }),
-    fetcher: fakeFetcher(),
+    fetcher,
   });
   const response = await handler(request());
   equal(response.status, 503, "HTTP status");
   equal((await response.json()).error, "ai_provider_not_configured", "Error code");
+  equal(quotaCalls, 0, "Missing provider configuration must not consume quota");
+});
+
+Deno.test("supports legacy service-role JWT fallback without confusing it with sb_secret keys", async () => {
+  const fetcher: Fetcher = async (input, init) => {
+    const url = String(input);
+    if (url === "https://supabase.example/auth/v1/user") {
+      return Response.json({ id: "test-user" }, { status: 200 });
+    }
+    if (url === "https://supabase.example/rest/v1/rpc/consume_miss_minutes_ai_rate_limit") {
+      const headers = new Headers(init?.headers);
+      equal(headers.get("apikey"), "legacy-service-role-jwt", "Legacy service key apikey");
+      equal(
+        headers.get("authorization"),
+        "Bearer legacy-service-role-jwt",
+        "Legacy service-role JWT bearer header",
+      );
+      return Response.json(true);
+    }
+    if (url === "https://api.deepseek.com/chat/completions") {
+      return Response.json({
+        choices: [{ message: { content: "Legacy fallback response" } }],
+      });
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+  const handler = createHandler({
+    env: testEnvironment({
+      SUPABASE_SECRET_KEYS: "",
+      SUPABASE_SERVICE_ROLE_KEY: "legacy-service-role-jwt",
+    }),
+    fetcher,
+  });
+  const response = await handler(request());
+  equal(response.status, 200, "HTTP status");
+  equal((await response.json()).content, "Legacy fallback response", "Provider content");
 });
 
 Deno.test("returns only normalized assistant content on success", async () => {

@@ -25,7 +25,7 @@ const CORS_HEADERS = {
   "access-control-max-age": "600",
 };
 
-const MAX_BODY_CHARS = 24_000;
+const MAX_BODY_BYTES = 24_000;
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 8_000;
 const MAX_TOTAL_CHARS = 16_000;
@@ -45,6 +45,56 @@ function jsonResponse(status: number, payload: Record<string, unknown>): Respons
     status,
     headers: CORS_HEADERS,
   });
+}
+
+async function readBodyWithinLimit(request: Request): Promise<string | undefined> {
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength !== null) {
+    const declaredBytes = Number(declaredLength);
+    if (Number.isFinite(declaredBytes) && declaredBytes > MAX_BODY_BYTES) return undefined;
+  }
+
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return undefined;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function serviceKeyHeaders(serviceKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    apikey: serviceKey,
+    "content-type": "application/json",
+  };
+  // Supabase sb_secret_* API keys are not JWTs and must never be sent as
+  // Authorization bearer tokens. Legacy service_role JWTs still need Bearer.
+  if (!serviceKey.startsWith("sb_secret_")) {
+    headers.authorization = `Bearer ${serviceKey}`;
+  }
+  return headers;
 }
 
 function getPublishableKey(env: EnvironmentReader): string | undefined {
@@ -130,13 +180,13 @@ export function createHandler({ env, fetcher }: Dependencies): (request: Request
       return jsonResponse(503, { error: "backend_auth_not_configured" });
     }
 
-    let bodyText: string;
+    let bodyText: string | undefined;
     try {
-      bodyText = await request.text();
+      bodyText = await readBodyWithinLimit(request);
     } catch {
       return jsonResponse(400, { error: "invalid_request_body" });
     }
-    if (bodyText.length > MAX_BODY_CHARS) {
+    if (bodyText === undefined) {
       return jsonResponse(413, { error: "request_too_large" });
     }
 
@@ -185,6 +235,11 @@ export function createHandler({ env, fetcher }: Dependencies): (request: Request
       return jsonResponse(401, { error: "invalid_session" });
     }
 
+    const deepseekKey = env("DEEPSEEK_API_KEY");
+    if (!deepseekKey) {
+      return jsonResponse(503, { error: "ai_provider_not_configured" });
+    }
+
     const serviceKey = getServiceKey(env);
     if (!serviceKey) {
       return jsonResponse(503, { error: "backend_quota_not_configured" });
@@ -194,11 +249,7 @@ export function createHandler({ env, fetcher }: Dependencies): (request: Request
     try {
       quotaResponse = await fetcher(new URL("/rest/v1/rpc/consume_miss_minutes_ai_rate_limit", supabaseUrl), {
         method: "POST",
-        headers: {
-          authorization: `Bearer ${serviceKey}`,
-          apikey: serviceKey,
-          "content-type": "application/json",
-        },
+        headers: serviceKeyHeaders(serviceKey),
         body: JSON.stringify({ p_user_id: userId, p_limit: 12 }),
         signal: AbortSignal.timeout(10_000),
       });
@@ -217,11 +268,6 @@ export function createHandler({ env, fetcher }: Dependencies): (request: Request
     }
     if (quotaAllowed !== true) {
       return jsonResponse(429, { error: "user_rate_limited", retry_after_seconds: 60 });
-    }
-
-    const deepseekKey = env("DEEPSEEK_API_KEY");
-    if (!deepseekKey) {
-      return jsonResponse(503, { error: "ai_provider_not_configured" });
     }
 
     try {
