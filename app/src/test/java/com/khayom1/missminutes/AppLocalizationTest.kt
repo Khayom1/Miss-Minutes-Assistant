@@ -20,6 +20,15 @@ class AppLocalizationTest {
         }
     }
 
+    @Test fun everyUiKeyHasAnExplicitTranslationInAllThreeLanguages() {
+        AppLocalization.allKeys().forEach { key ->
+            listOf("tg", "ru", "en").forEach { language ->
+                assertTrue("Missing $language translation for $key", AppLocalization.hasTranslation(language, key))
+                assertTrue("Blank $language translation for $key", AppLocalization.text(language, key).isNotBlank())
+            }
+        }
+    }
+
     @Test fun languageTagsAreNormalized() {
         assertEquals("tg-TJ", AppLocalization.languageTag("tg"))
         assertEquals("ru-RU", AppLocalization.languageTag("ru"))

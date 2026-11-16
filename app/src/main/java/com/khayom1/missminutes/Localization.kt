@@ -13,6 +13,17 @@ object AppLocalization {
         else -> "ru-RU"
     }
 
+    internal fun allKeys(): Set<String> = ENGLISH.keys + RUSSIAN.keys + TAJIK.keys
+
+    internal fun hasTranslation(language: String, key: String): Boolean {
+        val translations = when (normalize(language)) {
+            "tg" -> TAJIK
+            "en" -> ENGLISH
+            else -> RUSSIAN
+        }
+        return translations.containsKey(key)
+    }
+
     fun text(language: String, key: String): String {
         val translations = when (normalize(language)) {
             "tg" -> TAJIK
