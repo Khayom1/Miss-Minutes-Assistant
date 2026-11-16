@@ -23,8 +23,8 @@ declare
   v_count integer;
 begin
   if p_user_id is null
-     or p_limit < 1 or p_limit > 1000
-     or p_window_seconds < 1 or p_window_seconds > 3600 then
+     or p_limit is null or p_limit < 1 or p_limit > 1000
+     or p_window_seconds is null or p_window_seconds < 1 or p_window_seconds > 3600 then
     raise exception using
       errcode = '22023',
       message = 'invalid rate limit parameters';
