@@ -73,7 +73,7 @@ jobs:
               if not match:
                   raise SystemExit(f"Missing public BuildConfig field: {name}")
               with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
-                  env_file.write(f"{name}={match.group(1)}\\n")
+                  env_file.write(f"{name}={match.group(1)}\n")
           PY
           response_file="$(mktemp)"
           status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
