@@ -382,6 +382,23 @@ private fun MissMinutesRoot(activity: Activity) {
             onElevenLabsApiKeyChange = { elevenLabsApiKeyDraft = it },
             elevenLabsVoiceId = elevenLabsVoiceIdDraft,
             onElevenLabsVoiceIdChange = { elevenLabsVoiceIdDraft = it },
+            onRemoveApiKey = {
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        secrets.save("ai_primary_api_key", "")
+                        secrets.save("deepseek_api_key", "")
+                    }
+                    apiKeyDraft = ""
+                    status = "AI PROVIDER / SAVED WITHOUT KEY"
+                }
+            },
+            onRemoveVoiceKey = {
+                scope.launch {
+                    withContext(Dispatchers.IO) { secrets.save("elevenlabs_api_key", "") }
+                    elevenLabsApiKeyDraft = ""
+                    status = "ELEVENLABS / FALLBACK TO DEVICE TTS"
+                }
+            },
             onSave = {
                 val nameToSave = providerNameDraft.trim()
                 val baseUrlToSave = providerBaseUrlDraft.trim()
@@ -584,6 +601,8 @@ private fun SettingsDialog(
     onElevenLabsApiKeyChange: (String) -> Unit,
     elevenLabsVoiceId: String,
     onElevenLabsVoiceIdChange: (String) -> Unit,
+    onRemoveApiKey: () -> Unit,
+    onRemoveVoiceKey: () -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit,
     onNotificationSettings: () -> Unit,
@@ -637,6 +656,9 @@ private fun SettingsDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     placeholder = { Text("API Key") }
                 )
+                TextButton(onClick = onRemoveApiKey) {
+                    Text(AppLocalization.text(languageCode, "remove_provider_key"))
+                }
                 Text(AppLocalization.text(languageCode, "provider_security"), fontSize = 11.sp)
                 Text(AppLocalization.text(languageCode, "voice_section"), color = TvaOrange, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
@@ -647,6 +669,9 @@ private fun SettingsDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     label = { Text(AppLocalization.text(languageCode, "voice_key")) }
                 )
+                TextButton(onClick = onRemoveVoiceKey) {
+                    Text(AppLocalization.text(languageCode, "remove_voice_key"))
+                }
                 OutlinedTextField(
                     value = elevenLabsVoiceId,
                     onValueChange = onElevenLabsVoiceIdChange,
