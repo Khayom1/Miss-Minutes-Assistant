@@ -59,11 +59,22 @@ jobs:
         run: deno test supabase/functions/miss-minutes-ai/index_test.ts
 
       - name: Verify deployed gateway rejects unauthenticated requests
-        env:
-          SUPABASE_URL: https://bgfcpnlxztziigrsyuqp.supabase.co
-          SUPABASE_PUBLISHABLE_KEY: sb_publishable_EZp3LgM4zcqtFKBUkphGaQ_FmWpyOWz
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          gradle = Path("app/build.gradle.kts").read_text(encoding="utf-8")
+          for name in ("SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"):
+              pattern = rf'buildConfigField\("String",\s*"{name}",\s*"\\\"([^"]+)\\\""' 
+              match = re.search(pattern, gradle)
+              if not match:
+                  raise SystemExit(f"Missing public BuildConfig field: {name}")
+              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+                  env_file.write(f"{name}={match.group(1)}\\n")
+          PY
           response_file="$(mktemp)"
           status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
             --connect-timeout 10 --max-time 20 \
