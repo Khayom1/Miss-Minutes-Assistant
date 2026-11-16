@@ -301,6 +301,7 @@ fun MissMinutesApp(
     // Authentication is restored from the encrypted session store, never from saved UI state.
     var isAuthenticated by remember { mutableStateOf(false) }
     var authBusy by remember { mutableStateOf(false) }
+    var sessionGeneration by remember { mutableStateOf(0L) }
     var authMessage by remember { mutableStateOf<String?>(null) }
     var userEmail by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
@@ -342,6 +343,7 @@ fun MissMinutesApp(
                         val result = sessionManager.signUp(authEmail.trim(), authPassword)
                         val session = result.session
                         if (session != null) {
+                            sessionGeneration += 1
                             isAuthenticated = true
                             userEmail = session.email ?: authEmail.trim()
                             authEmail = userEmail
@@ -353,6 +355,7 @@ fun MissMinutesApp(
                         }
                     } else {
                         val session = sessionManager.signIn(authEmail.trim(), authPassword)
+                        sessionGeneration += 1
                         isAuthenticated = true
                         userEmail = session.email ?: authEmail.trim()
                         authEmail = userEmail
@@ -376,6 +379,17 @@ fun MissMinutesApp(
     val signOut: () -> Unit = {
         if (!authBusy) {
             authBusy = true
+            sessionGeneration += 1
+            isAuthenticated = false
+            userEmail = ""
+            authEmail = ""
+            authPassword = ""
+            messages.clear()
+            draft = ""
+            aiHasResponded = false
+            chatError = null
+            isSending = false
+            selectedScreenName = AppScreen.Chat.name
             scope.launch {
                 try {
                     sessionManager.signOut()
@@ -384,14 +398,6 @@ fun MissMinutesApp(
                 } catch (_: Exception) {
                     // Local credentials are cleared by SessionManager even if revocation fails.
                 } finally {
-                    isAuthenticated = false
-                    userEmail = ""
-                    authEmail = ""
-                    authPassword = ""
-                    messages.clear()
-                    draft = ""
-                    aiHasResponded = false
-                    selectedScreenName = AppScreen.Chat.name
                     authBusy = false
                 }
             }
@@ -429,21 +435,20 @@ fun MissMinutesApp(
                 if (messages.size > 100) messages.removeAt(0)
                 draft = ""
                 chatError = null
+                val requestGeneration = sessionGeneration
 
                 scope.launch {
                     try {
                         val completion: AiCompletion = aiProvider.complete(request)
+                        if (requestGeneration != sessionGeneration) return@launch
                         nextMessageId += 1
                         messages.add(ChatMessage(nextMessageId, completion.content, false))
                         if (messages.size > 100) messages.removeAt(0)
                         aiHasResponded = true
                     } catch (_: AiProviderException.AuthenticationRequired) {
-                        try {
-                            sessionManager.signOut()
-                        } catch (_: Exception) {
-                            // SessionManager always clears local tokens in its finally block.
-                        }
-                        // Never carry one account's in-memory conversation into another session.
+                        if (requestGeneration != sessionGeneration) return@launch
+                        sessionGeneration += 1
+                        authBusy = true
                         isAuthenticated = false
                         userEmail = ""
                         authEmail = ""
@@ -452,16 +457,30 @@ fun MissMinutesApp(
                         draft = ""
                         aiHasResponded = false
                         chatError = null
+                        isSending = false
                         selectedScreenName = AppScreen.Chat.name
                         authMessage = copy.sessionExpired
+                        try {
+                            sessionManager.signOut()
+                        } catch (_: Exception) {
+                            // SessionManager always clears local tokens in its finally block.
+                        } finally {
+                            authBusy = false
+                        }
                     } catch (_: AiProviderException.RateLimited) {
-                        chatError = copy.aiRateLimited
+                        if (requestGeneration == sessionGeneration) {
+                            chatError = copy.aiRateLimited
+                        }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {
-                        chatError = copy.sendFailed
+                        if (requestGeneration == sessionGeneration) {
+                            chatError = copy.sendFailed
+                        }
                     } finally {
-                        isSending = false
+                        if (requestGeneration == sessionGeneration) {
+                            isSending = false
+                        }
                     }
                 }
             }

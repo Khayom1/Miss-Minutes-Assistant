@@ -14,6 +14,7 @@ import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
 import com.khayom1.missminutes.ai.AiProviderException
+import kotlinx.coroutines.CompletableDeferred
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AuthFlowResult
 import com.khayom1.missminutes.ai.SessionManager
@@ -70,10 +71,12 @@ class MainActivityTest {
     private class FakeAiProvider : AiProvider {
         var lastRequest: AiRequest? = null
         var nextError: AiProviderException? = null
+        var pendingCompletion: CompletableDeferred<AiCompletion>? = null
 
         override suspend fun complete(request: AiRequest): AiCompletion {
             lastRequest = request
             nextError?.let { throw it }
+            pendingCompletion?.let { return it.await() }
             return AiCompletion(
                 content = "Mock AI response",
                 model = "test-mock"
@@ -193,6 +196,54 @@ class MainActivityTest {
         assertEquals(
             0,
             composeRule.onAllNodesWithText("Private conversation from previous account")
+                .fetchSemanticsNodes().size
+        )
+    }
+
+    @Test
+    fun inFlightAiResponseIsDiscardedAfterSignOutAndAccountSwitch() {
+        signIn()
+        val lateCompletion = CompletableDeferred<AiCompletion>()
+        aiProvider.pendingCompletion = lateCompletion
+
+        composeRule.onNodeWithTag("chat_input")
+            .performTextInput("Private pending prompt from old account")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Sending...")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("Sign out").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Sign in to Miss Minutes")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        lateCompletion.complete(
+            AiCompletion(content = "Late response from old account", model = "test-mock")
+        )
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("auth_email").performTextInput("new-user@example.test")
+        composeRule.onNodeWithTag("auth_password").performTextInput("correct-horse-battery")
+        composeRule.onNodeWithTag("auth_submit").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("How can I help?")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("Dashboard").performClick()
+        composeRule.onNodeWithText("new-user@example.test").assertIsDisplayed()
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("Private pending prompt from old account")
+                .fetchSemanticsNodes().size
+        )
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("Late response from old account")
                 .fetchSemanticsNodes().size
         )
     }
