@@ -20,7 +20,12 @@ function request(body: unknown, headers: Record<string, string> = {}) {
 }
 
 function validPayload() {
-  return { messages: [{ role: "user", content: "Hello" }] };
+  return {
+    model: "attacker-controlled-model",
+    max_tokens: 999_999,
+    stream: true,
+    messages: [{ role: "user", content: "Hello" }],
+  };
 }
 
 function dependencies(
