@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.khayom1.missminutes.ProductIdentity
@@ -288,20 +289,16 @@ private fun ChatScreen(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (messages.isEmpty()) {
-                item {
-                    Text(
-                        text = copy.previewNotice,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-            }
             items(messages, key = { it.id }) { message ->
                 MessageBubble(message = message, youLabel = copy.you)
             }
         }
+        Text(
+            text = copy.previewNotice,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 2.dp)
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -310,7 +307,7 @@ private fun ChatScreen(
             OutlinedTextField(
                 value = draft,
                 onValueChange = onDraftChange,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("chat_input"),
                 placeholder = { Text(copy.composerHint) },
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -442,7 +439,8 @@ private fun SettingsScreen(
                 }
                 Switch(
                     checked = darkTheme,
-                    onCheckedChange = onDarkThemeChange
+                    onCheckedChange = onDarkThemeChange,
+                    modifier = Modifier.testTag("dark_mode_switch")
                 )
             }
         }
