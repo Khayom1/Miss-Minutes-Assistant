@@ -7,12 +7,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -21,26 +28,38 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.Button
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.khayom1.missminutes.ProductIdentity
+import com.khayom1.missminutes.ai.AiCompletion
+import com.khayom1.missminutes.ai.AiMessage
+import com.khayom1.missminutes.ai.AiProvider
+import com.khayom1.missminutes.ai.AiProviderException
+import com.khayom1.missminutes.ai.AiRequest
+import com.khayom1.missminutes.ai.AiRole
+import com.khayom1.missminutes.ai.SessionManager
+import com.khayom1.missminutes.ai.SupabaseAuthException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 private enum class AppScreen(val symbol: String) {
     Chat("✦"),
@@ -70,7 +89,7 @@ private data class UiCopy(
     val welcomeBody: String,
     val composerHint: String,
     val send: String,
-    val previewNotice: String,
+    val gatewayNotice: String,
     val you: String,
     val dashboardTitle: String,
     val dashboardBody: String,
@@ -79,6 +98,8 @@ private data class UiCopy(
     val memory: String,
     val deviceTools: String,
     val notConnected: String,
+    val providerNotVerified: String,
+    val providerResponding: String,
     val historyTitle: String,
     val historyEmpty: String,
     val settingsTitle: String,
@@ -87,7 +108,27 @@ private data class UiCopy(
     val darkMode: String,
     val darkModeBody: String,
     val about: String,
-    val version: String
+    val version: String,
+    val authTitle: String,
+    val authBody: String,
+    val email: String,
+    val password: String,
+    val signIn: String,
+    val createAccount: String,
+    val switchToSignUp: String,
+    val switchToSignIn: String,
+    val wait: String,
+    val emailConfirmation: String,
+    val invalidCredentials: String,
+    val authRateLimited: String,
+    val authUnavailable: String,
+    val sessionExpired: String,
+    val signOut: String,
+    val account: String,
+    val sending: String,
+    val sendFailed: String,
+    val conversationTooLong: String,
+    val aiRateLimited: String
 )
 
 private fun copyFor(language: AppLanguage): UiCopy = when (language) {
@@ -100,7 +141,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Your personal assistant, ready when you are.",
         composerHint = "Message Miss Minutes",
         send = "Send",
-        previewNotice = "UI preview · AI services will be connected in P2.",
+        gatewayNotice = "Messages use your authenticated Supabase session and the private AI gateway.",
         you = "You",
         dashboardTitle = "Your workspace",
         dashboardBody = "A clear view of assistant capabilities and their connection status.",
@@ -109,15 +150,37 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         memory = "Memory",
         deviceTools = "Android tools",
         notConnected = "Not connected",
+        providerNotVerified = "Not yet verified",
+        providerResponding = "Responding",
         historyTitle = "Conversation history",
-        historyEmpty = "Your saved conversations will appear here.",
+        historyEmpty = "Saved conversations will appear here in a later phase.",
         settingsTitle = "App settings",
         language = "Language",
         appearance = "Appearance",
         darkMode = "Dark theme",
         darkModeBody = "Use a dark color scheme throughout the app.",
         about = "About",
-        version = "Version"
+        version = "Version",
+        authTitle = "Sign in to Miss Minutes",
+        authBody = "Use your Supabase account to access your assistant.",
+        email = "Email",
+        password = "Password",
+        signIn = "Sign in",
+        createAccount = "Create account",
+        switchToSignUp = "New here? Create an account",
+        switchToSignIn = "Already have an account? Sign in",
+        wait = "Please wait…",
+        emailConfirmation = "Check your email to confirm your account, then sign in.",
+        invalidCredentials = "Email or password is incorrect.",
+        authRateLimited = "Too many sign-in attempts. Try again later.",
+        authUnavailable = "Authentication service is temporarily unavailable.",
+        sessionExpired = "Your session expired. Please sign in again.",
+        signOut = "Sign out",
+        account = "Account",
+        sending = "Thinking…",
+        sendFailed = "No response received. Check your connection and server configuration.",
+        conversationTooLong = "This conversation is too long to send. Start a new conversation.",
+        aiRateLimited = "The AI request limit was reached. Try again shortly."
     )
     AppLanguage.Russian -> UiCopy(
         chat = "Чат",
@@ -128,7 +191,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ваш персональный помощник всегда под рукой.",
         composerHint = "Сообщение Miss Minutes",
         send = "Отправить",
-        previewNotice = "Предпросмотр интерфейса · Подключение ИИ появится в P2.",
+        gatewayNotice = "Сообщения отправляются через защищённый шлюз с вашей сессией Supabase.",
         you = "Вы",
         dashboardTitle = "Ваше пространство",
         dashboardBody = "Состояние возможностей помощника и подключённых сервисов.",
@@ -137,15 +200,37 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         memory = "Память",
         deviceTools = "Инструменты Android",
         notConnected = "Не подключено",
+        providerNotVerified = "Ещё не проверено",
+        providerResponding = "Отвечает",
         historyTitle = "История диалогов",
-        historyEmpty = "Сохранённые диалоги будут отображаться здесь.",
+        historyEmpty = "Сохранённые диалоги появятся в одном из следующих этапов.",
         settingsTitle = "Настройки приложения",
         language = "Язык",
         appearance = "Оформление",
         darkMode = "Тёмная тема",
         darkModeBody = "Использовать тёмную цветовую схему приложения.",
         about = "О приложении",
-        version = "Версия"
+        version = "Версия",
+        authTitle = "Вход в Miss Minutes",
+        authBody = "Войдите через аккаунт Supabase, чтобы пользоваться помощником.",
+        email = "Электронная почта",
+        password = "Пароль",
+        signIn = "Войти",
+        createAccount = "Создать аккаунт",
+        switchToSignUp = "Нет аккаунта? Создать",
+        switchToSignIn = "Уже есть аккаунт? Войти",
+        wait = "Подождите…",
+        emailConfirmation = "Подтвердите аккаунт по ссылке в письме, затем войдите.",
+        invalidCredentials = "Неверная почта или пароль.",
+        authRateLimited = "Слишком много попыток входа. Попробуйте позже.",
+        authUnavailable = "Сервис авторизации временно недоступен.",
+        sessionExpired = "Сессия истекла. Войдите снова.",
+        signOut = "Выйти",
+        account = "Аккаунт",
+        sending = "Думаю…",
+        sendFailed = "Ответ не получен. Проверьте интернет и настройки сервера.",
+        conversationTooLong = "Диалог слишком длинный. Начните новый диалог.",
+        aiRateLimited = "Достигнут лимит запросов ИИ. Попробуйте немного позже."
     )
     AppLanguage.Tajik -> UiCopy(
         chat = "Чат",
@@ -156,7 +241,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ёвари шахсии шумо ҳамеша омода аст.",
         composerHint = "Ба Miss Minutes паём нависед",
         send = "Фиристодан",
-        previewNotice = "Намоиши интерфейс · Хидматҳои AI дар марҳилаи P2 пайваст мешаванд.",
+        gatewayNotice = "Паёмҳо тавассути сессияи тасдиқшудаи Supabase ва шлюзи муҳофизатшуда мераванд.",
         you = "Шумо",
         dashboardTitle = "Муҳити кории шумо",
         dashboardBody = "Ҳолати имкониятҳо ва пайвасти хидматҳои ёвар.",
@@ -165,97 +250,397 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         memory = "Хотира",
         deviceTools = "Абзорҳои Android",
         notConnected = "Пайваст нест",
+        providerNotVerified = "Ҳанӯз санҷида нашудааст",
+        providerResponding = "Ҷавоб медиҳад",
         historyTitle = "Таърихи гуфтугӯҳо",
-        historyEmpty = "Гуфтугӯҳои сабтшуда дар ин ҷо намоиш дода мешаванд.",
+        historyEmpty = "Гуфтугӯҳои сабтшуда дар марҳилаи баъдӣ пайдо мешаванд.",
         settingsTitle = "Танзимоти барнома",
         language = "Забон",
         appearance = "Намуди зоҳирӣ",
         darkMode = "Мавзӯи торик",
         darkModeBody = "Дар тамоми барнома мавзӯи торик истифода шавад.",
         about = "Дар бораи барнома",
-        version = "Версия"
+        version = "Версия",
+        authTitle = "Вуруд ба Miss Minutes",
+        authBody = "Барои истифодаи ёвар бо ҳисоби Supabase ворид шавед.",
+        email = "Почтаи электронӣ",
+        password = "Рамз",
+        signIn = "Ворид шудан",
+        createAccount = "Сохтани ҳисоб",
+        switchToSignUp = "Ҳисоб надоред? Сохтан",
+        switchToSignIn = "Аллакай ҳисоб доред? Вуруд",
+        wait = "Лутфан интизор шавед…",
+        emailConfirmation = "Ҳисобро аз пайванди почтаи электронӣ тасдиқ кунед ва баъд ворид шавед.",
+        invalidCredentials = "Почта ё рамз нодуруст аст.",
+        authRateLimited = "Кӯшишҳои зиёд. Баъдтар дубора кӯшиш кунед.",
+        authUnavailable = "Хидмати тасдиқи ҳисоб муваққатан дастнорас аст.",
+        sessionExpired = "Сессия ба охир расид. Аз нав ворид шавед.",
+        signOut = "Баромадан",
+        account = "Ҳисоб",
+        sending = "Фикр карда истодаам…",
+        sendFailed = "Ҷавоб гирифта нашуд. Интернет ва танзимоти серверро санҷед.",
+        conversationTooLong = "Гуфтугӯ хеле дароз аст. Гуфтугӯи нав оғоз кунед.",
+        aiRateLimited = "Маҳдудияти дархостҳои AI расид. Каме баъд кӯшиш кунед."
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MissMinutesApp() {
+fun MissMinutesApp(
+    sessionManager: SessionManager,
+    aiProvider: AiProvider
+) {
+    val scope = rememberCoroutineScope()
     var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
     var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
     var darkTheme by rememberSaveable { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
+    var authEmail by rememberSaveable { mutableStateOf("") }
+    var authPassword by remember { mutableStateOf("") }
+    var isSignUp by rememberSaveable { mutableStateOf(false) }
+    var isRestoring by remember { mutableStateOf(true) }
+    var isAuthenticated by rememberSaveable { mutableStateOf(false) }
+    var authBusy by remember { mutableStateOf(false) }
+    var authMessage by remember { mutableStateOf<String?>(null) }
+    var userEmail by rememberSaveable { mutableStateOf("") }
+    var isSending by remember { mutableStateOf(false) }
+    var chatError by remember { mutableStateOf<String?>(null) }
+    var aiHasResponded by rememberSaveable { mutableStateOf(false) }
+    var nextMessageId by remember { mutableStateOf(0L) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
-    val screen = AppScreen.valueOf(selectedScreenName)
     val language = AppLanguage.valueOf(selectedLanguageName)
     val copy = copyFor(language)
 
-    MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            text = ProductIdentity.NAME,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                )
-            },
-            bottomBar = {
-                NavigationBar {
-                    AppScreen.entries.forEach { item ->
-                        val label = when (item) {
-                            AppScreen.Chat -> copy.chat
-                            AppScreen.Dashboard -> copy.dashboard
-                            AppScreen.History -> copy.history
-                            AppScreen.Settings -> copy.settings
+    LaunchedEffect(sessionManager) {
+        try {
+            val session = sessionManager.restoreSession()
+            if (session != null) {
+                isAuthenticated = true
+                userEmail = session.email.orEmpty()
+                authEmail = session.email.orEmpty()
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            authMessage = copy.authUnavailable
+        } finally {
+            isRestoring = false
+        }
+    }
+
+    val submitAuth: () -> Unit = {
+        if (!authBusy) {
+            scope.launch {
+                authBusy = true
+                authMessage = null
+                try {
+                    if (isSignUp) {
+                        val result = sessionManager.signUp(authEmail.trim(), authPassword)
+                        val session = result.session
+                        if (session != null) {
+                            isAuthenticated = true
+                            userEmail = session.email ?: authEmail.trim()
+                            authEmail = userEmail
+                            authPassword = ""
+                        } else {
+                            isSignUp = false
+                            authPassword = ""
+                            authMessage = copy.emailConfirmation
                         }
-                        NavigationBarItem(
-                            selected = screen == item,
-                            onClick = { selectedScreenName = item.name },
-                            icon = { Text(item.symbol, fontSize = 18.sp) },
-                            label = { Text(label) }
-                        )
+                    } else {
+                        val session = sessionManager.signIn(authEmail.trim(), authPassword)
+                        isAuthenticated = true
+                        userEmail = session.email ?: authEmail.trim()
+                        authEmail = userEmail
+                        authPassword = ""
+                    }
+                } catch (_: SupabaseAuthException.InvalidCredentials) {
+                    authMessage = copy.invalidCredentials
+                } catch (_: SupabaseAuthException.RateLimited) {
+                    authMessage = copy.authRateLimited
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    authMessage = copy.authUnavailable
+                } finally {
+                    authBusy = false
+                }
+            }
+        }
+    }
+
+    val signOut: () -> Unit = {
+        if (!authBusy) {
+            scope.launch {
+                authBusy = true
+                try {
+                    sessionManager.signOut()
+                } catch (_: Exception) {
+                    // Local credentials are cleared by SessionManager even if revocation fails.
+                } finally {
+                    isAuthenticated = false
+                    userEmail = ""
+                    authEmail = ""
+                    authPassword = ""
+                    messages.clear()
+                    draft = ""
+                    aiHasResponded = false
+                    selectedScreenName = AppScreen.Chat.name
+                    authBusy = false
+                }
+            }
+        }
+    }
+
+    val submitMessage: () -> Unit = {
+        val value = draft.trim()
+        if (value.isNotEmpty() && value.length <= 8_000 && !isSending) {
+            val requestMessages = messages.takeLast(19).map { message ->
+                AiMessage(
+                    role = if (message.isUser) AiRole.USER else AiRole.ASSISTANT,
+                    content = message.text
+                )
+            }.toMutableList()
+            requestMessages.add(AiMessage(AiRole.USER, value))
+            while (
+                requestMessages.size > 1 &&
+                requestMessages.sumOf { it.content.length } > 16_000
+            ) {
+                requestMessages.removeAt(0)
+            }
+
+            val request = try {
+                AiRequest(messages = requestMessages)
+            } catch (_: IllegalArgumentException) {
+                chatError = copy.conversationTooLong
+                null
+            }
+
+            if (request != null) {
+                nextMessageId += 1
+                messages.add(ChatMessage(nextMessageId, value, true))
+                if (messages.size > 100) messages.removeAt(0)
+                draft = ""
+                chatError = null
+
+                scope.launch {
+                    isSending = true
+                    try {
+                        val completion: AiCompletion = aiProvider.complete(request)
+                        nextMessageId += 1
+                        messages.add(ChatMessage(nextMessageId, completion.content, false))
+                        if (messages.size > 100) messages.removeAt(0)
+                        aiHasResponded = true
+                    } catch (_: AiProviderException.AuthenticationRequired) {
+                        try {
+                            sessionManager.signOut()
+                        } catch (_: Exception) {
+                            // SessionManager always clears local tokens in its finally block.
+                        }
+                        isAuthenticated = false
+                        authMessage = copy.sessionExpired
+                    } catch (_: AiProviderException.RateLimited) {
+                        chatError = copy.aiRateLimited
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        chatError = copy.sendFailed
+                    } finally {
+                        isSending = false
                     }
                 }
             }
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                when (screen) {
-                    AppScreen.Chat -> ChatScreen(
-                        copy = copy,
-                        messages = messages,
-                        draft = draft,
-                        onDraftChange = { draft = it },
-                        onSend = {
-                            val value = draft.trim()
-                            if (value.isNotEmpty()) {
-                                messages.add(
-                                    ChatMessage(
-                                        id = System.currentTimeMillis(),
-                                        text = value,
-                                        isUser = true
-                                    )
+        }
+    }
+
+    MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
+        when {
+            isRestoring -> LoadingScreen()
+            !isAuthenticated -> AuthScreen(
+                copy = copy,
+                email = authEmail,
+                password = authPassword,
+                isSignUp = isSignUp,
+                isBusy = authBusy,
+                message = authMessage,
+                onEmailChange = { authEmail = it },
+                onPasswordChange = { authPassword = it },
+                onModeChange = {
+                    isSignUp = !isSignUp
+                    authMessage = null
+                    authPassword = ""
+                },
+                onSubmit = submitAuth
+            )
+            else -> {
+                val screen = AppScreen.valueOf(selectedScreenName)
+                Scaffold(
+                    topBar = {
+                        CenterAlignedTopAppBar(
+                            title = {
+                                Text(
+                                    text = ProductIdentity.NAME,
+                                    fontWeight = FontWeight.SemiBold
                                 )
-                                draft = ""
+                            }
+                        )
+                    },
+                    bottomBar = {
+                        NavigationBar {
+                            AppScreen.entries.forEach { item ->
+                                val label = when (item) {
+                                    AppScreen.Chat -> copy.chat
+                                    AppScreen.Dashboard -> copy.dashboard
+                                    AppScreen.History -> copy.history
+                                    AppScreen.Settings -> copy.settings
+                                }
+                                NavigationBarItem(
+                                    selected = screen == item,
+                                    onClick = { selectedScreenName = item.name },
+                                    icon = { Text(item.symbol, fontSize = 18.sp) },
+                                    label = { Text(label) }
+                                )
                             }
                         }
-                    )
-                    AppScreen.Dashboard -> DashboardScreen(copy)
-                    AppScreen.History -> HistoryScreen(copy)
-                    AppScreen.Settings -> SettingsScreen(
-                        copy = copy,
-                        language = language,
-                        darkTheme = darkTheme,
-                        onLanguageChange = { selectedLanguageName = it.name },
-                        onDarkThemeChange = { darkTheme = it }
-                    )
+                    }
+                ) { innerPadding ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    ) {
+                        when (screen) {
+                            AppScreen.Chat -> ChatScreen(
+                                copy = copy,
+                                messages = messages,
+                                draft = draft,
+                                isSending = isSending,
+                                error = chatError,
+                                onDraftChange = { draft = it },
+                                onSend = submitMessage
+                            )
+                            AppScreen.Dashboard -> DashboardScreen(
+                                copy = copy,
+                                email = userEmail,
+                                aiStatus = if (aiHasResponded) {
+                                    copy.providerResponding
+                                } else {
+                                    copy.providerNotVerified
+                                }
+                            )
+                            AppScreen.History -> HistoryScreen(copy)
+                            AppScreen.Settings -> SettingsScreen(
+                                copy = copy,
+                                language = language,
+                                darkTheme = darkTheme,
+                                email = userEmail,
+                                isBusy = authBusy,
+                                onLanguageChange = { selectedLanguageName = it.name },
+                                onDarkThemeChange = { darkTheme = it },
+                                onSignOut = signOut
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LoadingScreen() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun AuthScreen(
+    copy: UiCopy,
+    email: String,
+    password: String,
+    isSignUp: Boolean,
+    isBusy: Boolean,
+    message: String?,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onModeChange: () -> Unit,
+    onSubmit: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = ProductIdentity.NAME,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = copy.authTitle,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 20.dp)
+        )
+        Text(
+            text = copy.authBody,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp, bottom = 20.dp)
+        )
+        OutlinedTextField(
+            value = email,
+            onValueChange = onEmailChange,
+            modifier = Modifier.fillMaxWidth().testTag("auth_email"),
+            label = { Text(copy.email) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next
+            )
+        )
+        OutlinedTextField(
+            value = password,
+            onValueChange = onPasswordChange,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag("auth_password"),
+            label = { Text(copy.password) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(onDone = { onSubmit() })
+        )
+        if (message != null) {
+            Text(
+                text = message,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+            )
+        }
+        Button(
+            onClick = onSubmit,
+            enabled = !isBusy && email.isNotBlank() && password.length >= 8,
+            modifier = Modifier.fillMaxWidth().padding(top = 20.dp).testTag("auth_submit")
+        ) {
+            Text(
+                if (isBusy) copy.wait else if (isSignUp) copy.createAccount else copy.signIn
+            )
+        }
+        TextButton(
+            onClick = onModeChange,
+            enabled = !isBusy,
+            modifier = Modifier.testTag("auth_toggle_mode")
+        ) {
+            Text(if (isSignUp) copy.switchToSignIn else copy.switchToSignUp)
         }
     }
 }
@@ -265,6 +650,8 @@ private fun ChatScreen(
     copy: UiCopy,
     messages: List<ChatMessage>,
     draft: String,
+    isSending: Boolean,
+    error: String?,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit
 ) {
@@ -294,11 +681,17 @@ private fun ChatScreen(
             }
         }
         Text(
-            text = copy.previewNotice,
+            text = copy.gatewayNotice,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 2.dp)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (error != null) {
+            Text(
+                text = error,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -306,7 +699,7 @@ private fun ChatScreen(
         ) {
             OutlinedTextField(
                 value = draft,
-                onValueChange = onDraftChange,
+                onValueChange = { if (it.length <= 8_000) onDraftChange(it) },
                 modifier = Modifier.weight(1f).testTag("chat_input"),
                 placeholder = { Text(copy.composerHint) },
                 maxLines = 4,
@@ -315,9 +708,10 @@ private fun ChatScreen(
             )
             Button(
                 onClick = onSend,
-                enabled = draft.isNotBlank()
+                enabled = draft.isNotBlank() && !isSending,
+                modifier = Modifier.testTag("chat_send")
             ) {
-                Text(copy.send)
+                Text(if (isSending) copy.sending else copy.send)
             }
         }
     }
@@ -347,7 +741,11 @@ private fun MessageBubble(message: ChatMessage, youLabel: String) {
 }
 
 @Composable
-private fun DashboardScreen(copy: UiCopy) {
+private fun DashboardScreen(
+    copy: UiCopy,
+    email: String,
+    aiStatus: String
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -356,7 +754,8 @@ private fun DashboardScreen(copy: UiCopy) {
     ) {
         Text(copy.dashboardTitle, style = MaterialTheme.typography.headlineMedium)
         Text(copy.dashboardBody, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        StatusCard(copy.aiProvider, copy.notConnected)
+        StatusCard(copy.account, email)
+        StatusCard(copy.aiProvider, aiStatus)
         StatusCard(copy.voice, copy.notConnected)
         StatusCard(copy.memory, copy.notConnected)
         StatusCard(copy.deviceTools, copy.notConnected)
@@ -401,8 +800,11 @@ private fun SettingsScreen(
     copy: UiCopy,
     language: AppLanguage,
     darkTheme: Boolean,
+    email: String,
+    isBusy: Boolean,
     onLanguageChange: (AppLanguage) -> Unit,
-    onDarkThemeChange: (Boolean) -> Unit
+    onDarkThemeChange: (Boolean) -> Unit,
+    onSignOut: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -442,6 +844,13 @@ private fun SettingsScreen(
                     onCheckedChange = onDarkThemeChange,
                     modifier = Modifier.testTag("dark_mode_switch")
                 )
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(copy.account, fontWeight = FontWeight.SemiBold)
+            Text(email, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onSignOut, enabled = !isBusy) {
+                Text(if (isBusy) copy.wait else copy.signOut)
             }
         }
         Spacer(modifier = Modifier.weight(1f))
