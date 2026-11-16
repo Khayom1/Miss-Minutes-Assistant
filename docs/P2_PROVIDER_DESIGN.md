@@ -27,7 +27,7 @@ The app supports Supabase email/password sign-in and sign-up. The password is se
 
 ## Optional local inference
 
-Local inference uses an OpenAI-compatible `/v1/chat/completions` endpoint restricted to loopback hosts (`127.0.0.1`, `localhost`, or `::1`). The default endpoint is `http://127.0.0.1:5000/v1/chat/completions`; it can be overridden with the Gradle property `-PlocalModelUrl=...`, but the runtime host policy still rejects LAN and public hosts.
+Local inference uses an OpenAI-compatible `/v1/chat/completions` endpoint restricted to loopback hosts (`127.0.0.1` or `localhost`). The default endpoint is `http://127.0.0.1:5000/v1/chat/completions`; it can be overridden with the Gradle property `-PlocalModelUrl=...`, but the runtime host policy still rejects LAN and public hosts.
 
 Cleartext HTTP is disabled globally and permitted only for `localhost` and `127.0.0.1` to support an on-device local model server. Selecting Local never falls back to the cloud provider, preventing an unexpected data transfer. No model weights or native inference runtime are bundled; a compatible local server must already be running on the device.
 
