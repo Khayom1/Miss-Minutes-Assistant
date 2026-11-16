@@ -462,6 +462,8 @@ fun MissMinutesApp(
                         authMessage = copy.sessionExpired
                         try {
                             sessionManager.signOut()
+                        } catch (error: CancellationException) {
+                            throw error
                         } catch (_: Exception) {
                             // SessionManager always clears local tokens in its finally block.
                         } finally {
