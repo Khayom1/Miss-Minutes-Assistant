@@ -71,13 +71,14 @@ class OverlayService : LifecycleService() {
         startForeground(NOTIFICATION_ID, notification())
         manager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val density = resources.displayMetrics.density
+        // Start as a lightweight 72dp bubble. The SceneView/GLB renderer is only composed
+        // after the user explicitly expands the overlay, avoiding a second 3D scene by default.
         layout = WindowManager.LayoutParams(
-            (218 * density).toInt(),
-            (250 * density).toInt(),
+            (78 * density).toInt(),
+            (78 * density).toInt(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -199,7 +200,9 @@ class OverlayService : LifecycleService() {
 
 @Composable
 private fun OverlayCharacter(languageCode: String, onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
-    var compact by remember { mutableStateOf(false) }
+    // Deliberately compact by default: no GL context, model load, or animation loop is created
+    // until the user chooses the expand button.
+    var compact by remember { mutableStateOf(true) }
     var clip by remember { mutableStateOf("Idle_Breathe") }
 
     val context = androidx.compose.ui.platform.LocalContext.current
