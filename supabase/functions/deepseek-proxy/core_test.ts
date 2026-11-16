@@ -1,4 +1,7 @@
-import { createDeepSeekProxyHandler } from "./core.ts";
+import {
+  createDeepSeekProxyHandler,
+  type DeepSeekProxyDependencies,
+} from "./core.ts";
 
 function assert(condition: unknown, message = "assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -20,7 +23,9 @@ function validPayload() {
   return { messages: [{ role: "user", content: "Hello" }] };
 }
 
-function dependencies(overrides: Record<string, unknown> = {}) {
+function dependencies(
+  overrides: Partial<DeepSeekProxyDependencies> = {},
+): DeepSeekProxyDependencies {
   return {
     userId: "user-123",
     providerKey: "test-only-key",
