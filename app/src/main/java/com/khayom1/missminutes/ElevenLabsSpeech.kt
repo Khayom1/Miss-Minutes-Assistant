@@ -29,8 +29,8 @@ class ElevenLabsSpeechClient(context: Context) {
     }
 
     fun release() {
-        player?.runCatching { stop() }
-        player?.release()
+        runCatching { player?.stop() }
+        runCatching { player?.release() }
         player = null
     }
 
@@ -103,7 +103,7 @@ class ElevenLabsSpeechClient(context: Context) {
         }
         continuation.invokeOnCancellation {
             runCatching { media.stop() }
-            media.release()
+            runCatching { media.release() }
             if (player === media) player = null
             file.delete()
         }
