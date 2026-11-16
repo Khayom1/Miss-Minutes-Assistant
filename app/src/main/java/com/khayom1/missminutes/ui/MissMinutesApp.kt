@@ -341,7 +341,8 @@ fun MissMinutesApp(
         if (authBusy) return
         authBusy = true
         scope.launch {
-            when (val result = action()) {
+            try {
+                when (val result = action()) {
                 is AuthResult.SignedIn -> {
                     signedInEmail = result.session.email
                     authMessage = copy.signedIn
@@ -359,8 +360,12 @@ fun MissMinutesApp(
                         else -> copy.authFailed
                     }
                 }
+                }
+            } catch (_: Exception) {
+                authMessage = copy.authFailed
+            } finally {
+                authBusy = false
             }
-            authBusy = false
         }
     }
 
@@ -381,7 +386,8 @@ fun MissMinutesApp(
 
         sending = true
         scope.launch {
-            when (val result = providerRouter.complete(ChatRequest(requestMessages), providerMode)) {
+            try {
+                when (val result = providerRouter.complete(ChatRequest(requestMessages), providerMode)) {
                 is ChatProviderResult.Success -> messages.add(
                     UiChatMessage(
                         id = nextId(),
@@ -397,8 +403,19 @@ fun MissMinutesApp(
                         isError = true
                     )
                 )
+                }
+            } catch (_: Exception) {
+                messages.add(
+                    UiChatMessage(
+                        id = nextId(),
+                        text = copy.networkError,
+                        isUser = false,
+                        isError = true
+                    )
+                )
+            } finally {
+                sending = false
             }
-            sending = false
         }
     }
 
