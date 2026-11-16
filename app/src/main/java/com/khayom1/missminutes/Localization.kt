@@ -17,9 +17,9 @@ object AppLocalization {
 
     internal fun hasTranslation(language: String, key: String): Boolean {
         val translations = when (normalize(language)) {
-            "tg" -> TAJIK
+            "tg" -> TAJIK_TRANSLATIONS
             "en" -> ENGLISH
-            else -> RUSSIAN
+            else -> RUSSIAN_TRANSLATIONS
         }
         return translations.containsKey(key)
     }
@@ -134,7 +134,7 @@ Never reveal or request API keys or other secrets.
         "action_clock_unsupported" to "The Clock app does not support this request."
     )
 
-    private val RUSSIAN = ENGLISH + mapOf(
+    private val RUSSIAN_TRANSLATIONS = mapOf(
         "3d_unavailable" to "3D недоступно на этом устройстве. Лёгкий 2D-интерфейс продолжит работать.",
         "authority" to "УПРАВЛЕНИЕ ВРЕМЕННЫМИ ОТКЛОНЕНИЯМИ", "settings" to "Настройки", "settings_title" to "TVA / НАСТРОЙКИ",
         "provider_profile" to "Профиль AI-провайдера: OpenAI-compatible, Gemini или Anthropic",
@@ -186,8 +186,9 @@ Never reveal or request API keys or other secrets.
         "action_not_found" to "Приложение не найдено: %s.",
         "action_clock_unsupported" to "Приложение часов не поддерживает этот запрос."
     )
+    private val RUSSIAN = ENGLISH + RUSSIAN_TRANSLATIONS
 
-    private val TAJIK = ENGLISH + mapOf(
+    private val TAJIK_TRANSLATIONS = mapOf(
         "3d_unavailable" to "3D дар ин дастгоҳ дастрас нест. Интерфейси сабуки 2D корро идома медиҳад.",
         "authority" to "ИДОРАИ ИХТИЛОФҲОИ ЗАМОНӢ", "settings" to "Танзимот", "settings_title" to "TVA / ТАНЗИМОТ",
         "provider_profile" to "Профили AI: OpenAI-compatible, Gemini ё Anthropic",
@@ -239,4 +240,5 @@ Never reveal or request API keys or other secrets.
         "action_not_found" to "Барнома ёфт нашуд: %s.",
         "action_clock_unsupported" to "Барномаи Соат ин дархостро дастгирӣ намекунад."
     )
+    private val TAJIK = ENGLISH + TAJIK_TRANSLATIONS
 }
