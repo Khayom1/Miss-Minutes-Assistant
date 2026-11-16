@@ -330,8 +330,8 @@ fun MissMinutesApp(
 
     val submitAuth: () -> Unit = {
         if (!authBusy) {
+            authBusy = true
             scope.launch {
-                authBusy = true
                 authMessage = null
                 try {
                     if (isSignUp) {
@@ -371,8 +371,8 @@ fun MissMinutesApp(
 
     val signOut: () -> Unit = {
         if (!authBusy) {
+            authBusy = true
             scope.launch {
-                authBusy = true
                 try {
                     sessionManager.signOut()
                 } catch (_: Exception) {
@@ -417,6 +417,7 @@ fun MissMinutesApp(
             }
 
             if (request != null) {
+                isSending = true
                 nextMessageId += 1
                 messages.add(ChatMessage(nextMessageId, value, true))
                 if (messages.size > 100) messages.removeAt(0)
@@ -424,7 +425,6 @@ fun MissMinutesApp(
                 chatError = null
 
                 scope.launch {
-                    isSending = true
                     try {
                         val completion: AiCompletion = aiProvider.complete(request)
                         nextMessageId += 1
