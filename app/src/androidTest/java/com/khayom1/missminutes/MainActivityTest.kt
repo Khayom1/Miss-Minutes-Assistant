@@ -13,6 +13,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
+import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AuthFlowResult
 import com.khayom1.missminutes.ai.SessionManager
@@ -68,9 +69,11 @@ class MainActivityTest {
 
     private class FakeAiProvider : AiProvider {
         var lastRequest: AiRequest? = null
+        var nextError: AiProviderException? = null
 
         override suspend fun complete(request: AiRequest): AiCompletion {
             lastRequest = request
+            nextError?.let { throw it }
             return AiCompletion(
                 content = "Mock AI response",
                 model = "test-mock"
@@ -154,6 +157,43 @@ class MainActivityTest {
                 "Check the authenticated chat"
             ),
             aiProvider.lastRequest?.messages?.last()
+        )
+    }
+
+    @Test
+    fun expiredSessionClearsPreviousAccountConversationBeforeReauthentication() {
+        signIn()
+        aiProvider.nextError = AiProviderException.AuthenticationRequired()
+
+        composeRule.onNodeWithTag("chat_input")
+            .performTextInput("Private conversation from previous account")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Sign in to Miss Minutes")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("Sign in to Miss Minutes").assertIsDisplayed()
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("Private conversation from previous account")
+                .fetchSemanticsNodes().size
+        )
+
+        composeRule.onNodeWithTag("auth_email").performTextInput("new-user@example.test")
+        composeRule.onNodeWithTag("auth_password").performTextInput("correct-horse-battery")
+        composeRule.onNodeWithTag("auth_submit").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("How can I help?")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("Dashboard").performClick()
+        composeRule.onNodeWithText("new-user@example.test").assertIsDisplayed()
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("Private conversation from previous account")
+                .fetchSemanticsNodes().size
         )
     }
 

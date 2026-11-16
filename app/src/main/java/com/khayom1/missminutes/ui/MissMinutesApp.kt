@@ -443,7 +443,16 @@ fun MissMinutesApp(
                         } catch (_: Exception) {
                             // SessionManager always clears local tokens in its finally block.
                         }
+                        // Never carry one account's in-memory conversation into another session.
                         isAuthenticated = false
+                        userEmail = ""
+                        authEmail = ""
+                        authPassword = ""
+                        messages.clear()
+                        draft = ""
+                        aiHasResponded = false
+                        chatError = null
+                        selectedScreenName = AppScreen.Chat.name
                         authMessage = copy.sessionExpired
                     } catch (_: AiProviderException.RateLimited) {
                         chatError = copy.aiRateLimited
