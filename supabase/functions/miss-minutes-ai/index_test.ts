@@ -29,20 +29,36 @@ function testEnvironment(overrides: Record<string, string> = {}): EnvironmentRea
   const values: Record<string, string> = {
     SUPABASE_URL: "https://supabase.example",
     SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: "sb_publishable_test" }),
+    SUPABASE_SECRET_KEYS: JSON.stringify({ default: "sb_secret_test-only" }),
     DEEPSEEK_API_KEY: "test-only-deepseek-secret",
     ...overrides,
   };
   return (name) => values[name];
 }
 
-function fakeFetcher(upstreamStatus = 200, upstreamPayload: unknown = {
-  choices: [{ message: { content: "Hello from the test provider" } }],
-}): Fetcher {
+function fakeFetcher(
+  upstreamStatus = 200,
+  upstreamPayload: unknown = {
+    choices: [{ message: { content: "Hello from the test provider" } }],
+  },
+  quotaAllowed = true,
+): Fetcher {
   return async (input, init) => {
     const url = String(input);
     if (url === "https://supabase.example/auth/v1/user") {
       equal(new Headers(init?.headers).get("apikey"), "sb_publishable_test", "Auth apikey");
       return Response.json({ id: "test-user" }, { status: 200 });
+    }
+    if (url === "https://supabase.example/rest/v1/rpc/consume_miss_minutes_ai_rate_limit") {
+      equal(
+        new Headers(init?.headers).get("authorization"),
+        "Bearer sb_secret_test-only",
+        "Service key must stay server-side",
+      );
+      const quotaRequest = JSON.parse(String(init?.body));
+      equal(quotaRequest.p_user_id, "test-user", "Rate limit user identity");
+      equal(quotaRequest.p_limit, 12, "Per-user request quota");
+      return Response.json(quotaAllowed);
     }
     if (url === "https://api.deepseek.com/chat/completions") {
       equal(
@@ -106,6 +122,29 @@ Deno.test("returns only normalized assistant content on success", async () => {
   equal(payload.content, "Hello from the test provider", "Assistant content");
   equal(payload.model, "deepseek-chat", "Model name");
   assert(!JSON.stringify(payload).includes("test-only-deepseek-secret"), "Provider key must not be returned");
+});
+
+Deno.test("enforces the persistent per-user quota before calling DeepSeek", async () => {
+  let deepSeekCalls = 0;
+  const fetcher: Fetcher = async (input, init) => {
+    const url = String(input);
+    if (url === "https://supabase.example/auth/v1/user") {
+      return Response.json({ id: "test-user" }, { status: 200 });
+    }
+    if (url === "https://supabase.example/rest/v1/rpc/consume_miss_minutes_ai_rate_limit") {
+      return Response.json(false);
+    }
+    if (url === "https://api.deepseek.com/chat/completions") {
+      deepSeekCalls++;
+      return Response.json({ choices: [{ message: { content: "should not run" } }] });
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+  const handler = createHandler({ env: testEnvironment(), fetcher });
+  const response = await handler(request());
+  equal(response.status, 429, "HTTP status");
+  equal((await response.json()).error, "user_rate_limited", "Error code");
+  equal(deepSeekCalls, 0, "DeepSeek must not be called after quota rejection");
 });
 
 Deno.test("maps upstream rate limits to HTTP 429", async () => {
