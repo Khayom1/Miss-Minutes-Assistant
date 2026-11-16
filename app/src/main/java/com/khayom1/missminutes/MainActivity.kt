@@ -115,6 +115,9 @@ private fun MissMinutesRoot(activity: Activity) {
     var firstRun by remember { mutableStateOf(!prefs.getBoolean("initialization_complete", false)) }
     var showSettings by remember { mutableStateOf(false) }
     var apiKeyDraft by remember { mutableStateOf("") }
+    var providerNameDraft by remember { mutableStateOf("DeepSeek") }
+    var providerBaseUrlDraft by remember { mutableStateOf("https://api.deepseek.com") }
+    var providerModelDraft by remember { mutableStateOf("deepseek-flash") }
     var input by remember { mutableStateOf("") }
     var selectedAnimation by remember { mutableStateOf("Idle_Breathe") }
     var isThinking by remember { mutableStateOf(false) }
@@ -146,7 +149,12 @@ private fun MissMinutesRoot(activity: Activity) {
     }
 
     LaunchedEffect(Unit) {
-        apiKeyDraft = withContext(Dispatchers.IO) { secrets.read("deepseek_api_key").orEmpty() }
+        providerNameDraft = prefs.getString("ai_provider_name", "DeepSeek") ?: "DeepSeek"
+        providerBaseUrlDraft = prefs.getString("ai_provider_base_url", "https://api.deepseek.com") ?: "https://api.deepseek.com"
+        providerModelDraft = prefs.getString("ai_provider_model", "deepseek-flash") ?: "deepseek-flash"
+        apiKeyDraft = withContext(Dispatchers.IO) {
+            (secrets.read("ai_primary_api_key") ?: secrets.read("deepseek_api_key")).orEmpty()
+        }
         withContext(Dispatchers.IO) {
             memory.seedTvaArchive()
             if (!prefs.getBoolean("owner_seeded", false)) {
@@ -187,22 +195,37 @@ private fun MissMinutesRoot(activity: Activity) {
         status = "TEMPORAL LINK / CONNECTING"
         scope.launch {
             try {
-                val key = withContext(Dispatchers.IO) { secrets.read("deepseek_api_key") }
+                val key = withContext(Dispatchers.IO) {
+                    secrets.read("ai_primary_api_key") ?: secrets.read("deepseek_api_key")
+                }
                 if (key.isNullOrBlank()) {
-                    val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь DeepSeek API Key. И не вздумай записывать его на табличке у входа в TVA!"
+                    val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь API Key выбранного AI-провайдера. И не вздумай записывать его на табличке у входа в TVA!"
                     appendMessage(messages, ChatLine("assistant", response))
                     voice.speak(response)
                     return@launch
                 }
                 val memoryContext = withContext(Dispatchers.IO) { memory.buildPromptContext() }
-                val response = DeepSeekClient.reply(key, PersonalityEngine.buildSystemPrompt(memoryContext), message)
+                val provider = ProviderConfig(
+                    id = "primary",
+                    displayName = prefs.getString("ai_provider_name", "DeepSeek") ?: "DeepSeek",
+                    baseUrl = prefs.getString("ai_provider_base_url", "https://api.deepseek.com") ?: "https://api.deepseek.com",
+                    modelId = prefs.getString("ai_provider_model", "deepseek-flash") ?: "deepseek-flash"
+                )
+                val response = AiConversationService.reply(
+                    provider,
+                    key,
+                    listOf(
+                        AiMessage("system", PersonalityEngine.buildSystemPrompt(memoryContext)),
+                        AiMessage("user", message)
+                    )
+                )
                 appendMessage(messages, ChatLine("assistant", response))
                 withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
                 selectedAnimation = "Talk_Loop"
                 voice.speak(response)
                 status = "TVA SYSTEM / STABLE"
             } catch (error: Exception) {
-                val response = "Так, минутку! Канал связи с DeepSeek временно схлопнулся: " +
+                val response = "Так, минутку! Канал связи с AI-провайдером временно схлопнулся: " +
                     (error.message ?: "неизвестная ошибка") + ". Проверь интернет и API Key, Хранитель."
                 appendMessage(messages, ChatLine("assistant", response))
                 status = "TEMPORAL LINK / ERROR"
@@ -236,7 +259,14 @@ private fun MissMinutesRoot(activity: Activity) {
             onAnimationChange = { selectedAnimation = it },
             onSettings = {
                 showSettings = true
-                scope.launch { apiKeyDraft = withContext(Dispatchers.IO) { secrets.read("deepseek_api_key").orEmpty() } }
+                scope.launch {
+                    providerNameDraft = prefs.getString("ai_provider_name", "DeepSeek") ?: "DeepSeek"
+                    providerBaseUrlDraft = prefs.getString("ai_provider_base_url", "https://api.deepseek.com") ?: "https://api.deepseek.com"
+                    providerModelDraft = prefs.getString("ai_provider_model", "deepseek-flash") ?: "deepseek-flash"
+                    apiKeyDraft = withContext(Dispatchers.IO) {
+                        (secrets.read("ai_primary_api_key") ?: secrets.read("deepseek_api_key")).orEmpty()
+                    }
+                }
             },
             onOverlay = {
                 if (Settings.canDrawOverlays(activity)) {
@@ -269,16 +299,38 @@ private fun MissMinutesRoot(activity: Activity) {
 
     if (showSettings) {
         SettingsDialog(
+            providerName = providerNameDraft,
+            onProviderNameChange = { providerNameDraft = it },
+            baseUrl = providerBaseUrlDraft,
+            onBaseUrlChange = { providerBaseUrlDraft = it },
+            modelId = providerModelDraft,
+            onModelIdChange = { providerModelDraft = it },
             apiKey = apiKeyDraft,
             onApiKeyChange = { apiKeyDraft = it },
             onSave = {
+                val nameToSave = providerNameDraft.trim()
+                val baseUrlToSave = providerBaseUrlDraft.trim()
+                val modelToSave = providerModelDraft.trim()
                 val keyToSave = apiKeyDraft.trim()
                 scope.launch {
                     try {
-                        withContext(Dispatchers.IO) { secrets.save("deepseek_api_key", keyToSave) }
+                        require(nameToSave.isNotBlank()) { "Provider name is required" }
+                        require(modelToSave.isNotBlank()) { "Model ID is required" }
+                        resolveOpenAiChatEndpoint(baseUrlToSave)
+                        withContext(Dispatchers.IO) {
+                            secrets.save("ai_primary_api_key", keyToSave)
+                            secrets.save("deepseek_api_key", "")
+                        }
+                        prefs.edit()
+                            .putString("ai_provider_name", nameToSave)
+                            .putString("ai_provider_base_url", baseUrlToSave)
+                            .putString("ai_provider_model", modelToSave)
+                            .apply()
                         showSettings = false
-                        status = if (keyToSave.isBlank()) "API KEY / EMPTY" else "API KEY / STORED SECURELY"
-                    } catch (_: Exception) { status = "API KEY / STORAGE ERROR" }
+                        status = if (keyToSave.isBlank()) "AI PROVIDER / SAVED WITHOUT KEY" else "AI PROVIDER / KEY STORED SECURELY"
+                    } catch (error: Exception) {
+                        status = "AI PROVIDER / INVALID CONFIG: " + (error.message ?: "unknown error")
+                    }
                 }
             },
             onDismiss = { showSettings = false },
@@ -437,6 +489,12 @@ private fun Dashboard(
 
 @Composable
 private fun SettingsDialog(
+    providerName: String,
+    onProviderNameChange: (String) -> Unit,
+    baseUrl: String,
+    onBaseUrlChange: (String) -> Unit,
+    modelId: String,
+    onModelIdChange: (String) -> Unit,
     apiKey: String,
     onApiKeyChange: (String) -> Unit,
     onSave: () -> Unit,
@@ -448,8 +506,34 @@ private fun SettingsDialog(
         onDismissRequest = onDismiss,
         title = { Text("TVA / НАСТРОЙКИ") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("DeepSeek API Key", color = TvaOrange, fontWeight = FontWeight.Bold)
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Профиль OpenAI-совместимого провайдера", color = TvaOrange, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = providerName,
+                    onValueChange = onProviderNameChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Имя провайдера") }
+                )
+                OutlinedTextField(
+                    value = baseUrl,
+                    onValueChange = onBaseUrlChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("HTTPS Base URL") },
+                    placeholder = { Text("https://api.example.com/v1") }
+                )
+                OutlinedTextField(
+                    value = modelId,
+                    onValueChange = onModelIdChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("ID модели") }
+                )
+                Text("API Key", color = TvaOrange, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = onApiKeyChange,
@@ -458,7 +542,7 @@ private fun SettingsDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     placeholder = { Text("API Key") }
                 )
-                Text("Ключ шифруется Android Keystore и не попадает в репозиторий.", fontSize = 11.sp)
+                Text("Ключ шифруется через Android Keystore. Используется протокол OpenAI Chat Completions через HTTPS.", fontSize = 11.sp)
                 OutlinedButton(onClick = onNotificationSettings, modifier = Modifier.fillMaxWidth()) {
                     Text("Разрешить чтение уведомлений")
                 }
