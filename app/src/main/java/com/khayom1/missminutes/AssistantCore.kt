@@ -394,6 +394,19 @@ internal fun classifyLocalCommand(raw: String, language: String = "ru"): LocalCo
     }
 }
 
+internal fun parseTimerDurationSeconds(value: String): Int? {
+    val match = Regex("(\\d{1,3})\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?|сония(?:ҳо)?|дақиқа(?:ҳо)?|соат(?:ҳо)?|секунд|секунды|секунду|сек|минут|минуты|минуту|мин|час|часа|часов)")
+        .find(value.lowercase(Locale.ROOT)) ?: return null
+    val amount = match.groupValues[1].toIntOrNull() ?: return null
+    val unit = match.groupValues[2]
+    val seconds = when {
+        unit.startsWith("сек") || unit.startsWith("сон") || unit.startsWith("sec") -> amount
+        unit.startsWith("hour") || unit.startsWith("hr") || unit.startsWith("час") || unit.startsWith("соат") -> amount * 3600
+        else -> amount * 60
+    }
+    return seconds.takeIf { it in 1..86_400 }
+}
+
 object AndroidActions {
     fun tryHandle(context: Context, raw: String, language: String = "ru"): String? {
         val code = AppLocalization.normalize(language)

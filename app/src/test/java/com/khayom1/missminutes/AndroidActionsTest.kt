@@ -19,6 +19,13 @@ class AndroidActionsTest {
         assertEquals(LocalCommandType.NONE, classifyLocalCommand("как работает таймер?"))
         assertEquals(LocalCommandType.NONE, classifyLocalCommand("расскажи про будильник"))
     }
+    @Test fun timerDurationsParseAcrossAllThreeLanguages() {
+        assertEquals(300, parseTimerDurationSeconds("set a timer for 5 minutes"))
+        assertEquals(5, parseTimerDurationSeconds("таймер мон барои 5 сония"))
+        assertEquals(7200, parseTimerDurationSeconds("set timer for 2 hours"))
+        assertEquals(300, parseTimerDurationSeconds("таймер мон барои 5 дақиқа"))
+        assertEquals(null, parseTimerDurationSeconds("0 minutes"))
+    }
     @Test fun localCommandsAreRecognizedInTajikAndEnglish() {
         assertEquals(LocalCommandType.HOME, classifyLocalCommand("go home", "en"))
         assertEquals(LocalCommandType.BACK, classifyLocalCommand("ақиб", "tg"))
