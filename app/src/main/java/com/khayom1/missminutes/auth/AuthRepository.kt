@@ -5,7 +5,8 @@ import com.khayom1.missminutes.ai.AccessTokenProvider
 data class AuthSession(
     val accessToken: String,
     val refreshToken: String,
-    val email: String?
+    val email: String?,
+    val expiresAtEpochSeconds: Long
 )
 
 enum class AuthErrorCode {
@@ -19,6 +20,7 @@ enum class AuthErrorCode {
 
 sealed interface AuthResult {
     data class SignedIn(val session: AuthSession) : AuthResult
+    data object SignedOut : AuthResult
     data object NeedsEmailConfirmation : AuthResult
     data class Failure(val error: AuthErrorCode) : AuthResult
 }
@@ -35,14 +37,16 @@ interface SessionStore : AccessTokenProvider {
     fun clear()
 }
 
-class InMemorySessionStore : SessionStore {
+class InMemorySessionStore(
+    private val nowEpochSeconds: () -> Long = { System.currentTimeMillis() / 1_000L }
+) : SessionStore {
     @Volatile
     private var session: AuthSession? = null
 
     override val currentSession: AuthSession?
-        get() = session
+        get() = session?.takeIf { it.expiresAtEpochSeconds > nowEpochSeconds() + 30 }
 
-    override suspend fun accessToken(): String? = session?.accessToken
+    override suspend fun accessToken(): String? = currentSession?.accessToken
 
     override fun save(session: AuthSession) {
         this.session = session
