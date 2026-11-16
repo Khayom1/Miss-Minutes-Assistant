@@ -151,9 +151,13 @@ export function createDeepSeekProxyHandler(dependencies: DeepSeekProxyDependenci
       });
 
       if (upstream.status >= 300 && upstream.status < 400) {
+        await upstream.body?.cancel();
         return json({ error: "provider_redirect_rejected" }, 502);
       }
-      if (!upstream.ok) return json({ error: "provider_unavailable" }, 502);
+      if (!upstream.ok) {
+        await upstream.body?.cancel();
+        return json({ error: "provider_unavailable" }, 502);
+      }
 
       let responseText: string;
       try {
