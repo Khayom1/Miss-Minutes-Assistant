@@ -486,9 +486,13 @@ fun MissMinutesApp(
                         onDarkThemeChange = { darkTheme = it },
                         onProviderModeChange = { selectedProviderModeName = it.name },
                         onSignIn = { email, password ->
+                            sessionStore.clear()
+                            signedInEmail = null
                             submitAuth { authRepository.signIn(email, password) }
                         },
                         onSignUp = { email, password ->
+                            sessionStore.clear()
+                            signedInEmail = null
                             submitAuth { authRepository.signUp(email, password) }
                         },
                         onSignOut = {
