@@ -199,7 +199,7 @@ private fun MissMinutesRoot(activity: Activity) {
                     secrets.read("ai_primary_api_key") ?: secrets.read("deepseek_api_key")
                 }
                 if (key.isNullOrBlank()) {
-                    val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь DeepSeek API Key. И не вздумай записывать его на табличке у входа в TVA!"
+                    val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь API Key выбранного AI-провайдера. И не вздумай записывать его на табличке у входа в TVA!"
                     appendMessage(messages, ChatLine("assistant", response))
                     voice.speak(response)
                     return@launch
@@ -510,13 +510,13 @@ private fun SettingsDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("OpenAI-compatible provider profile", color = TvaOrange, fontWeight = FontWeight.Bold)
+                Text("Профиль OpenAI-совместимого провайдера", color = TvaOrange, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = providerName,
                     onValueChange = onProviderNameChange,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("Provider name") }
+                    label = { Text("Имя провайдера") }
                 )
                 OutlinedTextField(
                     value = baseUrl,
@@ -531,7 +531,7 @@ private fun SettingsDialog(
                     onValueChange = onModelIdChange,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("Model ID") }
+                    label = { Text("ID модели") }
                 )
                 Text("API Key", color = TvaOrange, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
@@ -542,7 +542,7 @@ private fun SettingsDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     placeholder = { Text("API Key") }
                 )
-                Text("The API key is encrypted with Android Keystore. This profile uses the OpenAI-compatible Chat Completions protocol over HTTPS.", fontSize = 11.sp)
+                Text("Ключ шифруется через Android Keystore. Используется протокол OpenAI Chat Completions через HTTPS.", fontSize = 11.sp)
                 OutlinedButton(onClick = onNotificationSettings, modifier = Modifier.fillMaxWidth()) {
                     Text("Разрешить чтение уведомлений")
                 }
