@@ -61,6 +61,20 @@ function getPublishableKey(env: EnvironmentReader): string | undefined {
   return env("SUPABASE_ANON_KEY");
 }
 
+function getServiceKey(env: EnvironmentReader): string | undefined {
+  const raw = env("SUPABASE_SECRET_KEYS");
+  if (raw) {
+    try {
+      const keys = JSON.parse(raw) as Record<string, unknown>;
+      const value = keys.default;
+      if (typeof value === "string" && value.length > 0) return value;
+    } catch {
+      return undefined;
+    }
+  }
+  return env("SUPABASE_SERVICE_ROLE_KEY");
+}
+
 function parseBearerToken(value: string | null): string | undefined {
   if (!value) return undefined;
   const match = /^Bearer\s+([^\s]+)$/i.exec(value.trim());
