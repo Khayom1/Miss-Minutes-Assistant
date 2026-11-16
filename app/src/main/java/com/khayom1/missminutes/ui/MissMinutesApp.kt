@@ -22,7 +22,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.darkColorScheme
@@ -299,7 +298,7 @@ private fun ChatScreen(
                 }
             }
             items(messages, key = { it.id }) { message ->
-                MessageBubble(message)
+                MessageBubble(message = message, youLabel = copy.you)
             }
         }
         Row(
@@ -327,7 +326,7 @@ private fun ChatScreen(
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun MessageBubble(message: ChatMessage, youLabel: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -340,7 +339,7 @@ private fun MessageBubble(message: ChatMessage) {
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = if (message.isUser) "You" else "Miss Minutes",
+                text = if (message.isUser) youLabel else ProductIdentity.NAME,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold
             )
