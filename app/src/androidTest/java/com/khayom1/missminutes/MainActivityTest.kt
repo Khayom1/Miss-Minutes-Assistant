@@ -19,11 +19,13 @@ class MainActivityTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun launchDisplaysChatComposerAndPreviewNotice() {
+    fun launchDisplaysChatComposerAndSecureProviderNotice() {
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
         composeRule.onNodeWithText("Your personal assistant, ready when you are.").assertIsDisplayed()
         composeRule.onNodeWithText("Message Miss Minutes").assertIsDisplayed()
-        composeRule.onNodeWithText("UI preview · AI services will be connected in P2.").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Cloud messages are sent through the authenticated backend. The DeepSeek key stays server-side."
+        ).assertIsDisplayed()
     }
 
     @Test
@@ -31,6 +33,7 @@ class MainActivityTest {
         composeRule.onNodeWithText("Dashboard").performClick()
         composeRule.onNodeWithText("Your workspace").assertIsDisplayed()
         composeRule.onNodeWithText("AI provider").assertIsDisplayed()
+        composeRule.onNodeWithText("Sign in required").assertIsDisplayed()
 
         composeRule.onNodeWithText("History").performClick()
         composeRule.onNodeWithText("Conversation history").assertIsDisplayed()
@@ -40,11 +43,34 @@ class MainActivityTest {
     }
 
     @Test
-    fun chatComposerAddsLocalPreviewMessage() {
-        composeRule.onNodeWithTag("chat_input").performTextInput("Check the chat composer")
+    fun cloudChatRequiresAnAuthenticatedSession() {
+        composeRule.onNodeWithTag("chat_input").performTextInput("Check the secure chat composer")
         composeRule.onNodeWithText("Send").performClick()
-        composeRule.onNodeWithText("Check the chat composer").assertIsDisplayed()
-        composeRule.onNodeWithText("UI preview · AI services will be connected in P2.").assertIsDisplayed()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Check the secure chat composer").assertIsDisplayed()
+        composeRule.onNodeWithText("Sign in required").assertIsDisplayed()
+    }
+
+    @Test
+    fun settingsExposeAuthenticationAndProviderModes() {
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("Email").assertIsDisplayed()
+        composeRule.onNodeWithText("Password").assertIsDisplayed()
+        composeRule.onNodeWithText("Sign in").assertIsDisplayed()
+        composeRule.onNodeWithText("Create account").assertIsDisplayed()
+        composeRule.onNodeWithText("Secure cloud").assertIsDisplayed()
+        composeRule.onNodeWithText("Local device").assertIsDisplayed()
+    }
+
+    @Test
+    fun selectingLocalProviderShowsLoopbackOnlyNotice() {
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("Local device").performClick()
+        composeRule.onNodeWithText("Chat").performClick()
+        composeRule.onNodeWithText(
+            "Local messages are sent only to the loopback model server on this device."
+        ).assertIsDisplayed()
     }
 
     @Test
