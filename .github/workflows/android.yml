@@ -47,8 +47,20 @@ jobs:
           test -f app/src/main/java/com/khayom1/missminutes/MainActivity.kt
           test ! -d app/src/main/assets/models
 
+      - name: Scan tracked working tree for secrets
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
+
       - name: Run unit tests, build APK and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
+
+      - name: Run Android instrumentation tests (API 35)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          script: gradle --no-daemon connectedDebugAndroidTest
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
