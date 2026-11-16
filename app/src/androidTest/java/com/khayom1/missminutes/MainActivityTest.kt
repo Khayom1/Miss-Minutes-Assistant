@@ -210,7 +210,7 @@ class MainActivityTest {
             .performTextInput("Private pending prompt from old account")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Sending...")
+            composeRule.onAllNodesWithText("Thinking…")
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
