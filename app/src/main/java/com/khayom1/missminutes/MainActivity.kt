@@ -3,6 +3,8 @@ package com.khayom1.missminutes
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.Context
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -77,6 +79,15 @@ private val TvaOrange = Color(0xFFF28A35)
 private val TvaText = Color(0xFFFFE8D2)
 
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        val prefs = newBase.getSharedPreferences("tva_session", Activity.MODE_PRIVATE)
+        val language = AppLocalization.languageTag(prefs.getString("app_language", "ru") ?: "ru")
+        val configuration = Configuration(newBase.resources.configuration).apply {
+            setLocale(java.util.Locale.forLanguageTag(language))
+        }
+        super.attachBaseContext(newBase.createConfigurationContext(configuration))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -111,10 +122,16 @@ private fun MissMinutesRoot(activity: Activity) {
     DisposableEffect(memory) { onDispose { memory.close() } }
     val secrets = remember { SecretStore(context.applicationContext) }
     val scope = rememberCoroutineScope()
+    fun setBehaviorMode(mode: BehaviorMode) {
+        prefs.edit().putString("behavior_mode", mode.name).apply()
+    }
 
     var firstRun by remember { mutableStateOf(!prefs.getBoolean("initialization_complete", false)) }
     var showSettings by remember { mutableStateOf(false) }
     var apiKeyDraft by remember { mutableStateOf("") }
+    var elevenLabsApiKeyDraft by remember { mutableStateOf("") }
+    var elevenLabsVoiceIdDraft by remember { mutableStateOf("3ooIiYiDLwKz4dFFc7WM") }
+    var languageCode by remember { mutableStateOf(AppLocalization.normalize(prefs.getString("app_language", "ru"))) }
     var providerNameDraft by remember { mutableStateOf("DeepSeek") }
     var providerBaseUrlDraft by remember { mutableStateOf("https://api.deepseek.com") }
     var providerModelDraft by remember { mutableStateOf("deepseek-flash") }
@@ -126,35 +143,73 @@ private fun MissMinutesRoot(activity: Activity) {
 
     val messages = remember {
         mutableStateListOf(
-            ChatLine("assistant", "Так-так! Ну здравствуй, Хранитель Времени. Надеюсь, сегодня без очередного апокалипсиса временной линии?")
+            ChatLine("assistant", AppLocalization.text(languageCode, "welcome"))
         )
     }
 
-    val voice = remember(activity) { RussianVoiceController(activity) { recognizedText = it } }
-    DisposableEffect(voice) { onDispose { voice.release() } }
+    val voice = remember(activity) { RussianVoiceController(activity, { recognizedText = it }) { setBehaviorMode(BehaviorMode.IDLE) } }
+    val elevenLabs = remember(context) { ElevenLabsSpeechClient(context.applicationContext) }
+    DisposableEffect(voice, elevenLabs) {
+        onDispose {
+            voice.release()
+            elevenLabs.release()
+        }
+    }
+    LaunchedEffect(languageCode) { voice.setLanguage(AppLocalization.languageTag(languageCode)) }
+
+    fun speak(text: String) {
+        setBehaviorMode(BehaviorMode.SPEAKING)
+        scope.launch {
+            val elevenKey = withContext(Dispatchers.IO) { secrets.read("elevenlabs_api_key") }
+            val onComplete = { setBehaviorMode(BehaviorMode.IDLE) }
+            if (elevenKey.isNullOrBlank()) {
+                voice.speak(text, onComplete)
+            } else {
+                try {
+                    elevenLabs.speak(
+                        elevenKey,
+                        prefs.getString("elevenlabs_voice_id", "3ooIiYiDLwKz4dFFc7WM") ?: "3ooIiYiDLwKz4dFFc7WM",
+                        text,
+                        onComplete
+                    )
+                } catch (_: Exception) {
+                    status = "ELEVENLABS / FALLBACK TO DEVICE TTS"
+                    voice.speak(text, onComplete)
+                }
+            }
+        }
+    }
     val activityLifecycle = (activity as? LifecycleOwner)?.lifecycle
     DisposableEffect(voice, activityLifecycle) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) voice.cancelListening()
+            if (event == Lifecycle.Event.ON_STOP) {
+                voice.cancelListening()
+                if (prefs.getString("behavior_mode", "IDLE") == BehaviorMode.LISTENING.name) {
+                    setBehaviorMode(BehaviorMode.IDLE)
+                }
+            }
         }
         activityLifecycle?.addObserver(observer)
         onDispose { activityLifecycle?.removeObserver(observer) }
     }
 
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) voice.listen() else status = "MICROPHONE / PERMISSION DENIED"
+        if (granted) { setBehaviorMode(BehaviorMode.LISTENING); voice.listen() } else status = "MICROPHONE / PERMISSION DENIED"
     }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startOverlay(activity) else status = "OVERLAY / NOTIFICATION PERMISSION DENIED"
     }
 
     LaunchedEffect(Unit) {
+        setBehaviorMode(BehaviorMode.IDLE)
         providerNameDraft = prefs.getString("ai_provider_name", "DeepSeek") ?: "DeepSeek"
         providerBaseUrlDraft = prefs.getString("ai_provider_base_url", "https://api.deepseek.com") ?: "https://api.deepseek.com"
         providerModelDraft = prefs.getString("ai_provider_model", "deepseek-flash") ?: "deepseek-flash"
         apiKeyDraft = withContext(Dispatchers.IO) {
             (secrets.read("ai_primary_api_key") ?: secrets.read("deepseek_api_key")).orEmpty()
         }
+        elevenLabsApiKeyDraft = withContext(Dispatchers.IO) { secrets.read("elevenlabs_api_key").orEmpty() }
+        elevenLabsVoiceIdDraft = prefs.getString("elevenlabs_voice_id", "3ooIiYiDLwKz4dFFc7WM") ?: "3ooIiYiDLwKz4dFFc7WM"
         withContext(Dispatchers.IO) {
             memory.seedTvaArchive()
             if (!prefs.getBoolean("owner_seeded", false)) {
@@ -168,26 +223,28 @@ private fun MissMinutesRoot(activity: Activity) {
         val message = text.trim()
         if (message.isEmpty() || isThinking) return
         input = ""
+        setBehaviorMode(BehaviorMode.THINKING)
         appendMessage(messages, ChatLine("user", message))
         scope.launch(Dispatchers.IO) { memory.saveConversation("user", message) }
-        val localAction = AndroidActions.tryHandle(activity, message)
+        val localAction = AndroidActions.tryHandle(activity, message, languageCode)
         if (localAction != null) {
+            setBehaviorMode(BehaviorMode.INTERACTING)
             appendMessage(messages, ChatLine("assistant", localAction))
             scope.launch(Dispatchers.IO) { memory.saveConversation("assistant", localAction) }
-            voice.speak(localAction)
+            speak(localAction)
             return
         }
-        if (message.contains("уведомлен", ignoreCase = true)) {
+        if (listOf("уведомлен", "notification", "огоҳинома").any { message.contains(it, ignoreCase = true) }) {
             scope.launch {
                 val notifications = withContext(Dispatchers.IO) { memory.recentNotifications() }
                 val response = if (notifications.isBlank()) {
-                    "Хм-м... В архиве уведомлений пока пусто. Проверь, выдан ли мне доступ к уведомлениям Android."
+                    AppLocalization.text(languageCode, "no_notifications")
                 } else {
-                    "Так-так, вот что происходит в твоём цифровом королевстве:\n" + notifications
+                    AppLocalization.text(languageCode, "notifications_intro") + "\n" + notifications
                 }
                 appendMessage(messages, ChatLine("assistant", response))
                 withContext(Dispatchers.IO) { memory.saveConversation("assistant", response) }
-                voice.speak(response)
+                speak(response)
             }
             return
         }
@@ -199,7 +256,7 @@ private fun MissMinutesRoot(activity: Activity) {
                     secrets.read("ai_primary_api_key") ?: secrets.read("deepseek_api_key")
                 }
                 if (key.isNullOrBlank()) {
-                    val response = "Ой-ой! Мои речевые нейросхемы ещё не подключены. Открой настройки и добавь API Key выбранного AI-провайдера. И не вздумай записывать его на табличке у входа в TVA!"
+                    val response = AppLocalization.text(languageCode, "missing_provider_key")
                     appendMessage(messages, ChatLine("assistant", response))
                     voice.speak(response)
                     return@launch
@@ -215,7 +272,7 @@ private fun MissMinutesRoot(activity: Activity) {
                     provider,
                     key,
                     listOf(
-                        AiMessage("system", PersonalityEngine.buildSystemPrompt(memoryContext)),
+                        AiMessage("system", PersonalityEngine.buildSystemPrompt(memoryContext, languageCode)),
                         AiMessage("user", message)
                     )
                 )
@@ -225,9 +282,9 @@ private fun MissMinutesRoot(activity: Activity) {
                 voice.speak(response)
                 status = "TVA SYSTEM / STABLE"
             } catch (error: Exception) {
-                val response = "Так, минутку! Канал связи с AI-провайдером временно схлопнулся: " +
-                    (error.message ?: "неизвестная ошибка") + ". Проверь интернет и API Key, Хранитель."
+                val response = AppLocalization.text(languageCode, "provider_error")
                 appendMessage(messages, ChatLine("assistant", response))
+                setBehaviorMode(BehaviorMode.IDLE)
                 status = "TEMPORAL LINK / ERROR"
             } finally { isThinking = false }
         }
@@ -242,6 +299,7 @@ private fun MissMinutesRoot(activity: Activity) {
 
     if (firstRun) {
         InitializationSequence(
+            languageCode = languageCode,
             onComplete = {
                 prefs.edit().putBoolean("initialization_complete", true).apply()
                 firstRun = false
@@ -249,6 +307,7 @@ private fun MissMinutesRoot(activity: Activity) {
         )
     } else {
         Dashboard(
+            languageCode = languageCode,
             status = status,
             messages = messages,
             input = input,
@@ -266,6 +325,9 @@ private fun MissMinutesRoot(activity: Activity) {
                     apiKeyDraft = withContext(Dispatchers.IO) {
                         (secrets.read("ai_primary_api_key") ?: secrets.read("deepseek_api_key")).orEmpty()
                     }
+                    elevenLabsApiKeyDraft = withContext(Dispatchers.IO) { secrets.read("elevenlabs_api_key").orEmpty() }
+                    elevenLabsVoiceIdDraft = prefs.getString("elevenlabs_voice_id", "3ooIiYiDLwKz4dFFc7WM") ?: "3ooIiYiDLwKz4dFFc7WM"
+                    languageCode = AppLocalization.normalize(prefs.getString("app_language", "ru"))
                 }
             },
             onOverlay = {
@@ -289,9 +351,12 @@ private fun MissMinutesRoot(activity: Activity) {
             onListen = {
                 if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) ==
                     android.content.pm.PackageManager.PERMISSION_GRANTED
-                ) voice.listen() else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                ) {
+                    setBehaviorMode(BehaviorMode.LISTENING)
+                    voice.listen()
+                } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
             },
-            onSpeak = { text -> voice.speak(text) },
+            onSpeak = { text -> speak(text) },
             onNotificationSettings = { activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
             onAccessibilitySettings = { activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         )
@@ -299,6 +364,12 @@ private fun MissMinutesRoot(activity: Activity) {
 
     if (showSettings) {
         SettingsDialog(
+            languageCode = languageCode,
+            onLanguageChange = {
+                languageCode = AppLocalization.normalize(it)
+                prefs.edit().putString("app_language", languageCode).apply()
+                activity.recreate()
+            },
             providerName = providerNameDraft,
             onProviderNameChange = { providerNameDraft = it },
             baseUrl = providerBaseUrlDraft,
@@ -307,24 +378,50 @@ private fun MissMinutesRoot(activity: Activity) {
             onModelIdChange = { providerModelDraft = it },
             apiKey = apiKeyDraft,
             onApiKeyChange = { apiKeyDraft = it },
+            elevenLabsApiKey = elevenLabsApiKeyDraft,
+            onElevenLabsApiKeyChange = { elevenLabsApiKeyDraft = it },
+            elevenLabsVoiceId = elevenLabsVoiceIdDraft,
+            onElevenLabsVoiceIdChange = { elevenLabsVoiceIdDraft = it },
+            onRemoveApiKey = {
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        secrets.save("ai_primary_api_key", "")
+                        secrets.save("deepseek_api_key", "")
+                    }
+                    apiKeyDraft = ""
+                    status = "AI PROVIDER / SAVED WITHOUT KEY"
+                }
+            },
+            onRemoveVoiceKey = {
+                scope.launch {
+                    withContext(Dispatchers.IO) { secrets.save("elevenlabs_api_key", "") }
+                    elevenLabsApiKeyDraft = ""
+                    status = "ELEVENLABS / FALLBACK TO DEVICE TTS"
+                }
+            },
             onSave = {
                 val nameToSave = providerNameDraft.trim()
                 val baseUrlToSave = providerBaseUrlDraft.trim()
                 val modelToSave = providerModelDraft.trim()
                 val keyToSave = apiKeyDraft.trim()
+                val elevenLabsKeyToSave = elevenLabsApiKeyDraft.trim()
+                val elevenLabsVoiceToSave = elevenLabsVoiceIdDraft.trim()
                 scope.launch {
                     try {
                         require(nameToSave.isNotBlank()) { "Provider name is required" }
                         require(modelToSave.isNotBlank()) { "Model ID is required" }
-                        resolveOpenAiChatEndpoint(baseUrlToSave)
+                        resolveProviderEndpoint(ProviderConfig("primary", nameToSave, baseUrlToSave, modelToSave))
+                        if (elevenLabsKeyToSave.isNotBlank()) ElevenLabsSpeechClient.validateVoiceId(elevenLabsVoiceToSave)
                         withContext(Dispatchers.IO) {
                             secrets.save("ai_primary_api_key", keyToSave)
                             secrets.save("deepseek_api_key", "")
+                            secrets.save("elevenlabs_api_key", elevenLabsKeyToSave)
                         }
                         prefs.edit()
                             .putString("ai_provider_name", nameToSave)
                             .putString("ai_provider_base_url", baseUrlToSave)
                             .putString("ai_provider_model", modelToSave)
+                            .putString("elevenlabs_voice_id", elevenLabsVoiceToSave)
                             .apply()
                         showSettings = false
                         status = if (keyToSave.isBlank()) "AI PROVIDER / SAVED WITHOUT KEY" else "AI PROVIDER / KEY STORED SECURELY"
@@ -354,6 +451,7 @@ private fun startOverlay(activity: Activity) {
 
 @Composable
 private fun Dashboard(
+    languageCode: String,
     status: String,
     messages: List<ChatLine>,
     input: String,
@@ -380,17 +478,17 @@ private fun Dashboard(
         ) {
             Column {
                 Text("MISS MINUTES", color = TvaOrange, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 2.sp)
-                Text(status, color = Color(0xFFB58B6C), fontSize = 10.sp, letterSpacing = 1.sp)
+                Text(AppLocalization.status(languageCode, status), color = Color(0xFFB58B6C), fontSize = 10.sp, letterSpacing = 1.sp)
             }
             IconButton(onClick = onSettings) {
-                Icon(Icons.Default.Settings, contentDescription = "Настройки", tint = TvaText)
+                Icon(Icons.Default.Settings, contentDescription = AppLocalization.text(languageCode, "settings"), tint = TvaText)
             }
         }
 
         Card(colors = CardDefaults.cardColors(containerColor = TvaPanel), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
                 CharacterScene(Modifier.fillMaxWidth().height(285.dp), selectedAnimation)
-                Text("TVA CHARACTER // 3D LIVE RIG", color = Color(0xFFD6A57B), fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+                Text(AppLocalization.text(languageCode, "character_rig"), color = Color(0xFFD6A57B), fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
         }
 
@@ -416,11 +514,11 @@ private fun Dashboard(
                 onClick = onOverlay,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = TvaOrange, contentColor = Color(0xFF251308))
-            ) { Text("Показать поверх экрана", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-            OutlinedButton(onClick = onSettings) { Text("Настройки", fontSize = 12.sp) }
+            ) { Text(AppLocalization.text(languageCode, "overlay_button"), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+            OutlinedButton(onClick = onSettings) { Text(AppLocalization.text(languageCode, "settings"), fontSize = 12.sp) }
         }
 
-        Text("TEMPORAL COMMUNICATION", color = TvaOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Text(AppLocalization.text(languageCode, "communication"), color = TvaOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         Card(colors = CardDefaults.cardColors(containerColor = TvaPanel), shape = RoundedCornerShape(18.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 messages.takeLast(8).forEach { line ->
@@ -430,7 +528,7 @@ private fun Dashboard(
                         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
                     ) {
                         Text(
-                            if (isUser) "TIME-KEEPER" else "MISS MINUTES",
+                            if (isUser) AppLocalization.text(languageCode, "time_keeper") else "MISS MINUTES",
                             color = if (isUser) Color(0xFFB7B3AA) else TvaOrange,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold
@@ -438,7 +536,7 @@ private fun Dashboard(
                         Text(line.text, color = TvaText, fontSize = 14.sp, lineHeight = 20.sp)
                         if (!isUser) {
                             TextButton(onClick = { onSpeak(line.text) }) {
-                                Text("Прослушать", color = Color(0xFFD6A57B), fontSize = 10.sp)
+                                Text(AppLocalization.text(languageCode, "listen_to"), color = Color(0xFFD6A57B), fontSize = 10.sp)
                             }
                         }
                     }
@@ -446,7 +544,7 @@ private fun Dashboard(
                 if (isThinking) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = TvaOrange)
-                        Text("Мисс Минутс проверяет временные линии...", color = Color(0xFFD6A57B), fontSize = 12.sp)
+                        Text(AppLocalization.text(languageCode, "thinking"), color = Color(0xFFD6A57B), fontSize = 12.sp)
                     }
                 }
             }
@@ -457,28 +555,28 @@ private fun Dashboard(
                 value = input,
                 onValueChange = onInputChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Скажите что-нибудь...") },
+                placeholder = { Text(AppLocalization.text(languageCode, "input_hint")) },
                 shape = RoundedCornerShape(18.dp),
                 maxLines = 4
             )
             IconButton(onClick = onListen, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Default.Mic, contentDescription = "Голосовой ввод", tint = TvaOrange)
+                Icon(Icons.Default.Mic, contentDescription = AppLocalization.text(languageCode, "voice_input"), tint = TvaOrange)
             }
             IconButton(onClick = onSend, enabled = !isThinking, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Default.Send, contentDescription = "Отправить", tint = TvaOrange)
+                Icon(Icons.Default.Send, contentDescription = AppLocalization.text(languageCode, "send"), tint = TvaOrange)
             }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(onClick = onNotificationSettings, modifier = Modifier.weight(1f)) {
-                Text("Доступ к уведомлениям", fontSize = 10.sp)
+                Text(AppLocalization.text(languageCode, "notifications"), fontSize = 10.sp)
             }
             OutlinedButton(onClick = onAccessibilitySettings, modifier = Modifier.weight(1f)) {
-                Text("Системные действия", fontSize = 10.sp)
+                Text(AppLocalization.text(languageCode, "system_actions"), fontSize = 10.sp)
             }
         }
         Text(
-            "DeepSeek API оплачивается по условиям аккаунта провайдера. Ключ хранится в Android Keystore; без ключа доступны 3D-персонаж и локальные функции.",
+            AppLocalization.text(languageCode, "provider_billing"),
             color = Color(0xFF9C806A),
             fontSize = 10.sp,
             lineHeight = 14.sp
@@ -489,6 +587,8 @@ private fun Dashboard(
 
 @Composable
 private fun SettingsDialog(
+    languageCode: String,
+    onLanguageChange: (String) -> Unit,
     providerName: String,
     onProviderNameChange: (String) -> Unit,
     baseUrl: String,
@@ -497,6 +597,12 @@ private fun SettingsDialog(
     onModelIdChange: (String) -> Unit,
     apiKey: String,
     onApiKeyChange: (String) -> Unit,
+    elevenLabsApiKey: String,
+    onElevenLabsApiKeyChange: (String) -> Unit,
+    elevenLabsVoiceId: String,
+    onElevenLabsVoiceIdChange: (String) -> Unit,
+    onRemoveApiKey: () -> Unit,
+    onRemoveVoiceKey: () -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit,
     onNotificationSettings: () -> Unit,
@@ -504,26 +610,34 @@ private fun SettingsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("TVA / НАСТРОЙКИ") },
+        title = { Text(AppLocalization.text(languageCode, "settings_title")) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Профиль OpenAI-совместимого провайдера", color = TvaOrange, fontWeight = FontWeight.Bold)
+                Text(AppLocalization.text(languageCode, "language"), color = TvaOrange, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("tg" to "Тоҷикӣ", "ru" to "Русский", "en" to "English").forEach { (code, label) ->
+                        OutlinedButton(onClick = { onLanguageChange(code) }, modifier = Modifier.weight(1f)) {
+                            Text(if (languageCode == code) "✓ $label" else label, fontSize = 10.sp)
+                        }
+                    }
+                }
+                Text(AppLocalization.text(languageCode, "provider_profile"), color = TvaOrange, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = providerName,
                     onValueChange = onProviderNameChange,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("Имя провайдера") }
+                    label = { Text(AppLocalization.text(languageCode, "provider_name")) }
                 )
                 OutlinedTextField(
                     value = baseUrl,
                     onValueChange = onBaseUrlChange,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("HTTPS Base URL") },
+                    label = { Text(AppLocalization.text(languageCode, "base_url")) },
                     placeholder = { Text("https://api.example.com/v1") }
                 )
                 OutlinedTextField(
@@ -531,9 +645,9 @@ private fun SettingsDialog(
                     onValueChange = onModelIdChange,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("ID модели") }
+                    label = { Text(AppLocalization.text(languageCode, "model_id")) }
                 )
-                Text("API Key", color = TvaOrange, fontWeight = FontWeight.Bold)
+                Text(AppLocalization.text(languageCode, "api_key"), color = TvaOrange, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = onApiKeyChange,
@@ -542,16 +656,39 @@ private fun SettingsDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     placeholder = { Text("API Key") }
                 )
-                Text("Ключ шифруется через Android Keystore. Используется протокол OpenAI Chat Completions через HTTPS.", fontSize = 11.sp)
+                TextButton(onClick = onRemoveApiKey) {
+                    Text(AppLocalization.text(languageCode, "remove_provider_key"))
+                }
+                Text(AppLocalization.text(languageCode, "provider_security"), fontSize = 11.sp)
+                Text(AppLocalization.text(languageCode, "voice_section"), color = TvaOrange, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = elevenLabsApiKey,
+                    onValueChange = onElevenLabsApiKeyChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    label = { Text(AppLocalization.text(languageCode, "voice_key")) }
+                )
+                TextButton(onClick = onRemoveVoiceKey) {
+                    Text(AppLocalization.text(languageCode, "remove_voice_key"))
+                }
+                OutlinedTextField(
+                    value = elevenLabsVoiceId,
+                    onValueChange = onElevenLabsVoiceIdChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(AppLocalization.text(languageCode, "voice_id")) }
+                )
+                Text(AppLocalization.text(languageCode, "voice_fallback"), fontSize = 11.sp)
                 OutlinedButton(onClick = onNotificationSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("Разрешить чтение уведомлений")
+                    Text(AppLocalization.text(languageCode, "allow_notifications"))
                 }
                 OutlinedButton(onClick = onAccessibilitySettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("Открыть специальные возможности")
+                    Text(AppLocalization.text(languageCode, "accessibility"))
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onSave) { Text("СОХРАНИТЬ") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("ОТМЕНА") } }
+        confirmButton = { TextButton(onClick = onSave) { Text(AppLocalization.text(languageCode, "save")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(AppLocalization.text(languageCode, "cancel")) } }
     )
 }

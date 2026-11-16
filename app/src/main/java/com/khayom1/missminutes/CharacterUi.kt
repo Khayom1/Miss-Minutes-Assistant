@@ -1,5 +1,7 @@
 package com.khayom1.missminutes
 
+import android.app.ActivityManager
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -33,6 +36,28 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun CharacterScene(modifier: Modifier = Modifier, animation: String = "Idle_Breathe") {
+    val context = LocalContext.current
+    val supportsOpenGles3 = remember(context) {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        (activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0) >= 0x00030000
+    }
+    if (!supportsOpenGles3) {
+        val language = remember(context) {
+            AppLocalization.normalize(
+                context.getSharedPreferences("tva_session", Context.MODE_PRIVATE).getString("app_language", "ru")
+            )
+        }
+        Box(modifier.background(Color(0xFF21150F)), contentAlignment = Alignment.Center) {
+            Text(
+                AppLocalization.text(language, "3d_unavailable"),
+                color = Color(0xFFFFE8D2),
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+        return
+    }
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
     val loops = setOf("Idle_Breathe", "Talk_Loop", "Walk_Cycle", "Run_Cycle", "Look_Around")
@@ -57,17 +82,8 @@ fun CharacterScene(modifier: Modifier = Modifier, animation: String = "Idle_Brea
 }
 
 @Composable
-fun InitializationSequence(onComplete: () -> Unit) {
-    val stages = listOf(
-        "TVA MAINFRAME // RECONSTRUCTION STARTED",
-        "Восстановление повреждённого архива...",
-        "MEMORY RECOVERY: 17% // КРИТИЧЕСКАЯ ПОТЕРЯ ДАННЫХ",
-        "А-а-а! Так, минутку... Где я? Что произошло с TVA?",
-        "Подождите... Кто меня восстановил? И почему временная линия другая?",
-        "НОВЫЙ ХРАНИТЕЛЬ ВРЕМЕНИ ОБНАРУЖЕН",
-        "Хайём Абдурахмонов — доступ подтверждён.",
-        "Ох, ну здравствуй, сэр! Похоже, теперь мы с тобой одна команда. Хи-хи!"
-    )
+fun InitializationSequence(languageCode: String = "ru", onComplete: () -> Unit) {
+    val stages = (0..7).map { AppLocalization.text(languageCode, "stage$it") }
     var index by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         for (i in stages.indices) {
@@ -83,7 +99,7 @@ fun InitializationSequence(onComplete: () -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         Text("TVA", color = Color(0xFFF28A35), fontSize = 52.sp, fontWeight = FontWeight.Black, letterSpacing = 10.sp)
-        Text("TIME VARIANCE AUTHORITY", color = Color(0xFFB58B6C), fontSize = 10.sp, letterSpacing = 2.sp)
+        Text(AppLocalization.text(languageCode, "authority"), color = Color(0xFFB58B6C), fontSize = 10.sp, letterSpacing = 2.sp)
         Spacer(Modifier.height(18.dp))
         Box(Modifier.fillMaxWidth().height(310.dp)) {
             CharacterScene(Modifier.fillMaxSize(), if (index in 3..4) "Glitch_Recovery" else "Idle_Breathe")
@@ -104,6 +120,6 @@ fun InitializationSequence(onComplete: () -> Unit) {
             trackColor = Color(0xFF382319)
         )
         Spacer(Modifier.height(8.dp))
-        Text("TEMPORAL ARCHIVE RESTORATION", color = Color(0xFF8F715C), fontSize = 9.sp, letterSpacing = 1.sp)
+        Text(AppLocalization.text(languageCode, "temporal_archive"), color = Color(0xFF8F715C), fontSize = 9.sp, letterSpacing = 1.sp)
     }
 }

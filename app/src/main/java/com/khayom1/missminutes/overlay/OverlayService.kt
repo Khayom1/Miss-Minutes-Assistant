@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -48,6 +49,9 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.setViewTreeLifecycleOwner
+import com.khayom1.missminutes.AppLocalization
+import com.khayom1.missminutes.AutonomousBehaviorEngine
+import com.khayom1.missminutes.BehaviorMode
 import com.khayom1.missminutes.CharacterScene
 import com.khayom1.missminutes.MainActivity
 import kotlinx.coroutines.delay
@@ -58,6 +62,8 @@ class OverlayService : LifecycleService() {
     private lateinit var frame: DraggableFrame
     private lateinit var layout: WindowManager.LayoutParams
     private var attached = false
+    private val appLanguage: String
+        get() = AppLocalization.normalize(getSharedPreferences("tva_session", Context.MODE_PRIVATE).getString("app_language", "ru"))
 
     override fun onCreate() {
         super.onCreate()
@@ -65,13 +71,14 @@ class OverlayService : LifecycleService() {
         startForeground(NOTIFICATION_ID, notification())
         manager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val density = resources.displayMetrics.density
+        // Start as a lightweight 72dp bubble. The SceneView/GLB renderer is only composed
+        // after the user explicitly expands the overlay, avoiding a second 3D scene by default.
         layout = WindowManager.LayoutParams(
-            (218 * density).toInt(),
-            (250 * density).toInt(),
+            (78 * density).toInt(),
+            (78 * density).toInt(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -88,6 +95,7 @@ class OverlayService : LifecycleService() {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
                 OverlayCharacter(
+                    languageCode = appLanguage,
                     onStop = { stopSelf() },
                     onCompact = { compact ->
                         layout.width = ((if (compact) 78 else 218) * density).toInt()
@@ -124,7 +132,7 @@ class OverlayService : LifecycleService() {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Miss Minutes overlay", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, AppLocalization.text(appLanguage, "overlay_channel"), NotificationManager.IMPORTANCE_LOW)
             )
         }
     }
@@ -140,11 +148,11 @@ class OverlayService : LifecycleService() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("Мисс Минутс активна")
-            .setContentText("Перетащи персонажа по экрану.")
+            .setContentTitle(AppLocalization.text(appLanguage, "overlay_title"))
+            .setContentText(AppLocalization.text(appLanguage, "overlay_body"))
             .setContentIntent(open)
             .setOngoing(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Остановить", stop)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, AppLocalization.text(appLanguage, "stop"), stop)
             .build()
     }
 
@@ -191,19 +199,33 @@ class OverlayService : LifecycleService() {
 }
 
 @Composable
-private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
-    var compact by remember { mutableStateOf(false) }
+private fun OverlayCharacter(languageCode: String, onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
+    // Deliberately compact by default: no GL context, model load, or animation loop is created
+    // until the user chooses the expand button.
+    var compact by remember { mutableStateOf(true) }
     var clip by remember { mutableStateOf("Idle_Breathe") }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val preferences = remember { context.getSharedPreferences("tva_session", Context.MODE_PRIVATE) }
+    val behaviorEngine = remember { AutonomousBehaviorEngine() }
+
     LaunchedEffect(compact) {
+        behaviorEngine.reset()
+        clip = "Idle_Breathe"
         if (!compact) {
             while (true) {
-                delay(26000)
-                clip = "Look_Around"
-                delay(2200)
-                clip = "Blink"
-                delay(700)
-                clip = "Idle_Breathe"
+                val modeName = preferences.getString("behavior_mode", "IDLE") ?: "IDLE"
+                val mode = runCatching { BehaviorMode.valueOf(modeName) }.getOrDefault(BehaviorMode.IDLE)
+                val mood = preferences.getString("behavior_mood", "neutral") ?: "neutral"
+                val energy = preferences.getFloat("behavior_energy", 0.35f)
+                val action = behaviorEngine.nextAction(SystemClock.elapsedRealtime(), mode, mood, energy)
+                if (action == null) {
+                    delay(250)
+                } else {
+                    clip = action.animationName
+                    delay(action.durationMillis)
+                    clip = "Idle_Breathe"
+                }
             }
         }
     }
@@ -215,7 +237,7 @@ private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
                 IconButton(
                     onClick = { compact = false; onCompact(false) },
                     modifier = Modifier.align(Alignment.BottomEnd).size(28.dp)
-                ) { Icon(Icons.Default.OpenInFull, contentDescription = "Развернуть", tint = Color.White) }
+                ) { Icon(Icons.Default.OpenInFull, contentDescription = AppLocalization.text(languageCode, "expand"), tint = Color.White) }
             }
         }
     } else {
@@ -229,15 +251,15 @@ private fun OverlayCharacter(onStop: () -> Unit, onCompact: (Boolean) -> Unit) {
                     Text("TVA / MM", color = Color(0xFFFFB46D), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Row {
                         IconButton(onClick = { compact = true; onCompact(true) }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Remove, contentDescription = "Свернуть", tint = Color.White)
+                            Icon(Icons.Default.Remove, contentDescription = AppLocalization.text(languageCode, "collapse"), tint = Color.White)
                         }
                         IconButton(onClick = onStop, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Закрыть", tint = Color.White)
+                            Icon(Icons.Default.Close, contentDescription = AppLocalization.text(languageCode, "close"), tint = Color.White)
                         }
                     }
                 }
                 CharacterScene(Modifier.fillMaxWidth().height(205.dp), clip)
-                Text("Так-так, я здесь!", color = Color(0xFFFFE8D2), fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
+                Text(AppLocalization.text(languageCode, "overlay_greeting"), color = Color(0xFFFFE8D2), fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
             }
         }
     }

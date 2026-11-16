@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Miss Minutes — TVA</string>
+    <string name="notification_listener_name">Miss Minutes — дастрасӣ ба огоҳиномаҳо</string>
+    <string name="accessibility_service_name">Miss Minutes — амалҳои низомӣ</string>
+    <string name="accessibility_service_description">Танҳо амалҳои низомие, ки корбар мустақиман дархост кардааст.</string>
+</resources>
