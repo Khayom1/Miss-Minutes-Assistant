@@ -50,6 +50,14 @@ jobs:
       - name: Scan tracked working tree for secrets
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
 
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Test authenticated Supabase AI function
+        run: deno test supabase/functions/miss-minutes-ai/index_test.ts
+
       - name: Run unit tests, build APK and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
 
