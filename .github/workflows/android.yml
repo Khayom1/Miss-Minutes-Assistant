@@ -62,32 +62,55 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import os
+          import json
           import re
           from pathlib import Path
+          from urllib.error import HTTPError, URLError
+          from urllib.request import Request, urlopen
 
           gradle = Path("app/build.gradle.kts").read_text(encoding="utf-8")
-          for name in ("SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"):
-              pattern = rf'buildConfigField\("String",\s*"{name}",\s*"\\\"([^"]+)\\\""' 
+
+          def public_build_config(name):
+              pattern = rf'buildConfigField\("String",\s*"{name}",\s*"\\\"([^"]+)\\\""'
               match = re.search(pattern, gradle)
               if not match:
                   raise SystemExit(f"Missing public BuildConfig field: {name}")
-              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
-                  env_file.write(f"{name}={match.group(1)}\n")
+              return match.group(1)
+
+          supabase_url = public_build_config("SUPABASE_URL").rstrip("/")
+          publishable_key = public_build_config("SUPABASE_PUBLISHABLE_KEY")
+          request = Request(
+              f"{supabase_url}/functions/v1/miss-minutes-ai",
+              data=json.dumps({
+                  "messages": [{
+                      "role": "user",
+                      "content": "CI unauthenticated gateway smoke test"
+                  }]
+              }).encode("utf-8"),
+              headers={
+                  "apikey": publishable_key,
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+
+          try:
+              with urlopen(request, timeout=20) as response:
+                  status = response.status
+                  body = response.read().decode("utf-8", errors="replace")
+          except HTTPError as response:
+              status = response.code
+              body = response.read().decode("utf-8", errors="replace")
+          except URLError as error:
+              raise SystemExit(f"Supabase gateway smoke test network error: {error.reason}")
+
+          if status != 401:
+              print(f"Expected HTTP 401 without a user JWT, received HTTP {status}.")
+              print(body[:500])
+              raise SystemExit(1)
+
+          print("Unauthenticated request correctly rejected with HTTP 401.")
           PY
-          response_file="$(mktemp)"
-          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
-            --connect-timeout 10 --max-time 20 \
-            --request POST "$SUPABASE_URL/functions/v1/miss-minutes-ai" \
-            --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-            --header "Content-Type: application/json" \
-            --data '{"messages":[{"role":"user","content":"CI unauthenticated gateway smoke test"}]}')"
-          if [ "$status" != "401" ]; then
-            echo "Expected HTTP 401 without a user JWT, received HTTP $status."
-            cat "$response_file"
-            exit 1
-          fi
-          echo "Unauthenticated request correctly rejected with HTTP 401."
 
       - name: Run unit tests, build APK and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
