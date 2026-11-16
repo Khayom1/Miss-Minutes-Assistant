@@ -6,3 +6,9 @@ local.properties
 .DS_Store
 .externalNativeBuild/
 .cxx/
+
+# Local environment files and backend secrets
+.env
+.env.*
+!.env.example
+supabase/functions/.env
