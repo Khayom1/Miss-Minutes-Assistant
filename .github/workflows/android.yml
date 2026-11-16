@@ -42,6 +42,17 @@ jobs:
         with:
           gradle-version: "8.13"
 
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check Supabase Edge Function
+        run: deno check supabase/functions/deepseek-proxy/core.ts supabase/functions/deepseek-proxy/index.ts
+
+      - name: Test Supabase Edge Function security and provider contract
+        run: deno test --fail-fast supabase/functions/deepseek-proxy/core_test.ts
+
       - name: Verify Kotlin source formatting basics
         run: |
           test -f app/src/main/java/com/khayom1/missminutes/MainActivity.kt
@@ -74,7 +85,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: miss-minutes-foundation-debug
+          name: miss-minutes-p2-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
