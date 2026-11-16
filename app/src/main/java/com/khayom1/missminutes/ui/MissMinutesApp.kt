@@ -358,12 +358,12 @@ fun MissMinutesApp(
                     authMessage = copy.emailConfirmation
                 }
                 is AuthResult.Failure -> {
-                    authMessage = when (result.error) {
-                        else -> copy.authFailed
-                    }
+                    signedInEmail = sessionStore.currentSession?.email
+                    authMessage = copy.authFailed
                 }
                 }
             } catch (_: Exception) {
+                signedInEmail = sessionStore.currentSession?.email
                 authMessage = copy.authFailed
             } finally {
                 authBusy = false
@@ -656,7 +656,7 @@ private fun SettingsScreen(
     onSignOut: () -> Unit
 ) {
     var email by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -709,13 +709,13 @@ private fun SettingsScreen(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { onSignIn(email, password) },
+                        onClick = { onSignIn(email, password); password = "" },
                         enabled = !authBusy && email.isNotBlank() && password.length >= 8
                     ) {
                         Text(copy.signIn)
                     }
                     Button(
-                        onClick = { onSignUp(email, password) },
+                        onClick = { onSignUp(email, password); password = "" },
                         enabled = !authBusy && email.isNotBlank() && password.length >= 8
                     ) {
                         Text(copy.signUp)
