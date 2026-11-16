@@ -4,9 +4,9 @@ Android companion app inspired by Miss Minutes from Marvel's TVA. The project in
 
 ## Build and install a test APK
 
-The current CI produces a **debug APK**, not a production-signed release. Open the latest successful [Android CI run for PR #3](https://github.com/Khayom1/Miss-Minutes-Assistant/actions/workflows/android.yml), select **Artifacts**, and download `Miss-Minutes-Assistant-debug`. Install `app-debug.apk` on Android. If Android refuses an update because the signing certificate differs from an older local build, uninstall the older app first; uninstalling removes local app data and saved keys.
+The current CI produces a **debug APK**, not a production-signed release. Open the latest successful [Android CI run for this pull request](https://github.com/Khayom1/Miss-Minutes-Assistant/actions/workflows/android.yml), select **Artifacts**, and download `Miss-Minutes-Assistant-debug`. Install `app-debug.apk` on Android. If Android refuses an update because the signing certificate differs from an older local build, uninstall the older app first; uninstalling removes local app data and saved keys.
 
-The build is version **1.2.0 (versionCode 3)**. Changes are in the open PR branch and do not become the `main`/default version until that PR is reviewed and merged.
+The updated build target is version **1.2.1 (versionCode 4)**. The debug APK artifact is produced only by a successful CI run for the exact commit. Changes are in the open PR branch and do not become the `main`/default version until that PR is reviewed and merged.
 
 ## Languages and AI providers
 

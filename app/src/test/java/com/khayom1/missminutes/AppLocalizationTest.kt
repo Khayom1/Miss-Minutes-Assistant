@@ -7,7 +7,7 @@ import org.junit.Test
 
 class AppLocalizationTest {
     @Test fun allThreeLanguagesHaveDistinctCoreUiStrings() {
-        val keys = listOf("settings", "overlay_button", "input_hint", "provider_profile", "voice_section", "save")
+        val keys = listOf("settings", "overlay_button", "input_hint", "provider_profile", "voice_section", "save", "3d_unavailable")
         keys.forEach { key ->
             val tajik = AppLocalization.text("tg", key)
             val russian = AppLocalization.text("ru", key)

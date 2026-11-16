@@ -1,5 +1,7 @@
 package com.khayom1.missminutes
 
+import android.app.ActivityManager
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -33,6 +36,28 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun CharacterScene(modifier: Modifier = Modifier, animation: String = "Idle_Breathe") {
+    val context = LocalContext.current
+    val supportsOpenGles3 = remember(context) {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        (activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0) >= 0x00030000
+    }
+    if (!supportsOpenGles3) {
+        val language = remember(context) {
+            AppLocalization.normalize(
+                context.getSharedPreferences("tva_session", Context.MODE_PRIVATE).getString("app_language", "ru")
+            )
+        }
+        Box(modifier.background(Color(0xFF21150F)), contentAlignment = Alignment.Center) {
+            Text(
+                AppLocalization.text(language, "3d_unavailable"),
+                color = Color(0xFFFFE8D2),
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+        return
+    }
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
     val loops = setOf("Idle_Breathe", "Talk_Loop", "Walk_Cycle", "Run_Cycle", "Look_Around")

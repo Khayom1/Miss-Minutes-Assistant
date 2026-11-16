@@ -73,6 +73,7 @@ Never reveal or request API keys or other secrets.
     }
 
     private val ENGLISH = mapOf(
+        "3d_unavailable" to "3D is unavailable on this device. The lightweight 2D interface remains available.",
         "authority" to "TIME VARIANCE AUTHORITY", "settings" to "Settings", "settings_title" to "TVA / SETTINGS",
         "provider_profile" to "AI provider profile: OpenAI-compatible, Gemini or Anthropic",
         "provider_name" to "Provider name", "base_url" to "HTTPS Base URL", "model_id" to "Model ID",
@@ -123,6 +124,7 @@ Never reveal or request API keys or other secrets.
     )
 
     private val RUSSIAN = ENGLISH + mapOf(
+        "3d_unavailable" to "3D недоступно на этом устройстве. Лёгкий 2D-интерфейс продолжит работать.",
         "authority" to "УПРАВЛЕНИЕ ВРЕМЕННЫМИ ОТКЛОНЕНИЯМИ", "settings" to "Настройки", "settings_title" to "TVA / НАСТРОЙКИ",
         "provider_profile" to "Профиль AI-провайдера: OpenAI-compatible, Gemini или Anthropic",
         "provider_name" to "Имя провайдера", "base_url" to "HTTPS Base URL", "model_id" to "ID модели",
@@ -175,6 +177,7 @@ Never reveal or request API keys or other secrets.
     )
 
     private val TAJIK = ENGLISH + mapOf(
+        "3d_unavailable" to "3D дар ин дастгоҳ дастрас нест. Интерфейси сабуки 2D корро идома медиҳад.",
         "authority" to "ИДОРАИ ИХТИЛОФҲОИ ЗАМОНӢ", "settings" to "Танзимот", "settings_title" to "TVA / ТАНЗИМОТ",
         "provider_profile" to "Профили AI: OpenAI-compatible, Gemini ё Anthropic",
         "provider_name" to "Номи провайдер", "base_url" to "HTTPS Base URL", "model_id" to "ID-и модел",
