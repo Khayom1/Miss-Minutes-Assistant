@@ -131,7 +131,7 @@ class PluginRegistry(
                     pluginName = manifest.displayName,
                     description = manifest.description,
                     capability = handler.capability,
-                    arguments = action.arguments.toMap(),
+                    arguments = handler.argumentSchema.toMap(),
                     requiresConfirmation = action.requiresConfirmation || handler.requiresConfirmation,
                     connected = consentStore.isGranted(manifest.id),
                     access = access
@@ -341,8 +341,12 @@ class PluginRegistry(
         require(manifest.capabilities == manifest.actions.map { it.capability }.toSet())
         manifest.actions.forEach { action ->
             require(ACTION_ID.matches(action.id)) { "Invalid action id." }
-            require(handlersById[action.id]?.capability == action.capability) {
+            val handler = handlersById[action.id]
+            require(handler?.capability == action.capability) {
                 "Action is not backed by a compiled allowlisted handler."
+            }
+            require(action.arguments == handler.argumentSchema) {
+                "Manifest argument schema does not match the compiled handler schema."
             }
             require(action.arguments.size <= 8)
             action.arguments.forEach { (key, field) ->
