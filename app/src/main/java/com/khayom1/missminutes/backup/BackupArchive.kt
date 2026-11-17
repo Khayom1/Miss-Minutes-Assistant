@@ -21,6 +21,13 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+private class WipingByteArrayOutputStream : ByteArrayOutputStream() {
+    fun wipe() {
+        buf.fill(0)
+        reset()
+    }
+}
+
 /**
  * Password-encrypted, versioned backup container.
  *
@@ -126,7 +133,7 @@ class BackupArchive private constructor() {
                 payloads.keys.sortedBy { it.name }.forEach { add(kotlinx.serialization.json.JsonPrimitive(it.name)) }
             })
         }.toString().toByteArray(Charsets.UTF_8)
-        val output = ByteArrayOutputStream()
+        val output = WipingByteArrayOutputStream()
         try {
             ZipOutputStream(output).use { zip ->
                 zip.putNextEntry(ZipEntry(MANIFEST_ENTRY))
@@ -147,6 +154,7 @@ class BackupArchive private constructor() {
             return output.toByteArray()
         } finally {
             manifest.fill(0)
+            output.wipe()
         }
     }
 
@@ -164,17 +172,22 @@ class BackupArchive private constructor() {
                     require(entry.name == MANIFEST_ENTRY || Category.entries.any { it.fileName == entry.name }) {
                         "Backup contains an unknown entry."
                     }
-                    val content = ByteArrayOutputStream()
+                    val content = WipingByteArrayOutputStream()
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    while (true) {
-                        val count = zip.read(buffer)
-                        if (count < 0) break
-                        total += count
-                        require(total <= MAX_UNCOMPRESSED_BYTES) { "Backup expands beyond the safety limit." }
-                        require(content.size() + count <= MAX_CATEGORY_BYTES) { "Backup entry is too large." }
-                        content.write(buffer, 0, count)
+                    try {
+                        while (true) {
+                            val count = zip.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            require(total <= MAX_UNCOMPRESSED_BYTES) { "Backup expands beyond the safety limit." }
+                            require(content.size() + count <= MAX_CATEGORY_BYTES) { "Backup entry is too large." }
+                            content.write(buffer, 0, count)
+                        }
+                        entries[entry.name] = content.toByteArray()
+                    } finally {
+                        buffer.fill(0)
+                        content.wipe()
                     }
-                    entries[entry.name] = content.toByteArray()
                     zip.closeEntry()
                 }
             }
@@ -183,17 +196,33 @@ class BackupArchive private constructor() {
                 ?: throw IllegalArgumentException("Backup manifest is missing.")
             try {
                 val manifest = Json.parseToJsonElement(manifestBytes.toString(Charsets.UTF_8)).jsonObject
-                val version = manifest["schemaVersion"]?.jsonPrimitive?.content?.toIntOrNull()
+                require(manifest.keys == setOf("schemaVersion", "exportedAtEpochMillis", "categories")) {
+                    "Backup manifest contains unknown or missing fields."
+                }
+                val versionValue = manifest["schemaVersion"]?.jsonPrimitive
                     ?: throw IllegalArgumentException("Backup schema version is missing.")
+                require(!versionValue.isString)
+                val version = versionValue.content.toIntOrNull()
+                    ?: throw IllegalArgumentException("Backup schema version is invalid.")
                 require(version in 1..CURRENT_SCHEMA_VERSION) {
                     "This backup was created by a newer app version."
                 }
-                val exportedAt = manifest["exportedAtEpochMillis"]?.jsonPrimitive?.content?.toLongOrNull()
+                val exportedAtValue = manifest["exportedAtEpochMillis"]?.jsonPrimitive
                     ?: throw IllegalArgumentException("Backup timestamp is invalid.")
-                val declared = manifest["categories"]?.jsonArray?.map {
-                    runCatching { Category.valueOf(it.jsonPrimitive.content) }
+                require(!exportedAtValue.isString)
+                val exportedAt = exportedAtValue.content.toLongOrNull()
+                    ?.takeIf { it >= 0L }
+                    ?: throw IllegalArgumentException("Backup timestamp is invalid.")
+                val declaredList = manifest["categories"]?.jsonArray?.map { rawCategory ->
+                    val categoryValue = rawCategory.jsonPrimitive
+                    require(categoryValue.isString)
+                    runCatching { Category.valueOf(categoryValue.content) }
                         .getOrElse { throw IllegalArgumentException("Backup category is invalid.") }
-                }?.toSet() ?: throw IllegalArgumentException("Backup category list is missing.")
+                } ?: throw IllegalArgumentException("Backup category list is missing.")
+                require(declaredList.size == declaredList.distinct().size) {
+                    "Backup manifest contains duplicate categories."
+                }
+                val declared = declaredList.toSet()
                 val actual = entries.keys.map { file ->
                     Category.entries.single { it.fileName == file }
                 }.toSet()
