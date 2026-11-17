@@ -242,7 +242,7 @@ class MainActivityTest {
         composeRule.onNodeWithText("Conversation history").assertIsDisplayed()
 
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onAllNodesWithText("App settings").onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText("App settings").get(0).assertIsDisplayed()
 
         composeRule.onNodeWithText("New").performClick()
         waitForChatScreen()
@@ -502,7 +502,7 @@ class MainActivityTest {
         composeRule.onNodeWithText("Settings").performClick()
 
         composeRule.onNodeWithText("Русский").performClick()
-        composeRule.onAllNodesWithText("Настройки приложения").onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText("Настройки приложения").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Язык").assertIsDisplayed()
 
         composeRule.onNodeWithText("Тоҷикӣ").performClick()
