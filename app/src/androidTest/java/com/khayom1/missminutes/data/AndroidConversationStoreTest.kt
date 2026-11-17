@@ -63,6 +63,34 @@ class AndroidConversationStoreTest {
     }
 
     @Test
+    fun conversationSurvivesStoreRecreation() {
+        val conversation = store.createConversation("owner-a")
+        store.appendMessage("owner-a", conversation.id, ConversationRole.USER, "Persist across process restart")
+        store.close()
+
+        store = AndroidConversationStore(context, databaseName)
+        val restored = store.loadMessages("owner-a", conversation.id)
+        assertEquals(1, restored.size)
+        assertEquals("Persist across process restart", restored.single().content)
+    }
+
+    @Test
+    fun modifiedCiphertextFailsAuthenticationInsteadOfReturningGarbage() {
+        val conversation = store.createConversation("owner-a")
+        val message = store.appendMessage("owner-a", conversation.id, ConversationRole.USER, "authenticated text")
+        val raw = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            raw.execSQL(
+                "UPDATE messages SET content_cipher = X'0000000000000000000000000000000000000000000000000000000000000000' WHERE id = ?",
+                arrayOf(message.id)
+            )
+        } finally {
+            raw.close()
+        }
+        assertTrue(runCatching { store.loadMessages("owner-a", conversation.id) }.isFailure)
+    }
+
+    @Test
     fun accountIsolationPreventsCrossAccountReadsAndWrites() {
         val conversation = store.createConversation("owner-one")
         store.appendMessage("owner-one", conversation.id, ConversationRole.USER, "private")
