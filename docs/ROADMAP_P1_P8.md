@@ -9,7 +9,7 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 | P0 | Complete | Clean Android foundation, architecture/security baseline, CI and repository stabilization |
 | P1 | Complete | ChatGPT-like Compose UI foundation |
 | P2 | CI passed; live provider acceptance pending | Authenticated AI provider gateway, DeepSeek proxy and optional local inference contract |
-| P3 | In progress | On-device TTS plus user-enabled background voice runtime and exact wake phrase “Miss Minutes” (no “Hey”) |
+| P3 | Implementation in progress; acceptance pending | On-device TTS plus user-enabled microphone foreground service and exact offline phrase “Miss Minutes” (no “Hey”) |
 | P4 | Not started | Persistent local conversation history and memory, optional authenticated sync |
 | P5 | Not started | Explicitly permissioned Android-native capabilities |
 | P6 | Not started | Typed plugin/skill manifest, capability allowlist and execution boundary |
@@ -55,10 +55,9 @@ P2 acceptance:
 - The exact deployed function version is inspected with `verify_jwt=true`; the service-role header semantics are verified by Deno tests.
 - P3 code may be prepared on a dependent draft branch at the owner's direction, but it must not merge or be accepted until P2 is accepted.
 
-## P3 — TTS-first voice (in progress)
+## P3 — On-device voice (implementation in progress; acceptance pending)
 
-First delivery is deliberately limited to text-to-speech; STT, microphone permission and live voice conversations are deferred.
-
+### Text-to-speech
 - Android native TextToSpeech engine; no cloud TTS provider.
 - Selects the best available installed offline voice matching the device locale.
 - Uses Speak/Stop controls for assistant messages.
@@ -67,17 +66,17 @@ First delivery is deliberately limited to text-to-speech; STT, microphone permis
 - Stops speech on user cancellation/sign-out and shuts down the engine with the Activity lifecycle.
 - Device-specific voice quality and Tajik language availability must be verified on physical hardware.
 
-## P3 — Background voice activation (planned; not yet implemented)
-
-- Exact offline wake phrase: “Miss Minutes”; never “Hey Miss Minutes”.
-- User-controlled always-listening toggle and explicit microphone permission/disclosure.
-- Microphone foreground service started only while the app is visible and user initiates it; persistent notification and service lifecycle independent from the Activity.
-- On-device wake-word detector with a dedicated Miss Minutes model; do not substitute a Hey-Jarvis model.
-- On wake, transition to explicit speech-capture state; STT and conversation turn handling remain separate deliverables.
-- No raw audio upload or retention for wake-word detection.
-- Stop/release microphone on user disable, permission revocation, service shutdown and error.
-- Android 14+ microphone foreground-service restrictions, lock-screen, task removal, battery/thermal and reboot behavior must be tested on physical hardware.
-- Force stop and OS-enforced restrictions cannot be bypassed; report these states honestly.
+### Background wake phrase
+- Exact phrase gate: “Miss Minutes”; never “Hey Miss Minutes”. Transcript matching rejects any extra word, including “Hey”.
+- User-controlled enable/disable control with an explicit disclosure before the runtime microphone and notification permission requests.
+- Microphone foreground service is started only from the visible Settings UI after permission grant; it is private, declares the microphone FGS type, uses stopWithTask=false, and displays an ongoing notification with a Stop action.
+- The service uses Android's createOnDeviceSpeechRecognizer API on Android 13+ only. It fails closed when on-device recognition is unavailable; there is no network recognizer fallback and no audio upload.
+- The service owns recognition independently from the Activity. It releases the recognizer on stop, wake detection, errors and service destruction.
+- A wake detection stops listening and posts a notification the user can tap to open the app. The service does not launch an Activity from the background.
+- This is currently an on-device ASR transcript matcher, not a dedicated acoustic wake-word model. That implementation distinction remains an acceptance risk and must not be hidden.
+- No raw audio is uploaded or retained by this feature.
+- Android 14+ microphone foreground-service restrictions, lock-screen, task removal, process death, battery/thermal behavior and recognizer availability must be tested on physical hardware.
+- Force stop, permission revocation and OS-enforced restrictions cannot be bypassed; report these states honestly.
 - Evaluate false positives/negatives and battery/thermal cost on the target Samsung device before acceptance.
 
 ## P4 — Persistent memory and history (not started)
