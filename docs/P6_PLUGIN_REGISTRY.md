@@ -27,3 +27,5 @@ No DEX/JAR loading, scripts, shell commands, reflection, arbitrary URLs, unrestr
 ## Current status
 
 The connected catalog, runtime access checker, schema generation, DeepSeek tool-call dispatch, and bounded execution tests are being validated in the current release PR. Permission-request UX for future non-device capabilities and any write-capable connector remain open.
+
+Compiled handlers may impose a mandatory confirmation floor. An imported manifest can add confirmation, but cannot turn confirmation off for a mutating handler. The dispatcher checks the compiled handler policy immediately before execution.
