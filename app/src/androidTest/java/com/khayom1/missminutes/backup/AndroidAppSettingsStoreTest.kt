@@ -25,6 +25,6 @@ class AndroidAppSettingsStoreTest {
         val store = AndroidAppSettingsStore(context)
         store.applyBackup(SettingsBackupAdapter.Settings("ru", true, 90, false))
         assertEquals(AndroidAppSettingsStore.Appearance("ru", true), store.loadAppearance())
-        store.saveAppearance("English", false)
+        store.saveAppearance("en", false)
     }
 }
