@@ -17,6 +17,7 @@ Status: in progress. This is a gated handoff checklist, not a declaration that t
 ## Manual / external release gates
 
 - [ ] Review dependency report against current OSV/GHSA advisories; record date, findings and disposition.
+- [x] Triage CVE-2026-129482: no CertificatePinner use or trailing-dot endpoint found in the app; monitor for a vendor-fixed OkHttp release before adopting pinning.
 - [ ] Configure owner-controlled production signing outside source control; verify signing certificate fingerprint and repeatable release procedure.
 - [ ] Install on Samsung Galaxy A35 5G / Android 17. Test microphone foreground-service lifecycle, lock screen, task removal, notification stop action, battery/thermal behavior and restart recovery.
 - [ ] Verify installed offline speech language packs and real Tajik/Russian/English speech behavior.
