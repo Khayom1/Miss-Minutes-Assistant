@@ -53,3 +53,15 @@ AppFunctions are an emerging Android integration surface and must be treated as 
 ## Quality attributes
 
 Security and user control take precedence over breadth. All network operations are bounded and cancellable. Background work is durable only where Android scheduling permits it. Every external action is typed, permission checked, observable, and testable. The UI must remain useful if cloud AI, local inference, voice, or plugin services are unavailable.
+
+
+## Background voice activation — approved product requirement
+
+- The exact wake phrase is **"Miss Minutes"**. Do not prepend "Hey".
+- Wake-word detection must run locally on the device; raw microphone audio must not be streamed to the AI provider or uploaded for wake-word detection.
+- The user explicitly enables/disables always-listening mode. While active, show a persistent, truthful foreground-service notification and a clear microphone indicator.
+- Start the microphone foreground service only from a visible, user-initiated activity after runtime permission and required disclosures. Do not attempt to bypass Android background-start or while-in-use microphone restrictions.
+- The service owns audio capture and wake-word detection independently of the Activity lifecycle. Closing the app's task must not stop an already-running, user-enabled foreground service; Force stop, permission revocation, OS termination, battery restrictions and device reboot are separate system conditions and must be handled truthfully.
+- On detection, stop wake-word capture before handing audio to the conversation capture state machine; do not claim full duplex until echo cancellation, audio focus and capture/playback arbitration are tested.
+- The wake phrase requires a dedicated "Miss Minutes" model (or a verified custom model). A bundled "Hey Jarvis" classifier is not an acceptable substitute.
+- Background wake-word acceptance must include physical-device false-positive/false-negative, battery, thermal, lock-screen and task-removal testing on the target Samsung device. Emulator-only evidence is insufficient.
