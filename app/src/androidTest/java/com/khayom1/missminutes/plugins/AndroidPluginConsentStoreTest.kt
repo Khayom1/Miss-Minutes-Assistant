@@ -3,6 +3,7 @@ package com.khayom1.missminutes.plugins
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,6 +44,22 @@ class AndroidPluginConsentStoreTest {
         }
         assertTrue(logFile.length() <= 64 * 1024L)
         assertFalse(logFile.readText().contains("private-user-argument"))
+        logFile.delete()
+    }
+
+    @Test
+    fun auditReaderReturnsNewestValidatedMetadataOnly() {
+        val logFile = java.io.File(context.filesDir, "plugin-audit.log")
+        logFile.delete()
+        val log = FilePluginAuditLog(context)
+        log.append(PluginAuditEntry(1L, "android_device_status", "device_info", "success"))
+        log.append(PluginAuditEntry(2L, "android_device_status", "consent", "consent_revoked"))
+
+        val recent = log.readRecent(1)
+        assertEquals(1, recent.size)
+        assertEquals(2L, recent.single().timestampMillis)
+        assertEquals("consent_revoked", recent.single().outcome)
+        assertFalse(recent.toString().contains("private-user-argument"))
         logFile.delete()
     }
 
