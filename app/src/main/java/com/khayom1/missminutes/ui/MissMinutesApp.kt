@@ -1065,7 +1065,8 @@ fun MissMinutesApp(
                                     selected = screen == item,
                                     onClick = { selectedScreenName = item.name },
                                     icon = { Text(item.symbol, fontSize = 18.sp) },
-                                    label = { Text(label) }
+                                    label = { Text(label) },
+                                    modifier = Modifier.testTag("nav_${item.name.lowercase()}")
                                 )
                             }
                         }
