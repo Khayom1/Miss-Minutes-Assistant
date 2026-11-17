@@ -55,9 +55,8 @@ class AndroidAgentTaskStateStoreTest {
         )
 
         assertEquals(true, store.create(state))
-        val restored = store.load("persisted_task")
-        assertNotNull(restored)
-        assertFalse(restored!!.plan.nodes.single().action.request.userConfirmed)
+        val restored = requireNotNull(store.load("persisted_task"))
+        assertFalse(restored.plan.nodes.single().action.request.userConfirmed)
         assertEquals(123_456L, restored.nodes.getValue("read_device").approvedAtMillis)
         assertEquals(listOf(restored), store.all())
         val ciphertext = context.getSharedPreferences("miss_minutes_agent_tasks", Context.MODE_PRIVATE)
