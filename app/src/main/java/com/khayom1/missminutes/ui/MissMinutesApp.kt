@@ -839,7 +839,10 @@ fun MissMinutesApp(
                         }
                         pluginManifestStore.replace(pluginRegistry.installedPlugins())
                         incoming.conversationExportJson?.let { json ->
-                            conversationStore.restoreAll(owner, json, backupConflictPolicy)
+                            val effectivePolicy = if (
+                                incoming.singleConversation && backupConflictPolicy == RestoreConflictPolicy.REPLACE
+                            ) RestoreConflictPolicy.MERGE else backupConflictPolicy
+                            conversationStore.restoreAll(owner, json, effectivePolicy)
                         }
                         incoming.settings?.let { settings ->
                             conversationStore.setRetentionDays(owner, settings.retentionDays)
@@ -855,10 +858,13 @@ fun MissMinutesApp(
                         androidPluginConsent = false
                     }
                     loadConversation(owner)
-                    backupStatus = if (rejectedPlugins > 0) {
-                        "Restore completed; $rejectedPlugins unsupported plugin manifest(s) were skipped."
-                    } else {
-                        "Backup restored. Imported plugins remain disabled until you approve them."
+                    backupStatus = when {
+                        incoming.singleConversation && backupConflictPolicy == RestoreConflictPolicy.REPLACE ->
+                            "Selected chat restored using safe merge; other conversations were preserved."
+                        rejectedPlugins > 0 ->
+                            "Restore completed; $rejectedPlugins unsupported plugin manifest(s) were skipped."
+                        else ->
+                            "Backup restored. Imported plugins remain disabled until you approve them."
                     }
                     backupPreview = null
                     pendingRestorePayload = null
