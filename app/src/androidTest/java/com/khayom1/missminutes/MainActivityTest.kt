@@ -17,6 +17,7 @@ import androidx.test.rule.GrantPermissionRule
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.data.AndroidConversationStore
 import com.khayom1.missminutes.ai.AiMessage
+import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.AiProvider
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
@@ -31,6 +32,7 @@ import com.khayom1.missminutes.ai.SupabaseAuthRepository
 import com.khayom1.missminutes.ai.SupabaseAuthSession
 import com.khayom1.missminutes.voice.WakeWordServiceState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.rules.RuleChain
@@ -221,6 +223,16 @@ class MainActivityTest {
         composeRule.onNodeWithText("History").assertIsDisplayed()
         composeRule.onNodeWithTag("retention_30").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("retention_90").performScrollTo().assertIsDisplayed()
+
+        composeRule.onNodeWithText("Chat").performClick()
+        composeRule.onNodeWithTag("chat_input").performTextInput("What is my study goal?")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            aiProvider.lastRequest?.messages?.any { it.role == AiRole.SYSTEM } == true
+        }
+        val memoryPrompt = aiProvider.lastRequest?.messages?.firstOrNull()
+        assertEquals(AiRole.SYSTEM, memoryPrompt?.role)
+        assertTrue(memoryPrompt?.content.orEmpty().contains("Finish dentistry degree"))
     }
 
     @Test
