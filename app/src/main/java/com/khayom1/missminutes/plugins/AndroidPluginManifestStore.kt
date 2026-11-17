@@ -8,14 +8,14 @@ import kotlinx.serialization.json.jsonObject
  * Persists declarative plugin manifests only. Consent remains in the separate
  * AndroidPluginConsentStore and is never restored from an archive.
  */
-class AndroidPluginManifestStore(context: Context) {
+class AndroidPluginManifestStore(context: Context) : PluginManifestPersistence {
     private val preferences = context.applicationContext.getSharedPreferences(
         PREFERENCES_NAME,
         Context.MODE_PRIVATE
     )
 
     @Synchronized
-    fun load(): List<PluginManifest> {
+    override fun load(): List<PluginManifest> {
         val encoded = preferences.getString(KEY_MANIFESTS, null) ?: return emptyList()
         return runCatching {
             PluginManifestArchive.decode(Json.parseToJsonElement(encoded).jsonObject)
@@ -23,7 +23,7 @@ class AndroidPluginManifestStore(context: Context) {
     }
 
     @Synchronized
-    fun replace(manifests: Collection<PluginManifest>) {
+    override fun replace(manifests: Collection<PluginManifest>) {
         val encoded = PluginManifestArchive.encode(manifests.toList()).toString()
         check(preferences.edit().putString(KEY_MANIFESTS, encoded).commit()) {
             "Plugin manifests could not be persisted."
@@ -43,7 +43,7 @@ class AndroidPluginManifestStore(context: Context) {
     @Synchronized
     fun mergeImported(manifests: Collection<PluginManifest>): List<PluginManifest> {
         val merged = load().associateBy { it.id }.toMutableMap()
-        manifests.forEach { manifest -> merged[manifest.id] = manifest }
+        manifests.forEach { manifest -> merged.putIfAbsent(manifest.id, manifest) }
         val result = merged.values.sortedBy { it.id }
         replace(result)
         return result
