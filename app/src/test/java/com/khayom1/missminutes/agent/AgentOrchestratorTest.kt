@@ -165,6 +165,21 @@ class AgentOrchestratorTest {
         assertEquals(1, calls)
     }
 
+
+    @Test
+    fun stepBudgetPreventsDispatchOfAdditionalNodes() {
+        var calls = 0
+        val engine = orchestrator { _, _ ->
+            calls++
+            PluginExecutionResult(true, "ok", PluginCapability.DEVICE_INFORMATION)
+        }
+        engine.create(plan(listOf(node("first"), node("second")), maxSteps = 1))
+        engine.advance("task_1")
+        val stopped = engine.advance("task_1") as AgentAdvanceResult.Finished
+        assertEquals(AgentTaskStatus.FAILED, stopped.state.status)
+        assertEquals(1, calls)
+    }
+
     private fun assertIllegalArgument(block: () -> Unit) {
         try {
             block()
