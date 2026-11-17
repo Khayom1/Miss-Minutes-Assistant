@@ -222,23 +222,28 @@ class MainActivityTest {
         signIn()
 
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
-        composeRule.onNodeWithText("Dashboard").performClick()
+        composeRule.onNodeWithText("Settings").performClick()
         composeRule.onNodeWithText("user@example.test").assertIsDisplayed()
     }
 
     @Test
-    fun bottomNavigationOpensDashboardHistoryAndSettings() {
+    fun topControlsExposeHistoryNewChatAndSettingsOnly() {
         signIn()
 
-        composeRule.onNodeWithText("Dashboard").performClick()
-        composeRule.onNodeWithText("Your workspace").assertIsDisplayed()
-        composeRule.onNodeWithText("AI provider").assertIsDisplayed()
+        composeRule.onNodeWithText("History").assertIsDisplayed()
+        composeRule.onNodeWithText("New").assertIsDisplayed()
+        composeRule.onNodeWithText("Settings").assertIsDisplayed()
+        assertEquals(0, composeRule.onAllNodesWithText("Dashboard").fetchSemanticsNodes().size)
 
         composeRule.onNodeWithText("History").performClick()
         composeRule.onNodeWithText("Conversation history").assertIsDisplayed()
 
         composeRule.onNodeWithText("Settings").performClick()
         composeRule.onNodeWithText("App settings").assertIsDisplayed()
+
+        composeRule.onNodeWithText("New").performClick()
+        waitForChatScreen()
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
     }
 
     @Test
@@ -326,7 +331,7 @@ class MainActivityTest {
         val memorySwitch = composeRule.onNodeWithTag("memory_context_toggle")
         memorySwitch.performScrollTo().assertIsOff()
         memorySwitch.performClick()
-        composeRule.onNodeWithText("Chat").performClick()
+        composeRule.onNodeWithText("New").performClick()
         composeRule.onNodeWithTag("chat_input").performTextInput("How should you explain?")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -378,7 +383,7 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Dashboard").performClick()
+        composeRule.onNodeWithText("Settings").performClick()
         composeRule.onNodeWithText("new-user@example.test").assertIsDisplayed()
         assertEquals(
             0,
