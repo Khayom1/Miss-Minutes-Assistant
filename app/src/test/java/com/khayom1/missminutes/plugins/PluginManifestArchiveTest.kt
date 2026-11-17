@@ -109,7 +109,8 @@ class PluginManifestArchiveTest {
                 }
             }),
             consentStore = PluginConsentStore { false },
-            auditLog = PluginAuditLog {}
+            auditLog = PluginAuditLog {},
+            accessChecker = PluginAccessChecker { _, _ -> PluginAccessDecision.Granted }
         )
         assertTrue(registry.install(restored))
         val result = registry.execute(
