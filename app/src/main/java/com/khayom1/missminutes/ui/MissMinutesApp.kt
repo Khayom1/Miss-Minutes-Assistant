@@ -1029,7 +1029,7 @@ fun MissMinutesApp(
                         if (requestGeneration == conversationGeneration) chatError = copy.apiKeyInvalid
                     } catch (_: AiProviderException.LocalWorkspaceUnavailable) {
                         if (requestGeneration == conversationGeneration) {
-                            chatError = copy.apiKeyRequired
+                            chatError = copy.sendFailed
                         }
                     } catch (_: ConversationLimitReachedException) {
                         if (requestGeneration == conversationGeneration &&
