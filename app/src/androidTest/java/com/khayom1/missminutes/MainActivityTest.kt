@@ -197,6 +197,7 @@ class MainActivityTest {
         assertTrue(conversationStore.listConversations("guest-local").isNotEmpty())
         assertTrue(conversationStore.listConversations("test-user-" + "user@example.test".hashCode()).isEmpty())
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_account_about").performClick()
         composeRule.onNodeWithText("Guest (local only)").performScrollTo().assertIsDisplayed()
     }
 
@@ -227,6 +228,7 @@ class MainActivityTest {
 
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_account_about").performClick()
         composeRule.onNodeWithText("user@example.test").performScrollTo().assertIsDisplayed()
     }
 
@@ -329,6 +331,7 @@ class MainActivityTest {
     fun savedMemoryIsSentOnlyAfterExplicitOptIn() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_privacy_memory").performClick()
         composeRule.onNodeWithTag("memory_input").performScrollTo()
         composeRule.onNodeWithTag("memory_input").performTextInput("Prefers concise Tajik explanations")
         composeRule.onNodeWithText("Save memory").performScrollTo().performClick()
@@ -393,6 +396,7 @@ class MainActivityTest {
         }
 
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_account_about").performClick()
         composeRule.onNodeWithText("new-user@example.test").performScrollTo().assertIsDisplayed()
         assertEquals(
             0,
@@ -418,6 +422,7 @@ class MainActivityTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         WakeWordServiceState.setEnabled(context, true)
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_account_about").performClick()
         composeRule.onNodeWithText("Sign out").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             !WakeWordServiceState.isEnabled(context) &&
@@ -456,6 +461,7 @@ class MainActivityTest {
     fun settingsSavesAndRemovesUserOwnedDeepSeekKey() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_ai_voice").performClick()
         composeRule.onNodeWithTag("deepseek_api_key")
             .performTextInput("sk-user-owned-test-key-123456")
         composeRule.onNodeWithText("Save API key").performClick()
@@ -472,6 +478,7 @@ class MainActivityTest {
     fun settingsExposeExplicitFloatingAssistantControls() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_floating_assistant").performClick()
 
         composeRule.onNodeWithText("Floating assistant").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("overlay_start").performScrollTo().assertIsDisplayed()
@@ -482,6 +489,7 @@ class MainActivityTest {
     fun settingsShowsMicrophoneDisclosureBeforeListeningIsEnabled() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_ai_voice").performClick()
 
         composeRule.onNodeWithTag("wake_phrase_disclosure").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("wake_phrase_disclosure").assertTextContains("Android 12+", substring = true)
@@ -494,6 +502,7 @@ class MainActivityTest {
     fun settingsExposeEncryptedBackupAndRestoreControls() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_backup_restore").performClick()
         composeRule.onNodeWithText("Backup and restore").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Backup password (at least 10 characters)")
             .performScrollTo().assertIsDisplayed()
@@ -506,6 +515,7 @@ class MainActivityTest {
     fun settingsCanToggleDarkTheme() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_general").performClick()
         val themeSwitch = composeRule.onNodeWithTag("dark_mode_switch")
         themeSwitch.assertIsOff()
         themeSwitch.performClick()
@@ -516,14 +526,22 @@ class MainActivityTest {
     fun settingsSwitchesBetweenSupportedLanguages() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_general").performClick()
 
         composeRule.onNodeWithText("Русский").performClick()
         composeRule.onAllNodesWithText("Настройки приложения").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Язык").assertIsDisplayed()
 
+        composeRule.onNodeWithText("settings_back").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_back").performClick()
+        composeRule.onNodeWithText("ИИ и голос").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_back").performClick()
+        composeRule.onNodeWithTag("settings_page_general").performClick()
         composeRule.onNodeWithText("Тоҷикӣ").performClick()
         composeRule.onAllNodesWithText("Танзимоти барнома").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Забон").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_back").performClick()
+        composeRule.onNodeWithText("AI ва овоз").assertIsDisplayed()
     }
 
     @Test
@@ -538,4 +556,30 @@ class MainActivityTest {
         ).assertIsDisplayed()
         composeRule.onNodeWithText("Sign in").assertIsDisplayed()
     }
+
+    @Test
+    fun settingsHubExposesSevenAccessibleSubpagesAndBackNavigation() {
+        signIn()
+        composeRule.onNodeWithText("Settings").performClick()
+
+        listOf(
+            "settings_page_general",
+            "settings_page_ai_voice",
+            "settings_page_floating_assistant",
+            "settings_page_plugins_device",
+            "settings_page_privacy_memory",
+            "settings_page_backup_restore",
+            "settings_page_account_about"
+        ).forEach { tag ->
+            composeRule.onNodeWithTag(tag).assertIsDisplayed()
+        }
+
+        composeRule.onNodeWithTag("settings_page_plugins_device").performClick()
+        composeRule.onNodeWithText("Installed plugins").assertIsDisplayed()
+        composeRule.onNodeWithText("No external plugins are installed.").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_back").performClick()
+        composeRule.onNodeWithTag("settings_page_backup_restore").assertIsDisplayed()
+    }
+
+
 }
