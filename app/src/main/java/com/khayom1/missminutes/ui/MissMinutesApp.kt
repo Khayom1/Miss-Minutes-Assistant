@@ -686,6 +686,168 @@ fun MissMinutesApp(
         aiHasResponded = messages.any { !it.isUser }
     }
 
+    val createEncryptedBackup: () -> Unit = {
+        val owner = currentOwnerId
+        if (owner == null) {
+            backupError = "Local conversation store is not ready."
+        } else {
+            val selected = backupCategories.toSet()
+            val passwordCopy = backupPassword.toCharArray()
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                try {
+                    val payloads = withContext(Dispatchers.IO) {
+                        val chat = if (BackupArchive.Category.CHAT_HISTORY in selected) {
+                            conversationStore.exportAll(owner)
+                        } else null
+                        val settings = if (BackupArchive.Category.APP_SETTINGS in selected) {
+                            SettingsBackupAdapter.Settings(
+                                language = language.name,
+                                darkMode = darkTheme,
+                                retentionDays = conversationStore.getRetentionDays(owner),
+                                memoryContextEnabled = conversationStore.isMemoryContextEnabled(owner)
+                            )
+                        } else null
+                        val manifests = if (BackupArchive.Category.PLUGINS in selected) {
+                            pluginRegistry.installedPlugins()
+                        } else emptyList()
+                        BackupPayloadAdapters.encode(
+                            selected,
+                            chat,
+                            settings,
+                            manifests,
+                            conversationStore.getRetentionDays(owner)
+                        )
+                    }
+                    val bytes = withContext(Dispatchers.IO) {
+                        BackupArchive.instance.encode(payloads, passwordCopy)
+                    }
+                    pendingBackupBytes = bytes
+                    createBackupLauncher.launch("miss-minutes-backup.mmb")
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Backup could not be created."
+                    backupBusy = false
+                } finally {
+                    passwordCopy.fill('\\u0000')
+                }
+            }
+        }
+    }
+
+    val exportSelectedConversation: (String) -> Unit = { conversationId ->
+        val owner = currentOwnerId
+        if (owner == null) {
+            backupError = "Local conversation store is not ready."
+        } else if (backupPassword.length < 10) {
+            backupError = "Enter a backup password of at least 10 characters in Settings."
+        } else {
+            val passwordCopy = backupPassword.toCharArray()
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                try {
+                    val payloads = withContext(Dispatchers.IO) {
+                        val selectedChat = conversationStore.exportConversation(owner, conversationId)
+                        BackupPayloadAdapters.encode(
+                            setOf(BackupArchive.Category.CHAT_HISTORY),
+                            selectedChat,
+                            null,
+                            emptyList(),
+                            conversationStore.getRetentionDays(owner)
+                        )
+                    }
+                    val bytes = withContext(Dispatchers.IO) {
+                        BackupArchive.instance.encode(payloads, passwordCopy)
+                    }
+                    pendingBackupBytes = bytes
+                    createBackupLauncher.launch("miss-minutes-chat.mmb")
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Conversation backup could not be created."
+                    backupBusy = false
+                } finally {
+                    passwordCopy.fill('\\u0000')
+                }
+            }
+        }
+    }
+
+    val confirmBackupRestore: () -> Unit = {
+        val owner = currentOwnerId
+        val incoming = pendingRestorePayload
+        if (owner == null || incoming == null) {
+            backupError = "There is no validated backup to restore."
+        } else {
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                val oldAppearance = appSettingsStore.loadAppearance()
+                val oldRetention = withContext(Dispatchers.IO) { conversationStore.getRetentionDays(owner) }
+                val oldMemoryContext = withContext(Dispatchers.IO) { conversationStore.isMemoryContextEnabled(owner) }
+                val oldPlugins = pluginRegistry.installedPlugins()
+                val incomingPluginIds = incoming.pluginManifests.orEmpty().map { it.id }.toSet()
+                val oldConsents = incomingPluginIds.associateWith(pluginConsentStore::isGranted)
+                val oldChat = if (incoming.conversationExportJson != null) {
+                    withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
+                } else null
+                val newlyInstalled = mutableListOf<com.khayom1.missminutes.plugins.PluginManifest>()
+                var rejectedPlugins = 0
+                try {
+                    withContext(Dispatchers.IO) {
+                        incoming.pluginManifests.orEmpty().forEach { manifest ->
+                            pluginConsentStore.setGranted(manifest.id, false)
+                            try {
+                                if (pluginRegistry.install(manifest)) newlyInstalled += manifest
+                            } catch (_: IllegalArgumentException) {
+                                rejectedPlugins++
+                            }
+                        }
+                        pluginManifestStore.replace(pluginRegistry.installedPlugins())
+                        incoming.conversationExportJson?.let { json ->
+                            conversationStore.restoreAll(owner, json, backupConflictPolicy)
+                        }
+                        incoming.settings?.let { settings ->
+                            conversationStore.setRetentionDays(owner, settings.retentionDays)
+                            conversationStore.setMemoryContextEnabled(owner, settings.memoryContextEnabled)
+                            appSettingsStore.applyBackup(settings)
+                        }
+                    }
+                    incoming.settings?.let { settings ->
+                        selectedLanguageName = settings.language
+                        darkTheme = settings.darkMode
+                    }
+                    if (AndroidDeviceStatusPlugin.PLUGIN_ID in incomingPluginIds) {
+                        androidPluginConsent = false
+                    }
+                    loadConversation(owner)
+                    backupStatus = if (rejectedPlugins > 0) {
+                        "Restore completed; $rejectedPlugins unsupported plugin manifest(s) were skipped."
+                    } else {
+                        "Backup restored. Imported plugins remain disabled until you approve them."
+                    }
+                    backupPreview = null
+                    pendingRestorePayload = null
+                    backupPassword = ""
+                } catch (error: Exception) {
+                    withContext(Dispatchers.IO) {
+                        newlyInstalled.forEach { pluginRegistry.uninstall(it.id) }
+                        pluginManifestStore.replace(oldPlugins)
+                        oldConsents.forEach { (id, granted) -> pluginConsentStore.setGranted(id, granted) }
+                        appSettingsStore.saveAppearance(oldAppearance.language, oldAppearance.darkMode)
+                        conversationStore.setRetentionDays(owner, oldRetention)
+                        conversationStore.setMemoryContextEnabled(owner, oldMemoryContext)
+                        if (oldChat != null) {
+                            conversationStore.restoreAll(owner, oldChat, RestoreConflictPolicy.REPLACE)
+                        }
+                    }
+                    backupError = error.message ?: "Backup restore failed and changes were rolled back."
+                } finally {
+                    backupBusy = false
+                }
+            }
+        }
+    }
+
     val speechLocale = when (language) {
         AppLanguage.English -> Locale.US
         AppLanguage.Russian -> Locale("ru", "RU")
