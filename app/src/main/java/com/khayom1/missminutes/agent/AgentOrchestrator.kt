@@ -2,6 +2,7 @@ package com.khayom1.missminutes.agent
 
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
+import com.khayom1.missminutes.plugins.PluginToolDescriptor
 
 /** A single, explicitly allowlisted plugin invocation in an inspectable task graph. */
 data class AgentAction(
@@ -49,7 +50,8 @@ data class AgentNodeState(
     val status: AgentNodeStatus = AgentNodeStatus.PENDING,
     val message: String? = null,
     val idempotencyKey: String,
-    val approved: Boolean = false
+    val approved: Boolean = false,
+    val approvedAtMillis: Long? = null
 )
 
 data class AgentTaskState(
@@ -121,16 +123,40 @@ class AgentOrchestrator(
 
     @Synchronized
     fun create(plan: AgentTaskPlan): AgentTaskState {
-        validate(plan)
+        // A serialized/model-authored request is never a source of user approval.
+        val safePlan = plan.copy(nodes = plan.nodes.map { node ->
+            node.copy(action = node.action.copy(
+                request = node.action.request.copy(userConfirmed = false)
+            ))
+        })
+        validate(safePlan)
         val now = clockMillis()
-        require(plan.deadlineAtMillis > now && plan.deadlineAtMillis - now <= MAX_TASK_DURATION_MILLIS) { "Task deadline must be within the 24-hour execution window." }
-        val nodes = plan.nodes.associate { node ->
-            node.id to AgentNodeState(node.id, idempotencyKey = "${plan.id}:${node.id}")
+        require(safePlan.deadlineAtMillis > now && safePlan.deadlineAtMillis - now <= MAX_TASK_DURATION_MILLIS) { "Task deadline must be within the 24-hour execution window." }
+        val nodes = safePlan.nodes.associate { node ->
+            node.id to AgentNodeState(node.id, idempotencyKey = "${safePlan.id}:${node.id}")
         }
-        val state = AgentTaskState(plan, nodes, AgentTaskStatus.READY, updatedAtMillis = now)
+        val state = AgentTaskState(safePlan, nodes, AgentTaskStatus.READY, updatedAtMillis = now)
         check(store.create(state)) { "Task id already exists." }
         return state
     }
+
+    /** The connected plugin catalog is reused for every request; no per-message plugin picker is needed. */
+    fun availablePluginTools(): List<PluginToolDescriptor> =
+        (executor as? AgentActionCatalogProvider)?.availableTools().orEmpty()
+
+    /** Model tool calls are dispatched only through the current connected catalog. */
+    fun executePluginTool(
+        toolName: String,
+        argumentsJson: String,
+        userConfirmed: Boolean = false
+    ): PluginExecutionResult = (executor as? AgentActionCatalogProvider)?.executeToolCall(
+        toolName, argumentsJson, userConfirmed
+    ) ?: PluginExecutionResult(
+        success = false,
+        message = "Plugin tool runtime is unavailable.",
+        capability = com.khayom1.missminutes.plugins.PluginCapability.DEVICE_INFORMATION,
+        status = com.khayom1.missminutes.plugins.PluginExecutionStatus.HANDLER_UNAVAILABLE
+    )
 
     @Synchronized
     fun state(taskId: String): AgentTaskState? = store.load(taskId)
@@ -140,7 +166,12 @@ class AgentOrchestrator(
 
     @Synchronized
     fun pause(taskId: String): AgentTaskState = update(taskId) { current ->
-        if (current.status in TERMINAL) current else current.copy(status = AgentTaskStatus.PAUSED)
+        if (current.status in TERMINAL) current else current.copy(
+            nodes = current.nodes.mapValues { (_, node) ->
+                node.copy(approved = false, approvedAtMillis = null)
+            },
+            status = AgentTaskStatus.PAUSED
+        )
     }
 
     @Synchronized
@@ -156,8 +187,16 @@ class AgentOrchestrator(
             val nodes = current.nodes.mapValues { (_, node) ->
                 if (node.status == AgentNodeStatus.PENDING ||
                     node.status == AgentNodeStatus.WAITING_APPROVAL
-                ) node.copy(status = AgentNodeStatus.CANCELLED, message = "Cancelled by user.")
-                else node
+                ) {
+                    node.copy(
+                        status = AgentNodeStatus.CANCELLED,
+                        message = "Cancelled by user.",
+                        approved = false,
+                        approvedAtMillis = null
+                    )
+                } else {
+                    node.copy(approved = false, approvedAtMillis = null)
+                }
             }
             current.copy(nodes = nodes, status = AgentTaskStatus.CANCELLED)
         }
@@ -170,10 +209,16 @@ class AgentOrchestrator(
         }
         val planNode = current.plan.nodes.firstOrNull { it.id == nodeId }
             ?: throw IllegalArgumentException("Unknown task node.")
-        require(planNode.action.approvalRequired) { "This action does not require approval." }
+        require(requiresApproval(planNode.action)) { "This action does not require approval." }
         val node = current.nodes.getValue(nodeId)
         require(node.status == AgentNodeStatus.WAITING_APPROVAL) { "Node is not waiting for approval." }
-        val nodes = current.nodes + (nodeId to node.copy(status = AgentNodeStatus.PENDING, message = "Approved by user.", approved = true))
+        val approvedAt = clockMillis()
+        val nodes = current.nodes + (nodeId to node.copy(
+            status = AgentNodeStatus.PENDING,
+            message = "Approved by user.",
+            approved = true,
+            approvedAtMillis = approvedAt
+        ))
         current.copy(nodes = nodes, status = AgentTaskStatus.READY)
     }
 
@@ -249,22 +294,40 @@ class AgentOrchestrator(
         }
 
         val pendingState = current.nodes.getValue(pending.id)
-        if (pending.action.approvalRequired && !pendingState.approved) {
-            val nodes = current.nodes + (pending.id to current.nodes.getValue(pending.id)
-                .copy(status = AgentNodeStatus.WAITING_APPROVAL, message = "User approval required."))
+        val confirmationRequired = requiresApproval(pending.action)
+        val approvedAt = pendingState.approvedAtMillis
+        val approvalFresh = pendingState.approved && approvedAt != null &&
+            now >= approvedAt && now - approvedAt <= MAX_APPROVAL_AGE_MILLIS
+        if (confirmationRequired && !approvalFresh) {
+            val nodes = current.nodes + (pending.id to pendingState.copy(
+                status = AgentNodeStatus.WAITING_APPROVAL,
+                message = if (pendingState.approved) {
+                    "Approval expired; confirm again immediately before execution."
+                } else {
+                    "User approval required."
+                },
+                approved = false,
+                approvedAtMillis = null
+            ))
             current = current.copy(nodes = nodes, status = AgentTaskStatus.WAITING_APPROVAL, updatedAtMillis = now)
             store.save(current)
             return AgentAdvanceResult.BlockedForApproval(current, pending.id)
         }
 
-        val running = current.nodes + (pending.id to current.nodes.getValue(pending.id)
-            .copy(status = AgentNodeStatus.RUNNING, message = null))
+        // Consume the one-shot approval before dispatch. If the process dies now,
+        // recovery will not replay the action or reuse the confirmation.
+        val running = current.nodes + (pending.id to pendingState.copy(
+            status = AgentNodeStatus.RUNNING,
+            message = null,
+            approved = false,
+            approvedAtMillis = null
+        ))
         current = current.copy(nodes = running, status = AgentTaskStatus.RUNNING, updatedAtMillis = now)
         store.save(current)
 
         val result = try {
             executor.execute(
-                pending.action.request.copy(userConfirmed = pendingState.approved || pending.action.request.userConfirmed),
+                pending.action.request.copy(userConfirmed = confirmationRequired && approvalFresh),
                 running.getValue(pending.id).idempotencyKey
             )
         } catch (_: Exception) {
@@ -273,7 +336,9 @@ class AgentOrchestrator(
 
         val finalNode = running.getValue(pending.id).copy(
             status = if (result.success) AgentNodeStatus.SUCCEEDED else AgentNodeStatus.FAILED,
-            message = result.message.take(MAX_RESULT_CHARACTERS)
+            message = result.message.take(MAX_RESULT_CHARACTERS),
+            approved = false,
+            approvedAtMillis = null
         )
         val finalNodes = running + (pending.id to finalNode)
         val completed = current.completedSteps + 1
@@ -290,6 +355,18 @@ class AgentOrchestrator(
         )
         store.save(current)
         return AgentAdvanceResult.Progress(current, pending.id)
+    }
+
+    private fun requiresApproval(action: AgentAction): Boolean {
+        if (action.approvalRequired) return true
+        val catalog = executor as? AgentActionCatalogProvider ?: return false
+        return runCatching {
+            catalog.availableTools()
+                .firstOrNull {
+                    it.pluginId == action.request.pluginId && it.actionId == action.request.actionId
+                }
+                ?.requiresConfirmation ?: false
+        }.getOrDefault(true)
     }
 
     private fun update(taskId: String, transform: (AgentTaskState) -> AgentTaskState): AgentTaskState {
@@ -338,6 +415,7 @@ class AgentOrchestrator(
     private companion object {
         val ID = Regex("^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
         const val MAX_RESULT_CHARACTERS = 1_000
+        const val MAX_APPROVAL_AGE_MILLIS = 15_000L
         const val MAX_TASK_DURATION_MILLIS = 24 * 60 * 60 * 1_000L
         val TERMINAL = setOf(
             AgentTaskStatus.SUCCEEDED,

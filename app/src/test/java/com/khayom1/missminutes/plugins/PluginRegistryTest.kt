@@ -6,6 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PluginRegistryTest {
+    private val testAccessChecker = PluginAccessChecker { _, _ -> PluginAccessDecision.Granted }
     private val manifest = PluginManifest(
         id = "test_plugin",
         version = "1.0.0",
@@ -118,6 +119,7 @@ class PluginRegistryTest {
         val handler = object : PluginActionHandler {
             override val actionId = "typed_action"
             override val capability = PluginCapability.DEVICE_INFORMATION
+            override val argumentSchema = numericManifest.actions.single().arguments
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 calls++
                 return PluginActionOutput(true, "ok")
@@ -126,7 +128,8 @@ class PluginRegistryTest {
         val registry = PluginRegistry(
             handlers = listOf(handler),
             consentStore = PluginConsentStore { true },
-            auditLog = PluginAuditLog {}
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker,
         )
         registry.install(numericManifest)
         val invalidNumber = registry.execute(
@@ -151,12 +154,83 @@ class PluginRegistryTest {
     }
 
     @Test
+    fun importedManifestCannotWidenCompiledHandlerArgumentSchema() {
+        val registry = registry(consented = true) { PluginActionOutput(true, "ok") }
+        val widened = manifest.copy(
+            actions = manifest.actions.map { action ->
+                action.copy(
+                    arguments = mapOf(
+                        "locale" to PluginFieldSpec(
+                            name = "locale",
+                            type = PluginValueType.STRING,
+                            maxLength = 256
+                        )
+                    )
+                )
+            }
+        )
+
+        try {
+            registry.install(widened)
+            throw AssertionError("Expected a widened imported schema to be rejected.")
+        } catch (_: IllegalArgumentException) {
+            // The compiled handler schema remains authoritative.
+        }
+    }
+
+    @Test
+    fun writeCapabilitiesRequireConfirmationEvenWhenManifestOmitsIt() {
+        listOf(
+            PluginCapability.CALENDAR_WRITE,
+            PluginCapability.GITHUB_REPOSITORY_WRITE
+        ).forEachIndexed { index, writeCapability ->
+            val pluginId = "write_plugin_$index"
+            val compiledActionId = "write_action_$index"
+            var calls = 0
+            val handler = object : PluginActionHandler {
+                override val actionId = compiledActionId
+                override val capability = writeCapability
+                override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
+                    calls++
+                    return PluginActionOutput(true, "written")
+                }
+            }
+            val registry = PluginRegistry(
+                handlers = listOf(handler),
+                consentStore = PluginConsentStore { true },
+                auditLog = PluginAuditLog {},
+                accessChecker = testAccessChecker
+            )
+            val manifest = PluginManifest(
+                id = pluginId,
+                version = "1.0.0",
+                displayName = "Write test",
+                description = "A write capability must require confirmation.",
+                capabilities = setOf(writeCapability),
+                actions = listOf(PluginActionSpec(compiledActionId, writeCapability))
+            )
+            assertTrue(registry.install(manifest))
+            assertTrue(registry.connectedTools().single().requiresConfirmation)
+
+            val request = PluginExecutionRequest(pluginId, compiledActionId)
+            assertEquals(
+                PluginExecutionStatus.CONFIRMATION_REQUIRED,
+                registry.execute(request).status
+            )
+            assertEquals(0, calls)
+            assertTrue(registry.execute(request.copy(userConfirmed = true)).success)
+            assertEquals(1, calls)
+        }
+    }
+
+    @Test
     fun confirmationAndConsentAreIndependentGates() {
         var calls = 0
         val registry = PluginRegistry(
             handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
             consentStore = PluginConsentStore { true },
-            auditLog = PluginAuditLog {}
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker,
         )
         val confirmedManifest = manifest.copy(
             actions = manifest.actions.map { it.copy(requiresConfirmation = true) }
@@ -184,6 +258,7 @@ class PluginRegistryTest {
             handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
             consentStore = PluginConsentStore { true },
             auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker,
             clockMillis = { now },
             globalCallsPerMinute = 1
         )
@@ -200,7 +275,8 @@ class PluginRegistryTest {
         val blocked = PluginRegistry(
             handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
             consentStore = PluginConsentStore { true },
-            auditLog = PluginAuditLog { throw IllegalStateException("log unavailable") }
+            auditLog = PluginAuditLog { throw IllegalStateException("log unavailable") },
+            accessChecker = testAccessChecker,
         )
         blocked.install(manifest)
         assertFalse(blocked.execute(request()).success)
@@ -216,7 +292,8 @@ class PluginRegistryTest {
         val slow = PluginRegistry(
             handlers = listOf(handler { Thread.sleep(20); PluginActionOutput(true, "late") }),
             consentStore = PluginConsentStore { true },
-            auditLog = PluginAuditLog {}
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker,
         )
         slow.install(manifest.copy(maxExecutionMillis = 1))
         assertFalse(slow.execute(PluginExecutionRequest("test_plugin", "read_info", mapOf("locale" to PluginValue.Text("en")))).success)
@@ -236,7 +313,8 @@ class PluginRegistryTest {
         val registry = PluginRegistry(
             handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
             consentStore = consent,
-            auditLog = PluginAuditLog { events += it }
+            auditLog = PluginAuditLog { events += it },
+            accessChecker = testAccessChecker,
         )
         registry.install(manifest)
         assertTrue(registry.execute(
@@ -265,7 +343,8 @@ class PluginRegistryTest {
         val registry = PluginRegistry(
             handlers = listOf(handler { PluginActionOutput(true, "ok") }),
             consentStore = consent,
-            auditLog = PluginAuditLog { events += it }
+            auditLog = PluginAuditLog { events += it },
+            accessChecker = testAccessChecker,
         )
         registry.install(manifest)
         assertTrue(registry.uninstall("test_plugin"))
@@ -283,22 +362,129 @@ class PluginRegistryTest {
         val registry = PluginRegistry(
             handlers = listOf(handler { PluginActionOutput(true, "ok") }),
             consentStore = PluginConsentStore { true },
-            auditLog = PluginAuditLog {}
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker,
         )
         registry.install(manifest)
         assertFalse(registry.uninstall("test_plugin"))
         assertEquals(listOf(manifest), registry.installedPlugins())
     }
 
+
+    @Test
+    fun connectPersistsGrantAndPublishesConnectedTools() {
+        var granted = false
+        val events = mutableListOf<PluginAuditEntry>()
+        val consent = object : MutablePluginConsentStore {
+            override fun isGranted(pluginId: String) = granted
+            override fun setGranted(pluginId: String, value: Boolean) { granted = value }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(handler { PluginActionOutput(true, "ok") }),
+            consentStore = consent,
+            auditLog = PluginAuditLog { events += it },
+            accessChecker = testAccessChecker,
+        )
+        registry.install(manifest)
+        assertFalse(registry.isConnected("test_plugin"))
+        assertTrue(registry.connect("test_plugin"))
+        assertTrue(AndroidLikeConsentProbe(consent).isGranted("test_plugin"))
+        assertEquals(1, registry.connectedTools().size)
+        assertTrue(events.any { it.actionId == "connection" && it.outcome == "connected" })
+    }
+
+    @Test
+    fun missingRuntimeAccessIsReturnedAndBlocksHandlerExecution() {
+        var calls = 0
+        val permission = PluginAccessDecision.PermissionRequired(
+            id = "android.calendar",
+            label = "Calendar access",
+            explanation = "Calendar permission is required."
+        )
+        val registry = PluginRegistry(
+            handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
+            consentStore = PluginConsentStore { true },
+            auditLog = PluginAuditLog {},
+            accessChecker = PluginAccessChecker { _, _ -> permission }
+        )
+        registry.install(manifest)
+        val descriptor = registry.connectedTools().single()
+        assertEquals(permission, descriptor.access)
+        val result = registry.execute(
+            PluginExecutionRequest("test_plugin", "read_info", mapOf("locale" to PluginValue.Text("en")))
+        )
+        assertEquals(PluginExecutionStatus.PERMISSION_REQUIRED, result.status)
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun absentAccessCheckerFailsClosed() {
+        var calls = 0
+        val registry = PluginRegistry(
+            handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
+            consentStore = PluginConsentStore { true },
+            auditLog = PluginAuditLog {}
+        )
+        registry.install(manifest)
+        val result = registry.execute(
+            PluginExecutionRequest("test_plugin", "read_info", mapOf("locale" to PluginValue.Text("en")))
+        )
+        assertEquals(PluginExecutionStatus.ACCESS_UNAVAILABLE, result.status)
+        assertEquals(0, calls)
+    }
+
     private fun registry(consented: Boolean, action: () -> PluginActionOutput) = PluginRegistry(
         handlers = listOf(handler(action)),
         consentStore = PluginConsentStore { consented },
-        auditLog = PluginAuditLog {}
+        auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker,
     )
+
+    private class AndroidLikeConsentProbe(private val store: PluginConsentStore) { fun isGranted(id: String) = store.isGranted(id) }
 
     private fun handler(action: () -> PluginActionOutput) = object : PluginActionHandler {
         override val actionId = "read_info"
         override val capability = PluginCapability.DEVICE_INFORMATION
+        override val argumentSchema = manifest.actions.single().arguments
         override fun execute(arguments: Map<String, PluginValue>) = action()
+    }
+
+    @Test
+    fun compiledHandlerConfirmationCannotBeDisabledByImportedManifest() {
+        var calls = 0
+        val protectedHandler = object : PluginActionHandler {
+            override val actionId = "read_info"
+            override val capability = PluginCapability.DEVICE_INFORMATION
+            override val argumentSchema = manifest.actions.single().arguments
+            override val requiresConfirmation = true
+            override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
+                calls++
+                return PluginActionOutput(true, "completed")
+            }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(protectedHandler),
+            consentStore = PluginConsentStore { true },
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker
+        )
+        val importedManifest = manifest.copy(
+            actions = manifest.actions.map { it.copy(requiresConfirmation = false) }
+        )
+        assertTrue(registry.install(importedManifest))
+        assertTrue(registry.connectedTools().single().requiresConfirmation)
+
+        val request = PluginExecutionRequest(
+            "test_plugin",
+            "read_info",
+            mapOf("locale" to PluginValue.Text("en"))
+        )
+        val denied = registry.execute(request)
+        assertEquals(PluginExecutionStatus.CONFIRMATION_REQUIRED, denied.status)
+        assertEquals(0, calls)
+
+        val approved = registry.execute(request.copy(userConfirmed = true))
+        assertEquals(PluginExecutionStatus.SUCCEEDED, approved.status)
+        assertEquals(1, calls)
     }
 }

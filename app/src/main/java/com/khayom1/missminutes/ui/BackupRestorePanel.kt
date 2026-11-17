@@ -15,6 +15,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.khayom1.missminutes.backup.BackupArchive
@@ -90,6 +91,7 @@ internal fun BackupRestorePanel(
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(manifest.displayName, modifier = Modifier.weight(1f))
                     Switch(
+                        modifier = Modifier.testTag("plugin_consent_${manifest.id}"),
                         checked = pluginConsentStates[manifest.id] == true,
                         onCheckedChange = { onPluginConsentChange(manifest.id, it) }
                     )

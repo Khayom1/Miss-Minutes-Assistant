@@ -1,39 +1,31 @@
-# P6 — Secure Plugin Registry
+# P6 Plugin Registry — Local Connected Tools
 
-## Security boundary
+Plugins are local declarative manifests paired with compiled application handlers. A manifest describes metadata and a bounded action schema; it never carries executable code.
 
-P6 implements a closed-world plugin registry, not an arbitrary code loader. Plugin manifests are declarative metadata and typed argument schemas. They cannot contain scripts, bytecode, class names, reflection targets, URLs, shell commands, or arbitrary Android intents. Only action handlers compiled into the trusted application can execute.
+## Lifecycle
 
-This boundary prevents an imported or model-generated manifest from introducing executable code. A future third-party plugin runtime would require a separately reviewed process sandbox and is not enabled by this phase.
+1. Validate manifest identity, version, capabilities, action IDs, argument schemas, and size limits.
+2. Install only when every action maps to a compiled allowlisted handler.
+3. Ask the user to connect a plugin once. Persist that local consent grant.
+4. Discover connected tools automatically for each task. Do not ask the user to activate a plugin on every turn.
+5. Recheck Android permission and provider credential state at execution time.
+6. Revoke connection and uninstall locally; revocation must persist and be auditable.
 
-## Manifest contract
+## Model integration
 
-- Plugin identifiers, semantic versions, action identifiers and field identifiers use strict allowlisted formats.
-- Each action declares exactly one capability and a typed input schema.
-- Unknown actions, unknown fields, missing required fields, type mismatches, oversized strings, out-of-range integers and values outside explicit enumerations are rejected before handler invocation.
-- Manifest limits: 16 actions, 8 input fields per action, 12 calls/minute maximum, 5-second maximum declared execution budget.
-- Runtime output is bounded to 4,000 characters; request input is bounded to 2,000 characters.
+- Only connected tools are converted to provider-neutral JSON Schema and supplied to the model.
+- The dispatcher accepts only a name in the current connected catalog.
+- Arguments must be bounded JSON objects containing only declared primitive fields.
+- Unknown names, unknown fields, wrong types, invalid permissions, missing credentials, and unavailable handlers fail closed.
+- Consequential writes require explicit user confirmation.
+- Audit entries record action metadata and outcomes only; raw arguments and credentials are not logged.
 
-## Consent and execution
+## Security restrictions
 
-- Per-plugin user consent is stored in app-private SharedPreferences and defaults to denied.
-- Consent is separate from the existing P5 per-device-capability grant.
-- Actions requiring confirmation need a fresh per-invocation confirmation.
-- A compiled handler must match the action identifier and capability declared by the manifest.
-- A global rolling rate limit and per-plugin rolling rate limit apply.
-- The audit request must be recorded before handler execution; audit failure blocks execution.
-- Exceptions, Android permission failures, time-budget overruns and oversized output fail safely.
+No DEX/JAR loading, scripts, shell commands, reflection, arbitrary URLs, unrestricted Android intents, dynamic code downloads, or hidden background actions. A GitHub plugin is not supported until a real authorized GitHub handler exists and passes dedicated tests.
 
-## Sandboxing
+## Current status
 
-The registry itself does not execute plugin-supplied code. It dispatches only to a fixed set of compiled handlers supplied by the application. There is no dynamic class loading, WebView JavaScript bridge, arbitrary network client, file API, reflection, shell, or root capability exposed to plugins.
+The connected catalog, runtime access checker, schema generation, DeepSeek tool-call dispatch, and bounded execution tests are being validated in the current release PR. Permission-request UX for future non-device capabilities and any write-capable connector remain open.
 
-## Built-in integration
-
-The initial built-in android_device_status plugin wraps the existing P5 device-info and battery tools. The plugin consent gate and existing device capability grants must both be enabled. This gives a concrete integration without widening Android permissions.
-
-## Tests and acceptance
-
-- JVM tests cover consent denial, handler allowlisting, typed schema validation, confirmation, rate limits, audit fail-closed behavior, output limits and execution budget.
-- Android instrumentation covers persistent per-plugin consent and invalid identifier rejection.
-- CI must pass Gitleaks, Deno, JVM tests, APK build, lint, API 35 instrumentation and artifact upload on the exact final P6 head.
+Compiled handlers may impose a mandatory confirmation floor. An imported manifest can add confirmation, but cannot turn confirmation off for a mutating handler. The dispatcher checks the compiled handler policy immediately before execution.

@@ -3,15 +3,26 @@ package com.khayom1.missminutes.agent
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
 import com.khayom1.missminutes.plugins.PluginRegistry
+import com.khayom1.missminutes.plugins.PluginToolCallDispatcher
+import com.khayom1.missminutes.plugins.PluginToolDescriptor
 
 /**
- * Adapter to the P6 closed-world registry. The currently shipped device-status
- * plugin exposes read-only capabilities; any future mutating handler must add
- * an idempotency-aware adapter before it can be scheduled by an agent.
+ * Adapter to the closed-world registry. Only compiled handlers can execute;
+ * the currently shipped Android status actions are read-only.
  */
 class PluginRegistryAgentActionExecutor(
     private val registry: PluginRegistry
-) : AgentActionExecutor {
+) : AgentActionExecutor, AgentActionCatalogProvider {
+    private val toolDispatcher = PluginToolCallDispatcher(registry)
+
+    override fun availableTools(): List<PluginToolDescriptor> = registry.connectedTools()
+
+    override fun executeToolCall(
+        toolName: String,
+        argumentsJson: String,
+        userConfirmed: Boolean
+    ): PluginExecutionResult = toolDispatcher.execute(toolName, argumentsJson, userConfirmed)
+
     @Suppress("UNUSED_PARAMETER")
     override fun execute(
         request: PluginExecutionRequest,

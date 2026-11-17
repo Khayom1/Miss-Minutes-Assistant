@@ -1,8 +1,16 @@
 package com.khayom1.missminutes.plugins
 
-enum class PluginCapability {
+enum class PluginCapability(val requiresConfirmation: Boolean = false) {
     DEVICE_INFORMATION,
-    BATTERY_STATUS
+    BATTERY_STATUS,
+    CALENDAR_READ,
+    CALENDAR_WRITE(true),
+    CONTACTS_READ,
+    LOCATION_APPROXIMATE,
+    LOCATION_PRECISE,
+    NOTIFICATION_READ,
+    GITHUB_REPOSITORY_READ,
+    GITHUB_REPOSITORY_WRITE(true)
 }
 
 enum class PluginValueType {
@@ -55,10 +63,80 @@ data class PluginExecutionRequest(
     val userConfirmed: Boolean = false
 )
 
+enum class PluginExecutionStatus {
+    SUCCEEDED,
+    FAILED,
+    PLUGIN_NOT_INSTALLED,
+    ACTION_NOT_ALLOWED,
+    HANDLER_UNAVAILABLE,
+    PLUGIN_NOT_CONNECTED,
+    PERMISSION_REQUIRED,
+    CREDENTIAL_REQUIRED,
+    ACCESS_UNAVAILABLE,
+    CONFIRMATION_REQUIRED,
+    INVALID_ARGUMENTS,
+    CAPABILITY_MISMATCH,
+    RATE_LIMITED,
+    AUDIT_UNAVAILABLE,
+    EXECUTION_CAPACITY_EXCEEDED,
+    OUTPUT_REJECTED,
+    TIMED_OUT,
+    CANCELLED
+}
+
 data class PluginExecutionResult(
     val success: Boolean,
     val message: String,
-    val capability: PluginCapability
+    val capability: PluginCapability,
+    val status: PluginExecutionStatus = if (success) {
+        PluginExecutionStatus.SUCCEEDED
+    } else {
+        PluginExecutionStatus.FAILED
+    },
+    val accessDecision: PluginAccessDecision? = null
+)
+
+/**
+ * Access is checked at execution time. It is deliberately separate from the
+ * persistent plugin connection grant: connection is one-time, OS permissions
+ * and provider credentials can expire or be revoked independently.
+ */
+sealed interface PluginAccessDecision {
+    data object Granted : PluginAccessDecision
+
+    data class PermissionRequired(
+        val id: String,
+        val label: String,
+        val explanation: String,
+        val androidPermission: String? = null,
+        val settingsAction: String? = null
+    ) : PluginAccessDecision
+
+    data class CredentialRequired(
+        val provider: String,
+        val explanation: String
+    ) : PluginAccessDecision
+
+    data class Unavailable(
+        val explanation: String
+    ) : PluginAccessDecision
+}
+
+fun interface PluginAccessChecker {
+    fun inspect(pluginId: String, action: PluginActionSpec): PluginAccessDecision
+}
+
+data class PluginToolDescriptor(
+    val toolName: String,
+    val pluginId: String,
+    val actionId: String,
+    val pluginName: String,
+    val description: String,
+    val capability: PluginCapability,
+    val arguments: Map<String, PluginFieldSpec>,
+    val requiresConfirmation: Boolean,
+    val connected: Boolean,
+    val access: PluginAccessDecision
 )
 
 data class PluginAuditEntry(
@@ -84,5 +162,9 @@ fun interface PluginAuditLog {
 interface PluginActionHandler {
     val actionId: String
     val capability: PluginCapability
+    /** Compiled argument schema is authoritative; imported manifests cannot widen it. */
+    val argumentSchema: Map<String, PluginFieldSpec> get() = emptyMap()
+    /** Compiled safety floor: a manifest may require more confirmation, never less. */
+    val requiresConfirmation: Boolean get() = false
     fun execute(arguments: Map<String, PluginValue>): PluginActionOutput
 }

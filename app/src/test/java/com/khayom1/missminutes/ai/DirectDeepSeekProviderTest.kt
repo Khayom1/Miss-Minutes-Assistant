@@ -97,4 +97,90 @@ class DirectDeepSeekProviderTest {
         }.exceptionOrNull()
         assertTrue(error is AiProviderException.InvalidResponse)
     }
+
+    @Test
+    fun sendsConnectedToolSchemaAndParsesFunctionCalls() = runBlocking {
+        val response = AiHttpResponse(
+            200,
+            """{"model":"deepseek-chat","choices":[{"message":{"content":null,"tool_calls":[{"id":"call_status_1","type":"function","function":{"name":"plugin_status","arguments":"{}"}}]}}]}"""
+        )
+        val transport = FakeTransport(response)
+        val schema = Json.parseToJsonElement(
+            """{"type":"object","properties":{},"required":[],"additionalProperties":false}"""
+        ).jsonObject
+        val requestWithTool = AiRequest(
+            messages = listOf(AiMessage(AiRole.USER, "Read device status")),
+            tools = listOf(AiToolDefinition("plugin_status", "Read device status", schema))
+        )
+        val result = DirectDeepSeekProvider(
+            DeepSeekApiKeySource { "sk-user-owned-test-key-123456" },
+            transport
+        ).complete(requestWithTool)
+
+        assertEquals("plugin_status", result.toolCalls.single().name)
+        assertEquals("{}", result.toolCalls.single().arguments)
+        val payload = Json.parseToJsonElement(transport.body!!).jsonObject
+        assertEquals("auto", payload["tool_choice"]!!.jsonPrimitive.content)
+        assertEquals("plugin_status", payload["tools"]!!.jsonArray.single().jsonObject
+            ["function"]!!.jsonObject["name"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun serializesAssistantToolCallsAndToolResultsForFollowUpRequests() = runBlocking {
+        val transport = FakeTransport()
+        val schema = Json.parseToJsonElement(
+            """{"type":"object","properties":{},"required":[],"additionalProperties":false}"""
+        ).jsonObject
+        val tool = AiToolDefinition("plugin_status", "Read device status", schema)
+        val requestWithToolResult = AiRequest(
+            messages = listOf(
+                AiMessage(AiRole.USER, "Read device status"),
+                AiMessage(
+                    AiRole.ASSISTANT,
+                    "",
+                    toolCalls = listOf(AiToolCall("call_status_1", "plugin_status", "{}"))
+                ),
+                AiMessage(
+                    AiRole.TOOL,
+                    "SUCCESS: 78 percent battery",
+                    toolCallId = "call_status_1",
+                    name = "plugin_status"
+                )
+            ),
+            tools = listOf(tool)
+        )
+        DirectDeepSeekProvider(
+            DeepSeekApiKeySource { "sk-user-owned-test-key-123456" },
+            transport
+        ).complete(requestWithToolResult)
+
+        val messages = Json.parseToJsonElement(transport.body!!).jsonObject["messages"]!!.jsonArray
+        assertEquals("call_status_1", messages[1].jsonObject["tool_calls"]!!.jsonArray.single()
+            .jsonObject["id"]!!.jsonPrimitive.content)
+        assertEquals("call_status_1", messages[2].jsonObject["tool_call_id"]!!.jsonPrimitive.content)
+        assertEquals("plugin_status", messages[2].jsonObject["name"]!!.jsonPrimitive.content)
+    }
+
+
+    @Test
+    fun rejectsNonFunctionToolCallTypes() = runBlocking {
+        val response = AiHttpResponse(
+            200,
+            """{"model":"deepseek-chat","choices":[{"message":{"content":null,"tool_calls":[{"id":"call_1","type":"shell","function":{"name":"plugin_status","arguments":"{}"}}]}}]}"""
+        )
+        val schema = Json.parseToJsonElement(
+            """{"type":"object","properties":{},"required":[],"additionalProperties":false}"""
+        ).jsonObject
+        val requestWithTool = AiRequest(
+            messages = listOf(AiMessage(AiRole.USER, "Read device status")),
+            tools = listOf(AiToolDefinition("plugin_status", "Read device status", schema))
+        )
+        val error = runCatching {
+            DirectDeepSeekProvider(
+                DeepSeekApiKeySource { "sk-user-owned-test-key-123456" },
+                FakeTransport(response)
+            ).complete(requestWithTool)
+        }.exceptionOrNull()
+        assertTrue(error is AiProviderException.InvalidResponse)
+    }
 }

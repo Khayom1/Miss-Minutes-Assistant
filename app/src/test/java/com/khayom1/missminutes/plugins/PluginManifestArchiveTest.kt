@@ -103,13 +103,15 @@ class PluginManifestArchiveTest {
             handlers = listOf(object : PluginActionHandler {
                 override val actionId = "read_info"
                 override val capability = PluginCapability.DEVICE_INFORMATION
+                override val argumentSchema = restored.actions.single().arguments
                 override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                     executed = true
                     return PluginActionOutput(true, "ok")
                 }
             }),
             consentStore = PluginConsentStore { false },
-            auditLog = PluginAuditLog {}
+            auditLog = PluginAuditLog {},
+            accessChecker = PluginAccessChecker { _, _ -> PluginAccessDecision.Granted }
         )
         assertTrue(registry.install(restored))
         val result = registry.execute(
