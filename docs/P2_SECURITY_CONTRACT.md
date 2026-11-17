@@ -1,62 +1,48 @@
-# P2 AI Gateway — Security Contract
+# P2 AI Provider — Security Contract
 
 ## Request path
 
-Android client → Android direct DeepSeek provider `miss-minutes-ai` → Supabase Auth verification → server-only quota RPC → DeepSeek Chat Completions.
+Android Settings → user enters their DeepSeek API key → Android Keystore encrypts it → Android app sends an HTTPS request directly to DeepSeek Chat Completions.
 
-The Android application must never call `api.deepseek.com` directly.
+The Android client calls only `https://api.deepseek.com/chat/completions` for DeepSeek inference. The AI request does not pass through Supabase Edge Functions and does not send Supabase credentials to DeepSeek.
 
-## Authentication and authorization
+## User-owned API key
 
-- The Edge Function is deployed with `verify_jwt = true`. The incoming `Authorization: Bearer ...` header is the signed Supabase user JWT, not an API key.
-- The Android client sends the user JWT in `Authorization` and the public publishable key in `apikey`.
-- The handler separately calls Supabase Auth `/auth/v1/user` to verify the current session and obtain the immutable user ID.
-- Missing/invalid sessions, unsupported roles, empty input, oversized bodies and requests whose final message is not from the user are rejected.
-- Session access/refresh tokens are encrypted with AES-256-GCM using a non-exportable Android Keystore key. SharedPreferences contain ciphertext only; sign-out invalidates the key and removes the stored ciphertext.
-- Passwords are transient UI state only. They are not written to SharedPreferences, SavedState or logs.
+- The user enters the personal DeepSeek API key in the app's Settings screen.
+- The input is masked and the app does not put the key in Compose saved state, navigation arguments, logs, analytics, crash messages or network diagnostics.
+- The key is encrypted using AES-256-GCM with a non-exportable Android Keystore key.
+- SharedPreferences contain ciphertext and the IV only, never plaintext.
+- The user can replace or remove the key from Settings.
+- The key is decrypted only when a request is about to be sent, on an IO dispatcher.
+- The key is transmitted only as `Authorization: Bearer ...` over HTTPS to the official DeepSeek API endpoint.
+- The key is never embedded in BuildConfig, resources, APK constants, source control, GitHub Actions secrets, Supabase secrets or Supabase database rows.
+- A distributed APK cannot safely contain a shared developer API key. Each user must supply their own credential.
 
-## Supabase server credentials
+## Supabase account session
 
-- Prefer the platform-injected `SUPABASE_SECRET_KEYS.default` value when available.
-- A modern `sb_secret_...` key is not a JWT: it is sent only in the `apikey` header and must never be placed in `Authorization: Bearer`.
-- The legacy `SUPABASE_SERVICE_ROLE_KEY` fallback is a JWT and is sent as both `apikey` and `Authorization: Bearer`.
-- These privileged credentials remain device-side. They are never embedded in Android source/BuildConfig or returned to the client.
-- The quota RPC is called only after authentication and provider configuration checks.
-
-## DeepSeek provider secret
-
-- DeepSeek uses the server-selected model `deepseek-chat`.
-- `DEEPSEEK_API_KEY` is read only from Supabase Edge Function secrets.
-- It is not returned, logged, embedded in Android source/BuildConfig or included in responses.
-- Missing provider configuration returns sanitized `503 ai_provider_not_configured` without consuming the user's quota.
-
-## Persistent request quota
-
-Remote migration: `20261116181610_miss_minutes_ai_rate_limits`.
-
-- Table: `private.miss_minutes_ai_rate_limits`.
-- RLS is enabled with no client policies; the `private` schema is not granted to `anon` or `authenticated`.
-- `public.consume_miss_minutes_ai_rate_limit(uuid, integer)` is SECURITY INVOKER, not SECURITY DEFINER.
-- Execute is revoked from PUBLIC, `anon` and `authenticated`; only `service_role` can invoke it.
-- The Edge Function invokes the RPC with a server-only Supabase secret key using the correct API-key header semantics above.
-- Current limit: 12 accepted requests per user per minute; stale buckets older than 24 hours are removed during quota checks.
-- Supabase security advisor's sole `INFO rls_enabled_no_policy` finding is intentional deny-by-default on this private table.
+- Existing Supabase email/password sign-in and encrypted session persistence remain a separate account feature in this increment.
+- Supabase session tokens continue to be encrypted with AES-256-GCM using a non-exportable Android Keystore key.
+- Supabase JWTs and publishable keys are not sent to DeepSeek.
+- Supabase authentication is not used as a proxy for DeepSeek inference.
 
 ## Input and output controls
 
-- Request bodies are streamed and capped at 24,000 bytes before JSON parsing.
 - Maximum 20 user/assistant messages; maximum 8,000 characters per message and 16,000 combined.
-- Client-supplied system/tool/function roles are rejected; the system instruction and 768-token output ceiling are server-controlled.
-- Upstream calls have a 45-second timeout.
-- Error bodies are normalized; provider errors and credentials are not returned or logged.
+- Output is limited by the existing client request contract to at most 768 tokens.
+- Requests use HTTPS and bounded connect/read/call timeouts.
+- HTTP 401/403 maps to an invalid-key error without signing the user out of Supabase.
+- HTTP 429 maps to a rate-limit error; upstream 5xx maps to a sanitized unavailable error.
+- Provider response parsing is bounded and malformed responses fail closed.
+- API keys and provider error bodies are never returned to the UI or logged.
 
-## Deployment and operational status
+## Supabase Edge Function status
 
-- Only the new `miss-minutes-ai` Edge Function may be deployed/updated for this project.
-- Existing `veyrost-auth` and `veyrost-proxy` functions must remain untouched.
-- The private quota migration is applied and its RLS/privilege state has been inspected against the live project.
-- The Edge Function is deployed with `verify_jwt=true`; the service-key header compatibility fix must be deployed before P2 acceptance.
-- Android email/password sign-in, sign-up, session restore/refresh, encrypted storage, sign-out and authenticated chat wiring are implemented on the P2 branch. CI must still pass on the exact final P2 head.
-- A live provider invocation requires a real authenticated Supabase user and `DEEPSEEK_API_KEY` configured in Edge Function secrets. The available Supabase connection does not expose secret management or a real user session, so neither secret presence nor a live provider call can be verified in this run.
-- If `DEEPSEEK_API_KEY` is not already configured, the owner must add it through Supabase Dashboard → Edge Functions → Secrets. Never share the value in chat or commit it.
-- No physical Samsung Galaxy A35 5G / Android 17 test is claimed.
+The older `miss-minutes-ai` function and its server-side DeepSeek secret are no longer part of the Android AI request path. They may remain deployed during migration but are not invoked by the app. They can be retired separately after verifying no other client depends on them.
+
+## Acceptance
+
+- Unit tests verify direct endpoint, key header, missing-key behavior, invalid-key behavior, rate limits and malformed responses.
+- Android instrumentation verifies the key round-trips through Keystore encryption and that the persisted preference does not contain plaintext.
+- Gitleaks, JVM tests, APK build, lint, API 35 instrumentation and artifact upload must pass on the exact final branch head.
+- A real request with a valid user-supplied key is required before claiming live DeepSeek acceptance.
+- Physical Samsung Galaxy A35 5G / Android 17 testing is reported only after an actual device test.
