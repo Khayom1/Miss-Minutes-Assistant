@@ -9,12 +9,15 @@ import com.khayom1.missminutes.ai.AndroidDeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.DeepSeekApiKeySource
 import com.khayom1.missminutes.ai.DirectDeepSeekProvider
 import com.khayom1.missminutes.ai.DefaultSupabaseAuthRepository
+import com.khayom1.missminutes.ai.HybridTtsProvider
 import com.khayom1.missminutes.ai.OkHttpAiHttpTransport
 import com.khayom1.missminutes.ai.SessionManager
+import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ui.MissMinutesApp
 
 class MainActivity : ComponentActivity() {
-    private var ttsProvider: AndroidTtsProvider? = null
+    private var ttsProvider: TtsProvider? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -33,15 +36,22 @@ class MainActivity : ComponentActivity() {
             transport = transport
         )
 
-        val localTts = AndroidTtsProvider(applicationContext)
-        ttsProvider = localTts
+        val offlineTts = AndroidTtsProvider(applicationContext)
+        val hybridTts = HybridTtsProvider(
+            context = applicationContext,
+            functionUrl = BuildConfig.SUPABASE_URL.trimEnd('/') + "/functions/v1/miss-minutes-tts",
+            publishableKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY,
+            accessTokenSource = sessionManager,
+            offlineFallback = offlineTts
+        )
+        ttsProvider = hybridTts
 
         setContent {
             MissMinutesApp(
                 sessionManager = sessionManager,
                 aiProvider = aiProvider,
                 apiKeyStore = apiKeyStore,
-                ttsProvider = localTts
+                ttsProvider = hybridTts
             )
         }
     }
