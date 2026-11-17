@@ -1672,6 +1672,7 @@ private fun SettingsScreen(
     onMemoryContextChange: (Boolean) -> Unit,
     onSignOut: () -> Unit
 ) {
+    val settingsScope = rememberCoroutineScope()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1978,7 +1979,12 @@ private fun SettingsScreen(
                 Button(
                     enabled = pluginConsent && deviceGrants[DeviceToolCapability.DEVICE_INFO] == true,
                     onClick = {
-                        deviceToolMessage = pluginResultText(onRunPluginAction("device_info"))
+                        settingsScope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                onRunPluginAction("device_info")
+                            }
+                            deviceToolMessage = pluginResultText(result)
+                        }
                     }
                 ) {
                     Text(if (language == AppLanguage.Tajik) "Маълумот" else if (language == AppLanguage.Russian) "Устройство" else "Device info")
@@ -1986,7 +1992,12 @@ private fun SettingsScreen(
                 Button(
                     enabled = pluginConsent && deviceGrants[DeviceToolCapability.BATTERY_STATUS] == true,
                     onClick = {
-                        deviceToolMessage = pluginResultText(onRunPluginAction("battery_status"))
+                        settingsScope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                onRunPluginAction("battery_status")
+                            }
+                            deviceToolMessage = pluginResultText(result)
+                        }
                     }
                 ) {
                     Text(if (language == AppLanguage.Tajik) "Батарея" else if (language == AppLanguage.Russian) "Батарея" else "Battery")
