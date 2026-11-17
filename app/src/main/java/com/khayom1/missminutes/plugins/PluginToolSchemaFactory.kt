@@ -32,7 +32,11 @@ object PluginToolSchemaFactory {
         return connectedTools.sortedBy { it.toolName }.map { tool ->
             AiToolDefinition(
                 name = tool.toolName,
-                description = (tool.pluginName + ": " + tool.description).take(512),
+                description = (
+                    tool.pluginName + ": " +
+                        (if (tool.requiresConfirmation) "Requires explicit user confirmation before execution. " else "") +
+                        tool.description
+                    ).take(512),
                 parameters = parametersSchema(tool.arguments)
             )
         }
