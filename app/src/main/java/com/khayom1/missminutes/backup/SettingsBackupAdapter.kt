@@ -30,16 +30,17 @@ object SettingsBackupAdapter {
 
     fun decode(payload: JsonObject): Settings {
         require(payload.keys == allowedKeys) { "Unknown or missing settings fields." }
-        require(payload["schemaVersion"]?.jsonPrimitive?.content?.toIntOrNull() == SCHEMA_VERSION) {
+        val version = payload["schemaVersion"]?.jsonPrimitive
+        require(version != null && !version.isString && version.content.toIntOrNull() == SCHEMA_VERSION) {
             "Unsupported settings backup version."
         }
         val value = Settings(
-            language = payload["language"]?.jsonPrimitive?.content ?: throw IllegalArgumentException("Language is missing."),
-            darkMode = payload["darkMode"]?.jsonPrimitive?.content?.toBooleanStrictOrNull()
+            language = payload["language"]?.jsonPrimitive?.takeIf { it.isString }?.content ?: throw IllegalArgumentException("Language is missing."),
+            darkMode = payload["darkMode"]?.jsonPrimitive?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull()
                 ?: throw IllegalArgumentException("Dark mode value is invalid."),
-            retentionDays = payload["retentionDays"]?.jsonPrimitive?.content?.toIntOrNull()
+            retentionDays = payload["retentionDays"]?.jsonPrimitive?.takeIf { !it.isString }?.content?.toIntOrNull()
                 ?: throw IllegalArgumentException("Retention value is invalid."),
-            memoryContextEnabled = payload["memoryContextEnabled"]?.jsonPrimitive?.content?.toBooleanStrictOrNull()
+            memoryContextEnabled = payload["memoryContextEnabled"]?.jsonPrimitive?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull()
                 ?: throw IllegalArgumentException("Memory setting is invalid.")
         )
         validate(value)
