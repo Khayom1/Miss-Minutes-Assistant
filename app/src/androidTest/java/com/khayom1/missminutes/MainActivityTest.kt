@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsOff
 import android.Manifest
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -29,12 +30,18 @@ import com.khayom1.missminutes.ai.SessionStore
 import com.khayom1.missminutes.ai.SupabaseAuthRepository
 import com.khayom1.missminutes.ai.SupabaseAuthSession
 import com.khayom1.missminutes.voice.WakeWordServiceState
+import com.khayom1.missminutes.memory.AndroidKeystoreConversationCipher
+import com.khayom1.missminutes.memory.LocalConversationStore
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.rules.RuleChain
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityTest {
@@ -47,6 +54,8 @@ class MainActivityTest {
     private lateinit var sessionManager: SessionManager
     private lateinit var aiProvider: FakeAiProvider
     private lateinit var apiKeyStore: MemoryApiKeyStore
+    private lateinit var conversationStore: LocalConversationStore
+    private lateinit var conversationDatabaseName: String
 
     private class MemoryStore : SessionStore {
         private var session: SupabaseAuthSession? = null
@@ -83,7 +92,7 @@ class MainActivityTest {
             accessToken = "test-user-access-token",
             refreshToken = "test-user-refresh-token",
             expiresAtEpochSeconds = 10_000L,
-            userId = "test-user-id",
+            userId = "test-user-${email.hashCode()}",
             email = email
         )
     }
@@ -113,6 +122,13 @@ class MainActivityTest {
         )
         aiProvider = FakeAiProvider()
         apiKeyStore = MemoryApiKeyStore()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        conversationDatabaseName = "ui-memory-test-${UUID.randomUUID()}.db"
+        conversationStore = LocalConversationStore(
+            context,
+            AndroidKeystoreConversationCipher("miss_minutes_test_conversation_aes_v1"),
+            conversationDatabaseName
+        )
         composeRule.setContent {
             com.khayom1.missminutes.ui.MissMinutesApp(
                 sessionManager = sessionManager,
@@ -131,7 +147,8 @@ class MainActivityTest {
                     ) = onError()
                     override fun stop() = Unit
                     override fun close() = Unit
-                }
+                },
+                conversationStore = conversationStore
             )
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -140,14 +157,24 @@ class MainActivityTest {
         }
     }
 
+    @After
+    fun tearDown() {
+        conversationStore.close()
+        InstrumentationRegistry.getInstrumentation().targetContext.deleteDatabase(conversationDatabaseName)
+    }
+
+    private fun waitForChatScreen() {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("chat_input").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     private fun signIn() {
         composeRule.onNodeWithTag("auth_email").performTextInput("user@example.test")
         composeRule.onNodeWithTag("auth_password").performTextInput("correct-horse-battery")
         composeRule.onNodeWithTag("auth_submit").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("How can I help?")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+        waitForChatScreen()
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
     }
 
     @Test
@@ -189,7 +216,7 @@ class MainActivityTest {
         }
 
         composeRule.onNodeWithText("Check the authenticated chat").assertIsDisplayed()
-        composeRule.onNodeWithText("Mock AI response").assertIsDisplayed()
+        composeRule.onNodeWithText("Mock AI response").performScrollTo().assertIsDisplayed()
         assertEquals(
             AiMessage(
                 com.khayom1.missminutes.ai.AiRole.USER,
@@ -197,6 +224,83 @@ class MainActivityTest {
             ),
             aiProvider.lastRequest?.messages?.last()
         )
+    }
+
+    @Test
+    fun historyPersistsConversationAndCanOpenIt() {
+        signIn()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Persistent conversation title")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Mock AI response").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("History").performClick()
+        composeRule.onNodeWithText("Persistent conversation title").assertIsDisplayed()
+        composeRule.onNodeWithText("Open").performClick()
+        // The same conversation title is also rendered in History, so wait for
+        // the Chat-only composer before asserting that navigation completed.
+        waitForChatScreen()
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Mock AI response").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Mock AI response").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun lateResponseFromPreviousConversationDoesNotAppearInNewConversation() {
+        signIn()
+        val lateCompletion = CompletableDeferred<AiCompletion>()
+        aiProvider.pendingCompletion = lateCompletion
+
+        composeRule.onNodeWithTag("chat_input").performTextInput("Original conversation prompt")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Thinking…").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("History").performClick()
+        composeRule.onNodeWithText("New conversation").performClick()
+        // Navigation happens after the new row is committed and loaded off the UI thread.
+        waitForChatScreen()
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+        composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
+
+        lateCompletion.complete(AiCompletion(content = "Late original conversation response", model = "test-mock"))
+        composeRule.waitForIdle()
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("Late original conversation response").fetchSemanticsNodes().size
+        )
+    }
+
+    @Test
+    fun savedMemoryIsSentOnlyAfterExplicitOptIn() {
+        signIn()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("memory_input").performScrollTo()
+        composeRule.onNodeWithTag("memory_input").performTextInput("Prefers concise Tajik explanations")
+        composeRule.onNodeWithText("Save memory").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 2_000) {
+            composeRule.onAllNodesWithText("Prefers concise Tajik explanations").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        val memorySwitch = composeRule.onNodeWithTag("memory_context_toggle")
+        memorySwitch.performScrollTo().assertIsOff()
+        memorySwitch.performClick()
+        composeRule.onNodeWithText("Chat").performClick()
+        composeRule.onNodeWithTag("chat_input").performTextInput("How should you explain?")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            aiProvider.lastRequest?.messages?.any { it.role.name == "SYSTEM" } == true
+        }
+        val requestMessages = aiProvider.lastRequest!!.messages
+        assertEquals("SYSTEM", requestMessages.first().role.name)
+        assertFalse(requestMessages.first().content.contains("Prefers concise Tajik explanations"))
+        val memoryContext = requestMessages[1]
+        assertEquals("USER", memoryContext.role.name)
+        assertTrue(memoryContext.content.contains("Prefers concise Tajik explanations"))
     }
 
     @Test

@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,7 +42,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -49,7 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -68,10 +71,15 @@ import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.SessionManager
+import com.khayom1.missminutes.ai.buildAiContextMessages
 import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.SupabaseAuthException
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
+import com.khayom1.missminutes.memory.ConversationSummary
+import com.khayom1.missminutes.memory.ConversationLimitReachedException
+import com.khayom1.missminutes.memory.LocalConversationStore
+import com.khayom1.missminutes.memory.MemoryItem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -181,7 +189,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         providerNotVerified = "Not yet verified",
         providerResponding = "Responding",
         historyTitle = "Conversation history",
-        historyEmpty = "Saved conversations will appear here in a later phase.",
+        historyEmpty = "No saved conversations yet.",
         settingsTitle = "App settings",
         language = "Language",
         appearance = "Appearance",
@@ -241,7 +249,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         providerNotVerified = "Ещё не проверено",
         providerResponding = "Отвечает",
         historyTitle = "История диалогов",
-        historyEmpty = "Сохранённые диалоги появятся в одном из следующих этапов.",
+        historyEmpty = "Сохранённых диалогов пока нет.",
         settingsTitle = "Настройки приложения",
         language = "Язык",
         appearance = "Оформление",
@@ -301,7 +309,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         providerNotVerified = "Ҳанӯз санҷида нашудааст",
         providerResponding = "Ҷавоб медиҳад",
         historyTitle = "Таърихи гуфтугӯҳо",
-        historyEmpty = "Гуфтугӯҳои сабтшуда дар марҳилаи баъдӣ пайдо мешаванд.",
+        historyEmpty = "Ҳоло гуфтугӯи сабтшуда нест.",
         settingsTitle = "Танзимоти барнома",
         language = "Забон",
         appearance = "Намуди зоҳирӣ",
@@ -349,7 +357,8 @@ fun MissMinutesApp(
     aiProvider: AiProvider,
     ttsProvider: TtsProvider,
     apiKeyStore: DeepSeekApiKeyStore,
-    speechInputProvider: SpeechInputProvider
+    speechInputProvider: SpeechInputProvider,
+    conversationStore: LocalConversationStore
 ) {
     val scope = rememberCoroutineScope()
     var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
@@ -471,9 +480,50 @@ fun MissMinutesApp(
     var apiKeySaving by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
     var apiKeyMessage by remember { mutableStateOf<String?>(null) }
-    var nextMessageId by remember { mutableStateOf(0L) }
-    val messages = remember { mutableStateListOf<ChatMessage>() }
+    var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var currentOwnerId by remember { mutableStateOf<String?>(null) }
+    var activeConversationId by remember { mutableStateOf<String?>(null) }
+    var conversationSummaries by remember { mutableStateOf<List<ConversationSummary>>(emptyList()) }
+    var memoryItems by remember { mutableStateOf<List<MemoryItem>>(emptyList()) }
+    var retentionDays by remember { mutableStateOf(LocalConversationStore.DEFAULT_RETENTION_DAYS) }
+    var memoryContextEnabled by remember { mutableStateOf(false) }
+    var memoryDraft by rememberSaveable { mutableStateOf("") }
+    var memoryMessage by remember { mutableStateOf<String?>(null) }
+    var exportPayload by remember { mutableStateOf<String?>(null) }
+    var exportError by remember { mutableStateOf<String?>(null) }
+    var pendingDeleteConversationId by remember { mutableStateOf<String?>(null) }
+    var confirmDeleteAll by remember { mutableStateOf(false) }
     val copy = copyFor(language)
+
+    suspend fun loadConversation(ownerId: String, preferredConversationId: String? = null) {
+        val snapshot = withContext(Dispatchers.IO) {
+            conversationStore.pruneExpired(ownerId)
+            val initial = conversationStore.listConversations(ownerId)
+            val selectedId = preferredConversationId?.takeIf { id -> initial.any { it.id == id } }
+                ?: initial.firstOrNull()?.id
+                ?: conversationStore.createConversation(ownerId)
+            val latest = conversationStore.listConversations(ownerId)
+            val storedMessages = conversationStore.getMessages(ownerId, selectedId)
+            val storedMemory = conversationStore.listMemory(ownerId)
+            val days = conversationStore.getRetentionDays(ownerId)
+            val useMemoryContext = conversationStore.isMemoryContextEnabled(ownerId)
+            Triple(selectedId, latest, Triple(storedMessages, storedMemory, Pair(days, useMemoryContext)))
+        }
+        currentOwnerId = ownerId
+        activeConversationId = snapshot.first
+        conversationSummaries = snapshot.second
+        messages = snapshot.third.first.map { item ->
+            ChatMessage(
+                id = item.id,
+                text = item.content,
+                isUser = item.role == LocalConversationStore.ROLE_USER
+            )
+        }
+        memoryItems = snapshot.third.second
+        retentionDays = snapshot.third.third.first
+        memoryContextEnabled = snapshot.third.third.second
+        aiHasResponded = messages.any { !it.isUser }
+    }
 
     val speechLocale = when (language) {
         AppLanguage.English -> Locale.US
@@ -531,6 +581,7 @@ fun MissMinutesApp(
                 isAuthenticated = true
                 userEmail = session.email.orEmpty()
                 authEmail = session.email.orEmpty()
+                loadConversation(session.userId)
             } else {
                 disableWakeListening()
             }
@@ -559,6 +610,7 @@ fun MissMinutesApp(
                             userEmail = session.email ?: authEmail.trim()
                             authEmail = userEmail
                             authPassword = ""
+                            loadConversation(session.userId)
                         } else {
                             isSignUp = false
                             authPassword = ""
@@ -571,6 +623,7 @@ fun MissMinutesApp(
                         userEmail = session.email ?: authEmail.trim()
                         authEmail = userEmail
                         authPassword = ""
+                        loadConversation(session.userId)
                     }
                 } catch (_: SupabaseAuthException.InvalidCredentials) {
                     authMessage = copy.invalidCredentials
@@ -596,7 +649,18 @@ fun MissMinutesApp(
             userEmail = ""
             authEmail = ""
             authPassword = ""
-            messages.clear()
+            messages = emptyList()
+            currentOwnerId = null
+            activeConversationId = null
+            conversationSummaries = emptyList()
+            memoryItems = emptyList()
+            memoryDraft = ""
+            memoryContextEnabled = false
+            exportPayload = null
+            exportError = null
+            pendingDeleteConversationId = null
+            confirmDeleteAll = false
+            memoryMessage = null
             ttsProvider.stop()
             speakingMessageId = null
             voiceError = null
@@ -686,19 +750,17 @@ fun MissMinutesApp(
     val submitMessage: () -> Unit = {
         val value = draft.trim()
         if (value.isNotEmpty() && value.length <= 8_000 && !isSending) {
-            val requestMessages = messages.takeLast(19).map { message ->
-                AiMessage(
-                    role = if (message.isUser) AiRole.USER else AiRole.ASSISTANT,
-                    content = message.text
-                )
-            }.toMutableList()
-            requestMessages.add(AiMessage(AiRole.USER, value))
-            while (
-                requestMessages.size > 1 &&
-                requestMessages.sumOf { it.content.length } > 16_000
-            ) {
-                requestMessages.removeAt(0)
-            }
+            val requestMessages = buildAiContextMessages(
+                history = messages.map { message ->
+                    AiMessage(
+                        role = if (message.isUser) AiRole.USER else AiRole.ASSISTANT,
+                        content = message.text
+                    )
+                },
+                currentUserMessage = value,
+                savedMemory = memoryItems.map { it.content },
+                includeSavedMemory = memoryContextEnabled
+            )
 
             val request = try {
                 AiRequest(messages = requestMessages)
@@ -709,21 +771,53 @@ fun MissMinutesApp(
 
             if (request != null) {
                 isSending = true
-                nextMessageId += 1
-                messages.add(ChatMessage(nextMessageId, value, true))
-                if (messages.size > 100) messages.removeAt(0)
                 draft = ""
                 chatError = null
                 val requestGeneration = sessionGeneration
 
                 scope.launch {
+                    var requestConversationId: String? = null
                     try {
+                        val ownerId = currentOwnerId ?: throw AiProviderException.AuthenticationRequired()
+                        val conversationId = activeConversationId ?: withContext(Dispatchers.IO) {
+                            conversationStore.createConversation(ownerId)
+                        }
+                        if (activeConversationId == null) activeConversationId = conversationId
+                        requestConversationId = conversationId
+                        val userMessageId = withContext(Dispatchers.IO) {
+                            conversationStore.appendMessage(
+                                ownerId,
+                                conversationId,
+                                LocalConversationStore.ROLE_USER,
+                                value
+                            )
+                        }
+                        if (requestGeneration != sessionGeneration) return@launch
+                        if (activeConversationId == conversationId) {
+                            messages = messages + ChatMessage(userMessageId, value, true)
+                        }
+                        conversationSummaries = withContext(Dispatchers.IO) {
+                            conversationStore.listConversations(ownerId)
+                        }
+
                         val completion: AiCompletion = aiProvider.complete(request)
                         if (requestGeneration != sessionGeneration) return@launch
-                        nextMessageId += 1
-                        messages.add(ChatMessage(nextMessageId, completion.content, false))
-                        if (messages.size > 100) messages.removeAt(0)
-                        aiHasResponded = true
+                        val assistantMessageId = withContext(Dispatchers.IO) {
+                            conversationStore.appendMessage(
+                                ownerId,
+                                conversationId,
+                                LocalConversationStore.ROLE_ASSISTANT,
+                                completion.content
+                            )
+                        }
+                        if (requestGeneration != sessionGeneration) return@launch
+                        if (activeConversationId == conversationId) {
+                            messages = messages + ChatMessage(assistantMessageId, completion.content, false)
+                            aiHasResponded = true
+                        }
+                        conversationSummaries = withContext(Dispatchers.IO) {
+                            conversationStore.listConversations(ownerId)
+                        }
                     } catch (_: AiProviderException.AuthenticationRequired) {
                         if (requestGeneration != sessionGeneration) return@launch
                         sessionGeneration += 1
@@ -733,7 +827,16 @@ fun MissMinutesApp(
                         userEmail = ""
                         authEmail = ""
                         authPassword = ""
-                        messages.clear()
+                        messages = emptyList()
+                        currentOwnerId = null
+                        activeConversationId = null
+                        conversationSummaries = emptyList()
+                        memoryItems = emptyList()
+                        memoryContextEnabled = false
+                        exportPayload = null
+                        exportError = null
+                        pendingDeleteConversationId = null
+                        memoryMessage = null
                         draft = ""
                         aiHasResponded = false
                         chatError = null
@@ -749,14 +852,28 @@ fun MissMinutesApp(
                         } finally {
                             authBusy = false
                         }
+                    } catch (_: ConversationLimitReachedException) {
+                        if (requestGeneration == sessionGeneration &&
+                            activeConversationId == requestConversationId
+                        ) {
+                            chatError = when (language) {
+                                AppLanguage.English -> "This conversation reached its 500-message limit. Start a new conversation to continue."
+                                AppLanguage.Russian -> "В диалоге достигнут лимит 500 сообщений. Создайте новый диалог."
+                                AppLanguage.Tajik -> "Ҳадди 500 паём дар ин гуфтугӯ пур шуд. Барои идома гуфтугӯи нав созед."
+                            }
+                        }
                     } catch (_: AiProviderException.RateLimited) {
-                        if (requestGeneration == sessionGeneration) {
+                        if (requestGeneration == sessionGeneration &&
+                            activeConversationId == requestConversationId
+                        ) {
                             chatError = copy.aiRateLimited
                         }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {
-                        if (requestGeneration == sessionGeneration) {
+                        if (requestGeneration == sessionGeneration &&
+                            activeConversationId == requestConversationId
+                        ) {
                             chatError = copy.sendFailed
                         }
                     } finally {
@@ -769,6 +886,120 @@ fun MissMinutesApp(
         }
     }
 
+
+    val openConversation: (String) -> Unit = { id ->
+        currentOwnerId?.let { owner ->
+            scope.launch {
+                loadConversation(owner, id)
+                selectedScreenName = AppScreen.Chat.name
+            }
+        }
+    }
+    val startNewConversation: () -> Unit = {
+        currentOwnerId?.let { owner ->
+            scope.launch {
+                val id = withContext(Dispatchers.IO) { conversationStore.createConversation(owner) }
+                loadConversation(owner, id)
+                selectedScreenName = AppScreen.Chat.name
+            }
+        }
+    }
+    val deleteConversation: (String) -> Unit = { id ->
+        currentOwnerId?.let { owner ->
+            scope.launch {
+                withContext(Dispatchers.IO) { conversationStore.deleteConversation(owner, id) }
+                pendingDeleteConversationId = null
+                if (activeConversationId == id) loadConversation(owner)
+                else conversationSummaries = withContext(Dispatchers.IO) {
+                    conversationStore.listConversations(owner)
+                }
+            }
+        }
+    }
+    val exportLocalData: () -> Unit = {
+        currentOwnerId?.let { owner ->
+            scope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
+                }
+                result.onSuccess {
+                    exportPayload = it
+                    exportError = null
+                }.onFailure {
+                    exportPayload = null
+                    exportError = when (language) {
+                        AppLanguage.English -> "Export is larger than the 2 MB safety limit. Delete older records and retry."
+                        AppLanguage.Russian -> "Экспорт превышает безопасный лимит 2 МБ. Удалите старые записи и повторите попытку."
+                        AppLanguage.Tajik -> "Содирот аз ҳадди бехатари 2 МБ зиёд аст. Сабтҳои кӯҳнаро пок карда, боз кӯшиш кунед."
+                    }
+                }
+            }
+        }
+    }
+    val deleteAllLocalData: () -> Unit = {
+        currentOwnerId?.let { owner ->
+            scope.launch {
+                withContext(Dispatchers.IO) { conversationStore.deleteAll(owner) }
+                confirmDeleteAll = false
+                activeConversationId = null
+                messages = emptyList()
+                conversationSummaries = emptyList()
+                memoryItems = emptyList()
+                memoryDraft = ""
+                exportPayload = null
+                exportError = null
+                pendingDeleteConversationId = null
+                aiHasResponded = false
+            }
+        }
+    }
+    val addMemory: () -> Unit = {
+        val owner = currentOwnerId
+        val value = memoryDraft.trim()
+        if (owner != null && value.isNotEmpty()) {
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) { conversationStore.addMemory(owner, value) }
+                }.onSuccess {
+                    memoryDraft = ""
+                    memoryMessage = null
+                    memoryItems = withContext(Dispatchers.IO) { conversationStore.listMemory(owner) }
+                }.onFailure {
+                    memoryMessage = when (language) {
+                        AppLanguage.English -> "Memory could not be saved. Keep it under 2,000 characters."
+                        AppLanguage.Russian -> "Не удалось сохранить память. Ограничение — 2 000 символов."
+                        AppLanguage.Tajik -> "Хотира нигоҳ дошта нашуд. Ҳадди аксар 2 000 аломат аст."
+                    }
+                }
+            }
+        }
+    }
+    val deleteMemory: (String) -> Unit = { id ->
+        currentOwnerId?.let { owner ->
+            scope.launch {
+                withContext(Dispatchers.IO) { conversationStore.deleteMemory(owner, id) }
+                memoryItems = withContext(Dispatchers.IO) { conversationStore.listMemory(owner) }
+            }
+        }
+    }
+    val changeRetention: (Int) -> Unit = { days ->
+        currentOwnerId?.let { owner ->
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    conversationStore.setRetentionDays(owner, days)
+                    conversationStore.pruneExpired(owner)
+                }
+                retentionDays = days
+                conversationSummaries = withContext(Dispatchers.IO) {
+                    conversationStore.listConversations(owner)
+                }
+                memoryItems = withContext(Dispatchers.IO) { conversationStore.listMemory(owner) }
+                if (activeConversationId == null || conversationSummaries.none { it.id == activeConversationId }) {
+                    loadConversation(owner)
+                }
+            }
+        }
+    }
 
     val speakMessage: (ChatMessage) -> Unit = { message ->
         if (!message.isUser) {
@@ -874,7 +1105,25 @@ fun MissMinutesApp(
                                 },
                                 voiceStatus = copy.voiceNeedsSetup
                             )
-                            AppScreen.History -> HistoryScreen(copy)
+                            AppScreen.History -> HistoryScreen(
+                                copy = copy,
+                                language = language,
+                                conversations = conversationSummaries,
+                                exportPayload = exportPayload,
+                                exportError = exportError,
+                                pendingDeleteConversationId = pendingDeleteConversationId,
+                                confirmDeleteAll = confirmDeleteAll,
+                                onNewConversation = startNewConversation,
+                                onOpenConversation = openConversation,
+                                onRequestDelete = { pendingDeleteConversationId = it },
+                                onConfirmDelete = { id -> deleteConversation(id) },
+                                onCancelDelete = { pendingDeleteConversationId = null },
+                                onExport = exportLocalData,
+                                onDismissExport = { exportPayload = null },
+                                onRequestDeleteAll = { confirmDeleteAll = true },
+                                onConfirmDeleteAll = deleteAllLocalData,
+                                onCancelDeleteAll = { confirmDeleteAll = false }
+                            )
                             AppScreen.Settings -> SettingsScreen(
                                 copy = copy,
                                 language = language,
@@ -893,6 +1142,25 @@ fun MissMinutesApp(
                                 onDisableWakeListening = disableWakeListening,
                                 onLanguageChange = { selectedLanguageName = it.name },
                                 onDarkThemeChange = { darkTheme = it },
+                                memoryItems = memoryItems,
+                                memoryDraft = memoryDraft,
+                                memoryMessage = memoryMessage,
+                                retentionDays = retentionDays,
+                                memoryContextEnabled = memoryContextEnabled,
+                                onMemoryDraftChange = { memoryDraft = it.take(LocalConversationStore.MAX_MEMORY_CHARS) },
+                                onAddMemory = addMemory,
+                                onDeleteMemory = deleteMemory,
+                                onRetentionChange = changeRetention,
+                                onMemoryContextChange = { enabled ->
+                                    currentOwnerId?.let { owner ->
+                                        scope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                conversationStore.setMemoryContextEnabled(owner, enabled)
+                                            }
+                                            memoryContextEnabled = enabled
+                                        }
+                                    }
+                                },
                                 onSignOut = signOut
                             )
                         }
@@ -1017,7 +1285,14 @@ private fun ChatScreen(
     speechListening: Boolean,
     speechError: String?,
     onSpeechInput: () -> Unit
-) {
+) { 
+    val messageListState = rememberLazyListState()
+    LaunchedEffect(messages.lastOrNull()?.id) {
+        if (messages.isNotEmpty()) {
+            messageListState.animateScrollToItem(messages.lastIndex)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1036,6 +1311,7 @@ private fun ChatScreen(
             )
         }
         LazyColumn(
+            state = messageListState,
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1176,15 +1452,127 @@ private fun StatusCard(title: String, status: String) {
 }
 
 @Composable
-private fun HistoryScreen(copy: UiCopy) {
+private fun HistoryScreen(
+    copy: UiCopy,
+    language: AppLanguage,
+    conversations: List<ConversationSummary>,
+    exportPayload: String?,
+    exportError: String?,
+    pendingDeleteConversationId: String?,
+    confirmDeleteAll: Boolean,
+    onNewConversation: () -> Unit,
+    onOpenConversation: (String) -> Unit,
+    onRequestDelete: (String) -> Unit,
+    onConfirmDelete: (String) -> Unit,
+    onCancelDelete: () -> Unit,
+    onExport: () -> Unit,
+    onDismissExport: () -> Unit,
+    onRequestDeleteAll: () -> Unit,
+    onConfirmDeleteAll: () -> Unit,
+    onCancelDeleteAll: () -> Unit
+) {
+    val clipboard = LocalClipboardManager.current
+    val labels = when (language) {
+        AppLanguage.English -> listOf("New conversation", "Export all data", "Delete all local data", "Open", "Delete", "messages", "Cancel", "Delete", "Export preview; copying happens only when you choose Copy")
+        AppLanguage.Russian -> listOf("Новый диалог", "Экспорт всех данных", "Удалить все локальные данные", "Открыть", "Удалить", "сообщений", "Отмена", "Удалить", "Предпросмотр экспорта; копирование выполняется только по вашему выбору")
+        AppLanguage.Tajik -> listOf("Гуфтугӯи нав", "Содироти ҳамаи маълумот", "Пок кардани ҳамаи маълумоти маҳаллӣ", "Кушодан", "Пок кардан", "паём", "Бекор кардан", "Пок кардан", "Намунаи содирот; нусхабардорӣ танҳо бо интихоби шумо иҷро мешавад")
+    }
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(copy.historyTitle, style = MaterialTheme.typography.headlineMedium)
-        Text(copy.historyEmpty, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onNewConversation) { Text(labels[0]) }
+            TextButton(onClick = onExport, enabled = conversations.isNotEmpty()) { Text(labels[1]) }
+        }
+        TextButton(onClick = onRequestDeleteAll, enabled = conversations.isNotEmpty()) {
+            Text(labels[2], color = MaterialTheme.colorScheme.error)
+        }
+        if (exportError != null) {
+            Text(exportError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        if (conversations.isEmpty()) {
+            Text(copy.historyEmpty, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(conversations, key = { it.id }) { conversation ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(conversation.title, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "${conversation.messageCount} ${labels[5]}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { onOpenConversation(conversation.id) }) { Text(labels[3]) }
+                                TextButton(onClick = { onRequestDelete(conversation.id) }) {
+                                    Text(labels[4], color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (exportPayload != null) {
+        AlertDialog(
+            onDismissRequest = onDismissExport,
+            title = { Text(if (language == AppLanguage.Tajik) "Содироти маълумот" else if (language == AppLanguage.Russian) "Экспорт данных" else "Export data") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(labels[8], style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (language == AppLanguage.Tajik) "Нусхабардорӣ маълумотро ба буфери мубодила мегузорад." else if (language == AppLanguage.Russian) "Копирование помещает данные в буфер обмена." else "Copy places the full export on the system clipboard.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(exportPayload.take(1_500), style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    clipboard.setText(AnnotatedString(exportPayload))
+                    onDismissExport()
+                }) { Text(if (language == AppLanguage.Tajik) "Нусхабардорӣ" else if (language == AppLanguage.Russian) "Копировать" else "Copy export") }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissExport) { Text(labels[6]) }
+            }
+        )
+    }
+
+    if (pendingDeleteConversationId != null) {
+        AlertDialog(
+            onDismissRequest = onCancelDelete,
+            title = { Text(if (language == AppLanguage.Tajik) "Гуфтугӯ пок шавад?" else if (language == AppLanguage.Russian) "Удалить диалог?" else "Delete conversation?") },
+            text = { Text(if (language == AppLanguage.Tajik) "Ин амал танҳо ин гуфтугӯро аз телефони шумо пок мекунад." else if (language == AppLanguage.Russian) "Этот диалог будет удалён только с этого устройства." else "This conversation will be deleted from this device.") },
+            confirmButton = {
+                TextButton(onClick = { onConfirmDelete(pendingDeleteConversationId) }) {
+                    Text(labels[7], color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = onCancelDelete) { Text(labels[6]) } }
+        )
+    }
+
+    if (confirmDeleteAll) {
+        AlertDialog(
+            onDismissRequest = onCancelDeleteAll,
+            title = { Text(if (language == AppLanguage.Tajik) "Ҳамаи маълумоти маҳаллӣ пок шавад?" else if (language == AppLanguage.Russian) "Удалить все локальные данные?" else "Delete all local data?") },
+            text = { Text(if (language == AppLanguage.Tajik) "Ҳамаи гуфтугӯҳо ва хотираҳои маҳаллӣ пок мешаванд. Ин амал барқарор намешавад." else if (language == AppLanguage.Russian) "Все локальные диалоги и сохранённые воспоминания будут удалены. Это действие нельзя отменить." else "All local conversations and saved memories will be deleted. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = onConfirmDeleteAll) {
+                    Text(if (language == AppLanguage.Tajik) "Ҳамаашро пок кун" else if (language == AppLanguage.Russian) "Удалить всё" else "Delete everything", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = onCancelDeleteAll) { Text(labels[6]) } }
+        )
     }
 }
 
@@ -1207,6 +1595,16 @@ private fun SettingsScreen(
     onDisableWakeListening: () -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
     onDarkThemeChange: (Boolean) -> Unit,
+    memoryItems: List<MemoryItem>,
+    memoryDraft: String,
+    memoryMessage: String?,
+    retentionDays: Int,
+    memoryContextEnabled: Boolean,
+    onMemoryDraftChange: (String) -> Unit,
+    onAddMemory: () -> Unit,
+    onDeleteMemory: (String) -> Unit,
+    onRetentionChange: (Int) -> Unit,
+    onMemoryContextChange: (Boolean) -> Unit,
     onSignOut: () -> Unit
 ) {
     Column(
@@ -1351,6 +1749,105 @@ private fun SettingsScreen(
                 modifier = Modifier.testTag("wake_phrase_toggle")
             ) {
                 Text(if (wakeEnabled) wakeStop else wakeStart)
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Local memory"
+                    AppLanguage.Russian -> "Локальная память"
+                    AppLanguage.Tajik -> "Хотираи маҳаллӣ"
+                },
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Only items you explicitly save are stored. Content is encrypted with Android Keystore and is not synced to a server."
+                    AppLanguage.Russian -> "Сохраняются только добавленные вами записи. Данные шифруются Android Keystore и не синхронизируются с сервером."
+                    AppLanguage.Tajik -> "Танҳо маълумоте нигоҳ дошта мешавад, ки худатон илова мекунед. Он бо Android Keystore рамзгузорӣ шуда, ба сервер ҳамоҳанг намешавад."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    when (language) {
+                        AppLanguage.English -> "Include saved memory in AI requests"
+                        AppLanguage.Russian -> "Добавлять сохранённую память в запросы ИИ"
+                        AppLanguage.Tajik -> "Илова кардани хотира ба дархостҳои AI"
+                    },
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Switch(
+                    checked = memoryContextEnabled,
+                    onCheckedChange = onMemoryContextChange,
+                    modifier = Modifier.testTag("memory_context_toggle")
+                )
+            }
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Off by default. When enabled, saved notes are sent to DeepSeek with your next message."
+                    AppLanguage.Russian -> "По умолчанию выключено. При включении сохранённые заметки отправляются в DeepSeek вместе со следующим сообщением."
+                    AppLanguage.Tajik -> "Бо нобаёнӣ хомӯш аст. Ҳангоми фаъол кардан, хотира бо паёми навбатӣ ба DeepSeek фиристода мешавад."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            OutlinedTextField(
+                value = memoryDraft,
+                onValueChange = onMemoryDraftChange,
+                modifier = Modifier.fillMaxWidth().testTag("memory_input"),
+                label = { Text(if (language == AppLanguage.Tajik) "Чиро дар хотир нигоҳ дорам?" else if (language == AppLanguage.Russian) "Что запомнить?" else "What should I remember?") },
+                maxLines = 3
+            )
+            Button(onClick = onAddMemory, enabled = memoryDraft.isNotBlank()) {
+                Text(if (language == AppLanguage.Tajik) "Дар хотира нигоҳ дор" else if (language == AppLanguage.Russian) "Сохранить в памяти" else "Save memory")
+            }
+            if (memoryMessage != null) {
+                Text(memoryMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            memoryItems.forEach { item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(item.content, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { onDeleteMemory(item.id) }) {
+                        Text(if (language == AppLanguage.Tajik) "Пок" else if (language == AppLanguage.Russian) "Удалить" else "Delete")
+                    }
+                }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                if (language == AppLanguage.Tajik) "Муҳлати нигоҳдорӣ" else if (language == AppLanguage.Russian) "Срок хранения" else "Retention period",
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                if (language == AppLanguage.Tajik) "Гуфтугӯҳо ва хотираҳои кӯҳна ба таври худкор пок мешаванд. 0 маънои бе муҳлатро дорад." else if (language == AppLanguage.Russian) "Старые диалоги и записи удаляются автоматически. 0 означает без ограничения срока." else "Older conversations and memories are automatically deleted. 0 means no automatic age-based deletion.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(30, 90, 365, 0).forEach { days ->
+                    FilterChip(
+                        selected = retentionDays == days,
+                        onClick = { onRetentionChange(days) },
+                        label = {
+                            Text(
+                                when (days) {
+                                    0 -> if (language == AppLanguage.Tajik) "Ҳамеша" else if (language == AppLanguage.Russian) "Всегда" else "Never"
+                                    365 -> if (language == AppLanguage.Tajik) "1 сол" else if (language == AppLanguage.Russian) "1 год" else "1 year"
+                                    else -> "$days"
+                                }
+                            )
+                        }
+                    )
+                }
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
