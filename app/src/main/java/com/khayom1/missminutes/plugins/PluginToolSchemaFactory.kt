@@ -1,5 +1,6 @@
 package com.khayom1.missminutes.plugins
 
+import com.khayom1.missminutes.ai.AiToolDefinition
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -13,16 +14,29 @@ object PluginToolSchemaFactory {
             "Tool names must be unique."
         }
         return buildJsonArray {
-            tools.filter { it.connected }.sortedBy { it.toolName }.forEach { tool ->
+            toAiToolDefinitions(tools).forEach { tool ->
                 add(buildJsonObject {
                     put("type", "function")
                     put("function", buildJsonObject {
-                        put("name", tool.toolName)
-                        put("description", "${tool.pluginName}: ${tool.description}".take(512))
-                        put("parameters", parametersSchema(tool.arguments))
+                        put("name", tool.name)
+                        put("description", tool.description)
+                        put("parameters", tool.parameters)
                     })
                 })
             }
+        }
+    }
+
+    fun toAiToolDefinitions(tools: Collection<PluginToolDescriptor>): List<AiToolDefinition> {
+        require(tools.map { it.toolName }.distinct().size == tools.size) {
+            "Tool names must be unique."
+        }
+        return tools.filter { it.connected }.sortedBy { it.toolName }.map { tool ->
+            AiToolDefinition(
+                name = tool.toolName,
+                description = tool.pluginName + ": " + tool.description.take(512),
+                parameters = parametersSchema(tool.arguments)
+            )
         }
     }
 
