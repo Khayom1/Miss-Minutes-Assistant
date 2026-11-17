@@ -162,7 +162,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Your personal assistant, ready when you are.",
         composerHint = "Message Miss Minutes",
         send = "Send",
-        gatewayNotice = "Messages use your authenticated Supabase session and the private AI gateway.",
+        gatewayNotice = "AI replies use your personal DeepSeek API key, encrypted on this device and sent directly to DeepSeek over HTTPS. Supabase is used only for sign-in.",
         you = "You",
         dashboardTitle = "Your workspace",
         dashboardBody = "A clear view of assistant capabilities and their connection status.",
@@ -217,7 +217,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ваш персональный помощник всегда под рукой.",
         composerHint = "Сообщение Miss Minutes",
         send = "Отправить",
-        gatewayNotice = "Сообщения отправляются через защищённый шлюз с вашей сессией Supabase.",
+        gatewayNotice = "Ответы ИИ используют ваш личный API-ключ DeepSeek: он хранится на устройстве в зашифрованном виде и отправляется напрямую в DeepSeek по HTTPS. Supabase используется только для входа.",
         you = "Вы",
         dashboardTitle = "Ваше пространство",
         dashboardBody = "Состояние возможностей помощника и подключённых сервисов.",
@@ -272,7 +272,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ёвари шахсии шумо ҳамеша омода аст.",
         composerHint = "Ба Miss Minutes паём нависед",
         send = "Фиристодан",
-        gatewayNotice = "Паёмҳо тавассути сессияи тасдиқшудаи Supabase ва шлюзи муҳофизатшуда мераванд.",
+        gatewayNotice = "Ҷавобҳои AI бо калиди шахсии DeepSeek-и шумо кор мекунанд: калид дар телефон рамзгузорӣ шуда, мустақиман тавассути HTTPS ба DeepSeek фиристода мешавад. Supabase танҳо барои ворид шудан истифода мешавад.",
         you = "Шумо",
         dashboardTitle = "Муҳити кории шумо",
         dashboardBody = "Ҳолати имкониятҳо ва пайвасти хидматҳои ёвар.",
@@ -417,6 +417,7 @@ fun MissMinutesApp(
             Intent(context, MissMinutesWakeWordService::class.java)
                 .setAction(MissMinutesWakeWordService.ACTION_STOP)
         )
+        WakeWordServiceState.setEnabled(context, false)
         wakeEnabled = false
         wakeMessage = when (language) {
             AppLanguage.English -> "Offline wake phrase listening is off."
@@ -467,10 +468,13 @@ fun MissMinutesApp(
                 isAuthenticated = true
                 userEmail = session.email.orEmpty()
                 authEmail = session.email.orEmpty()
+            } else {
+                disableWakeListening()
             }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
+            disableWakeListening()
             authMessage = copy.authUnavailable
         } finally {
             isRestoring = false
@@ -523,6 +527,7 @@ fun MissMinutesApp(
     val signOut: () -> Unit = {
         if (!authBusy) {
             authBusy = true
+            disableWakeListening()
             sessionGeneration += 1
             isAuthenticated = false
             userEmail = ""
@@ -660,6 +665,7 @@ fun MissMinutesApp(
                         if (requestGeneration != sessionGeneration) return@launch
                         sessionGeneration += 1
                         authBusy = true
+                        disableWakeListening()
                         isAuthenticated = false
                         userEmail = ""
                         authEmail = ""
@@ -1229,9 +1235,9 @@ private fun SettingsScreen(
             AppLanguage.Tajik -> "Ибораи бедоркунии офлайн"
         }
         val wakeDisclosure = when (language) {
-            AppLanguage.English -> "When enabled, Miss Minutes keeps the microphone active through an Android foreground service while this feature is on. Audio is processed only by Android's on-device speech recognizer (Android 13+ with an installed offline English model); there is no cloud fallback or audio upload. If local recognition is unavailable, listening stops. A persistent notification is shown. Android may stop the service because of Force stop, permission changes or system restrictions."
-            AppLanguage.Russian -> "При включении Miss Minutes использует микрофон через фоновую службу Android, пока функция активна. Звук обрабатывается только встроенным офлайн-распознавателем Android (Android 13+ с установленной офлайн-моделью английского языка); облачного резервного режима и отправки аудио нет. Если локальное распознавание недоступно, прослушивание остановится. Постоянное уведомление обязательно. Android может остановить службу при принудительной остановке, отзыве разрешений или системных ограничениях."
-            AppLanguage.Tajik -> "Ҳангоми фаъол будан Miss Minutes микрофонро тавассути хидмати пешзаминаи Android истифода мебарад. Овоз танҳо дар дастгоҳ коркард мешавад (Android 13+ ва модели офлайнии забони англисӣ лозим аст); ба абр фиристода намешавад ва роҳи эҳтиётии онлайн вуҷуд надорад. Агар шинохти маҳаллӣ дастнорас бошад, гӯшкунӣ қатъ мешавад. Огоҳиномаи доимӣ нишон дода мешавад. Android метавонад хидматро ҳангоми Force stop, бекор шудани иҷозат ё маҳдудияти система қатъ кунад."
+            AppLanguage.English -> "When enabled, Miss Minutes keeps the microphone active through an Android foreground service while this feature is on. Audio is processed only by Android's on-device speech recognizer (Android 12+ with an installed offline English model); there is no cloud fallback or audio upload. If local recognition is unavailable, listening stops. A persistent notification is shown. Android may stop the service because of Force stop, permission changes or system restrictions."
+            AppLanguage.Russian -> "При включении Miss Minutes использует микрофон через фоновую службу Android, пока функция активна. Звук обрабатывается только встроенным офлайн-распознавателем Android (Android 12+ с установленной офлайн-моделью английского языка); облачного резервного режима и отправки аудио нет. Если локальное распознавание недоступно, прослушивание остановится. Постоянное уведомление обязательно. Android может остановить службу при принудительной остановке, отзыве разрешений или системных ограничениях."
+            AppLanguage.Tajik -> "Ҳангоми фаъол будан Miss Minutes микрофонро тавассути хидмати пешзаминаи Android истифода мебарад. Овоз танҳо дар дастгоҳ коркард мешавад (Android 12+ ва модели офлайнии забони англисӣ лозим аст); ба абр фиристода намешавад ва роҳи эҳтиётии онлайн вуҷуд надорад. Агар шинохти маҳаллӣ дастнорас бошад, гӯшкунӣ қатъ мешавад. Огоҳиномаи доимӣ нишон дода мешавад. Android метавонад хидматро ҳангоми Force stop, бекор шудани иҷозат ё маҳдудияти система қатъ кунад."
         }
         val wakeStart = when (language) {
             AppLanguage.English -> "Enable microphone listening"
@@ -1251,7 +1257,12 @@ private fun SettingsScreen(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(wakeTitle, fontWeight = FontWeight.SemiBold)
             Text("Miss Minutes", fontWeight = FontWeight.Medium)
-            Text(wakeDisclosure, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text(
+                wakeDisclosure,
+                modifier = Modifier.testTag("wake_phrase_disclosure"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
             Text(wakeState, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
             if (wakeMessage != null) {
                 Text(wakeMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
