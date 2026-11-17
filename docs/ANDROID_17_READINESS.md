@@ -7,7 +7,7 @@
 - Java bytecode remains Java 17.
 - Android Gradle Plugin is pinned to 9.3.1; Gradle is pinned to 9.5.0.
 - Kotlin Gradle plugin 2.4.21 is pinned explicitly as AGP's built-in Kotlin runtime dependency. The legacy `org.jetbrains.kotlin.android` application plugin is no longer applied; Compose and serialization compiler plugins remain.
-- CI runs the complete instrumentation suite on API 37 and retains an API 35 compatibility run.
+- API 37 is currently delivered through the Android Cinnamon Bun Preview SDK channel; CI explicitly installs preview-channel platform and emulator packages. CI runs the complete instrumentation suite on API 37 and retains an API 35 compatibility run. This is preview validation, not a Play-ready stable SDK claim.
 
 ## Android 17 behavior audit
 
