@@ -5,6 +5,9 @@ import com.khayom1.missminutes.plugins.PluginManifest
 import com.khayom1.missminutes.plugins.PluginActionSpec
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -57,6 +60,39 @@ class BackupPayloadAdaptersTest {
         assertNull(restored.conversationExportJson)
         assertNull(restored.pluginManifests)
         assertEquals(settings, restored.settings)
+    }
+
+    @Test
+    fun selectedConversationIsNormalizedForRestore() {
+        val selected = buildJsonObject {
+            put("schemaVersion", 2)
+            put("exportedAt", 1234L)
+            put("conversation", buildJsonObject {
+                put("id", "conversation-1")
+                put("title", "Selected")
+                put("createdAt", 100L)
+                put("updatedAt", 200L)
+                put("messages", kotlinx.serialization.json.buildJsonArray {})
+            })
+        }
+        val payloads = BackupPayloadAdapters.encode(
+            setOf(BackupArchive.Category.CHAT_HISTORY),
+            selected.toString(),
+            null,
+            emptyList(),
+            30
+        )
+        val restored = BackupPayloadAdapters.decode(
+            BackupArchive.instance.decode(
+                BackupArchive.instance.encode(payloads, "correct-horse-battery".toCharArray()),
+                "correct-horse-battery".toCharArray()
+            )
+        )
+        val normalized = kotlinx.serialization.json.Json.parseToJsonElement(
+            restored.conversationExportJson!!
+        ).jsonObject
+        assertEquals(1, normalized.getValue("conversations").jsonArray.size)
+        assertEquals(30, normalized.getValue("retentionDays").jsonPrimitive.content.toInt())
     }
 
     @Test
