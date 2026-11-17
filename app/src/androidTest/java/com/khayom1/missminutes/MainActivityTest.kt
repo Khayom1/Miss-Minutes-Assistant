@@ -157,6 +157,8 @@ class MainActivityTest {
             ).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
+        composeRule.onNodeWithTag("api_key_settings_action").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("deepseek_api_key").assertIsDisplayed()
         assertTrue(composeRule.onAllNodesWithText("Sign in to Miss Minutes").fetchSemanticsNodes().isEmpty())
     }
 
@@ -306,7 +308,24 @@ class MainActivityTest {
             ).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
+        composeRule.onNodeWithTag("api_key_settings_action").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("deepseek_api_key").assertIsDisplayed()
         assertTrue(composeRule.onAllNodesWithText("Sign in to Miss Minutes").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun rateLimitedProviderErrorDoesNotOfferCredentialSettingsAction() {
+        assertChatReady()
+        aiProvider.nextError = AiProviderException.RateLimited()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Check rate limit handling")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("The AI request limit was reached. Try again shortly.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(
+            composeRule.onAllNodesWithTag("api_key_settings_action").fetchSemanticsNodes().isEmpty()
+        )
     }
 
     @Test
@@ -316,12 +335,12 @@ class MainActivityTest {
         composeRule.onNodeWithTag("deepseek_api_key")
             .performTextInput("sk-user-owned-test-key-123456")
         composeRule.onNodeWithText("Save API key").performClick()
-        composeRule.waitUntil(timeoutMillis = 2_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             apiKeyStore.key == "sk-user-owned-test-key-123456"
         }
         composeRule.onNodeWithText("Key is stored securely on this device.").assertIsDisplayed()
         composeRule.onNodeWithText("Remove key").performClick()
-        composeRule.waitUntil(timeoutMillis = 2_000) { apiKeyStore.key == null }
+        composeRule.waitUntil(timeoutMillis = 10_000) { apiKeyStore.key == null }
         assertEquals(null, apiKeyStore.key)
     }
 

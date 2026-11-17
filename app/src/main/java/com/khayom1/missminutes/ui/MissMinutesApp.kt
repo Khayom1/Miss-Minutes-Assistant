@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
@@ -82,6 +83,7 @@ import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.buildAiContextMessages
 import com.khayom1.missminutes.ai.TtsProvider
+import com.khayom1.missminutes.ai.TtsBackgroundPlaybackGuard
 import com.khayom1.missminutes.device.AndroidDeviceToolHost
 import com.khayom1.missminutes.device.DeviceToolCapability
 import com.khayom1.missminutes.device.DeviceToolCommand
@@ -340,6 +342,7 @@ fun MissMinutesApp(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val appSettingsStore = remember(context) { AndroidAppSettingsStore(context) }
     var selectedLanguageName by remember(context) {
         mutableStateOf(when (appSettingsStore.loadAppearance().language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name })
@@ -483,8 +486,17 @@ fun MissMinutesApp(
     var userEmail by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
+    var chatErrorNeedsApiKey by remember { mutableStateOf(false) }
     var aiHasResponded by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<Long?>(null) }
+    DisposableEffect(lifecycleOwner, ttsProvider) {
+        val playbackGuard = TtsBackgroundPlaybackGuard(
+            stopPlayback = ttsProvider::stop,
+            onStopped = { speakingMessageId = null }
+        )
+        lifecycleOwner.lifecycle.addObserver(playbackGuard)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(playbackGuard) }
+    }
     var voiceError by remember { mutableStateOf<String?>(null) }
     var speechError by remember { mutableStateOf<String?>(null) }
     var speechListening by remember { mutableStateOf(false) }
@@ -1060,6 +1072,8 @@ fun MissMinutesApp(
                 apiKeySaving = false
                 result.onSuccess {
                     apiKeyConfigured = true
+                    if (chatErrorNeedsApiKey) chatError = null
+                    chatErrorNeedsApiKey = false
                     apiKeyInput = ""
                     apiKeyMessage = when (language) {
                         AppLanguage.English -> "API key saved securely on this device."
@@ -1141,6 +1155,7 @@ fun MissMinutesApp(
                 isSending = true
                 draft = ""
                 chatError = null
+                chatErrorNeedsApiKey = false
                 val requestGeneration = conversationGeneration
 
                 scope.launch {
@@ -1197,9 +1212,11 @@ fun MissMinutesApp(
                     } catch (_: AiProviderException.MissingApiKey) {
                         if (requestGeneration == conversationGeneration) {
                             chatError = copy.apiKeyRequired
+                            chatErrorNeedsApiKey = true
                         }
                     } catch (_: AiProviderException.InvalidApiKey) {
                         if (requestGeneration == conversationGeneration) {
+                            chatErrorNeedsApiKey = true
                             chatError = when (language) {
                                 AppLanguage.Tajik -> "DeepSeek ин калиди API-ро рад кард. Онро дар Танзимот санҷед ё иваз кунед."
                                 AppLanguage.Russian -> "DeepSeek отклонил этот API-ключ. Проверьте его или замените в настройках."
@@ -1426,6 +1443,8 @@ fun MissMinutesApp(
                                 draft = draft,
                                 isSending = isSending,
                                 error = chatError,
+                                showApiKeySettingsAction = chatErrorNeedsApiKey,
+                                onOpenSettings = { selectedScreenName = AppScreen.Settings.name },
                                 onDraftChange = { draft = it },
                                 onSend = submitMessage,
                                 speakingMessageId = speakingMessageId,
@@ -1612,6 +1631,8 @@ private fun ChatScreen(
     draft: String,
     isSending: Boolean,
     error: String?,
+    showApiKeySettingsAction: Boolean,
+    onOpenSettings: () -> Unit,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     speakingMessageId: Long?,
@@ -1678,6 +1699,14 @@ private fun ChatScreen(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall
             )
+            if (showApiKeySettingsAction) {
+                TextButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.testTag("api_key_settings_action")
+                ) {
+                    Text(copy.settings)
+                }
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
