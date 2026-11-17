@@ -19,6 +19,7 @@ import android.os.Process
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -83,9 +84,13 @@ class MissMinutesWakeWordService : Service() {
         }
         if (active) return START_NOT_STICKY
 
-        val onDeviceRecognizerAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(this) }.getOrDefault(false)
-        if (!onDeviceRecognizerAvailable) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            publishState(false, "On-device speech recognition requires Android 12 or later.")
+            postStatusNotification("On-device speech recognition requires Android 12 or later.")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        if (!isOnDeviceRecognizerAvailable()) {
             publishState(false, "On-device speech recognition is unavailable.")
             postStatusNotification(
                 "On-device speech recognition is unavailable. Wake phrase listening was not started."
@@ -106,8 +111,9 @@ class MissMinutesWakeWordService : Service() {
             active = true
             wakeHandled = false
             publishState(true, "Offline wake phrase listening is active.")
-            recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this).also {
-                it.setRecognitionListener(recognitionListener)
+            if (!createOnDeviceRecognizer()) {
+                failClosed()
+                return START_NOT_STICKY
             }
             startListening()
         } catch (_: SecurityException) {
@@ -116,6 +122,19 @@ class MissMinutesWakeWordService : Service() {
             failClosed()
         }
         return START_NOT_STICKY
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun isOnDeviceRecognizerAvailable(): Boolean =
+        runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(this) }.getOrDefault(false)
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun createOnDeviceRecognizer(): Boolean {
+        if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) return false
+        recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this).also {
+            it.setRecognitionListener(recognitionListener)
+        }
+        return true
     }
 
     private fun hasRequiredPermissions(): Boolean {
@@ -166,7 +185,7 @@ class MissMinutesWakeWordService : Service() {
 
     private fun containsExactWakePhrase(bundle: Bundle?): Boolean {
         val candidates = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-        return candidates.any(WakePhraseMatcher::matches)
+        return WakePhraseMatcher.matchesRecognitionCandidates(candidates)
     }
 
     private fun scheduleRestart(delayMillis: Long) {
