@@ -8,8 +8,13 @@ import org.junit.Test
 class LocalPluginPackageManagerTest {
     private class ConsentStore : MutablePluginConsentStore {
         private val grants = mutableMapOf<String, Boolean>()
+        var failForPluginId: String? = null
         override fun isGranted(pluginId: String): Boolean = grants[pluginId] == true
         override fun setGranted(pluginId: String, granted: Boolean) {
+            if (pluginId == failForPluginId) {
+                failForPluginId = null
+                throw IllegalStateException("simulated consent storage failure")
+            }
             grants[pluginId] = granted
         }
     }
@@ -196,6 +201,23 @@ class LocalPluginPackageManagerTest {
         assertTrue(fixture.registry.installedPlugins().isEmpty())
         assertTrue(fixture.store.load().isEmpty())
         assertFalse(fixture.consent.isGranted("local_test_plugin"))
+    }
+
+    @Test
+    fun consentStorageFailureRollsBackEarlierManifestsInSamePackage() {
+        val fixture = fixture()
+        val second = manifest().copy(id = "second_local_plugin")
+        fixture.consent.failForPluginId = second.id
+
+        val error = runCatching {
+            fixture.manager.importManifests(listOf(manifest(), second))
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalStateException)
+        assertTrue(fixture.registry.installedPlugins().isEmpty())
+        assertTrue(fixture.store.load().isEmpty())
+        assertFalse(fixture.consent.isGranted("local_test_plugin"))
+        assertFalse(fixture.consent.isGranted(second.id))
     }
 
     @Test
