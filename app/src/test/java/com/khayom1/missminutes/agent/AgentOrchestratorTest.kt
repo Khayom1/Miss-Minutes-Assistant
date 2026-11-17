@@ -1,8 +1,10 @@
 package com.khayom1.missminutes.agent
 
+import com.khayom1.missminutes.plugins.PluginAccessDecision
 import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
+import com.khayom1.missminutes.plugins.PluginToolDescriptor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,6 +34,39 @@ class AgentOrchestratorTest {
         store: AgentTaskStateStore = InMemoryAgentTaskStateStore(),
         action: (PluginExecutionRequest, String) -> PluginExecutionResult
     ) = AgentOrchestrator(store, AgentActionExecutor(action), clockMillis = { now })
+
+    private class ConfirmationFloorExecutor : AgentActionExecutor, AgentActionCatalogProvider {
+        val requests = mutableListOf<PluginExecutionRequest>()
+
+        override fun availableTools() = listOf(
+            PluginToolDescriptor(
+                toolName = "plugin_device_status_read_info",
+                pluginId = "device_status",
+                actionId = "read_info",
+                pluginName = "Device status",
+                description = "Read device status.",
+                capability = PluginCapability.DEVICE_INFORMATION,
+                arguments = emptyMap(),
+                requiresConfirmation = true,
+                connected = true,
+                access = PluginAccessDecision.Granted
+            )
+        )
+
+        override fun executeToolCall(
+            toolName: String,
+            argumentsJson: String,
+            userConfirmed: Boolean
+        ) = PluginExecutionResult(false, "not used", PluginCapability.DEVICE_INFORMATION)
+
+        override fun execute(
+            request: PluginExecutionRequest,
+            idempotencyKey: String
+        ): PluginExecutionResult {
+            requests += request
+            return PluginExecutionResult(true, "done", PluginCapability.DEVICE_INFORMATION)
+        }
+    }
 
     @Test
     fun executesGraphInDependencyOrderAndUsesStableIdempotencyKeys() {
@@ -82,6 +117,69 @@ class AgentOrchestratorTest {
         assertEquals(AgentTaskStatus.SUCCEEDED, result.state.status)
         assertEquals(1, calls)
         assertTrue(confirmed)
+        assertFalse(result.state.nodes.getValue("sensitive").approved)
+        assertEquals(null, result.state.nodes.getValue("sensitive").approvedAtMillis)
+    }
+
+    @Test
+    fun modelSuppliedConfirmationCannotBypassCompiledHandlerConfirmationFloor() {
+        val executor = ConfirmationFloorExecutor()
+        val engine = AgentOrchestrator(InMemoryAgentTaskStateStore(), executor, clockMillis = { now })
+        val request = PluginExecutionRequest(
+            pluginId = "device_status",
+            actionId = "read_info",
+            userConfirmed = true
+        )
+        engine.create(plan(listOf(
+            AgentTaskNode("sensitive", action = AgentAction(request, approvalRequired = false))
+        )))
+
+        assertFalse(engine.state("task_1")!!.plan.nodes.single().action.request.userConfirmed)
+        val blocked = engine.advance("task_1") as AgentAdvanceResult.BlockedForApproval
+        assertEquals("sensitive", blocked.nodeId)
+        assertTrue(executor.requests.isEmpty())
+
+        engine.approve("task_1", "sensitive")
+        val completed = engine.advance("task_1") as AgentAdvanceResult.Progress
+        assertTrue(executor.requests.single().userConfirmed)
+        assertFalse(completed.state.nodes.getValue("sensitive").approved)
+    }
+
+    @Test
+    fun expiredApprovalMustBeGrantedAgainBeforeExecution() {
+        var calls = 0
+        val engine = orchestrator { request, _ ->
+            calls++
+            assertTrue(request.userConfirmed)
+            PluginExecutionResult(true, "done", PluginCapability.DEVICE_INFORMATION)
+        }
+        engine.create(plan(listOf(node("sensitive", approval = true))))
+        engine.advance("task_1")
+        engine.approve("task_1", "sensitive")
+
+        now += 15_001L
+        val blockedAgain = engine.advance("task_1") as AgentAdvanceResult.BlockedForApproval
+        assertEquals("sensitive", blockedAgain.nodeId)
+        assertFalse(blockedAgain.state.nodes.getValue("sensitive").approved)
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun pausingTaskInvalidatesAnyPendingOneShotApproval() {
+        var calls = 0
+        val engine = orchestrator { _, _ ->
+            calls++
+            PluginExecutionResult(true, "done", PluginCapability.DEVICE_INFORMATION)
+        }
+        engine.create(plan(listOf(node("sensitive", approval = true))))
+        engine.advance("task_1")
+        engine.approve("task_1", "sensitive")
+        engine.pause("task_1")
+        engine.resume("task_1")
+
+        val blockedAgain = engine.advance("task_1") as AgentAdvanceResult.BlockedForApproval
+        assertEquals("sensitive", blockedAgain.nodeId)
+        assertEquals(0, calls)
     }
 
     @Test
