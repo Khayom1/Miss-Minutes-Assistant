@@ -657,6 +657,12 @@ fun MissMinutesApp(
             conversationSummaries = emptyList()
             memoryItems = emptyList()
             memoryDraft = ""
+            memoryContextEnabled = false
+            exportPayload = null
+            exportError = null
+            pendingDeleteConversationId = null
+            confirmDeleteAll = false
+            memoryMessage = null
             ttsProvider.stop()
             speakingMessageId = null
             voiceError = null
@@ -821,6 +827,11 @@ fun MissMinutesApp(
                         activeConversationId = null
                         conversationSummaries = emptyList()
                         memoryItems = emptyList()
+                        memoryContextEnabled = false
+                        exportPayload = null
+                        exportError = null
+                        pendingDeleteConversationId = null
+                        memoryMessage = null
                         draft = ""
                         aiHasResponded = false
                         chatError = null
