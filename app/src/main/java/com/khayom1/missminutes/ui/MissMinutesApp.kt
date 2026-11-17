@@ -753,8 +753,34 @@ fun MissMinutesApp(
 
                 scope.launch {
                     try {
+                        val owner = currentOwnerId
+                        val conversationId = if (owner != null) {
+                            withContext(Dispatchers.IO) {
+                                val existingId = activeConversationId
+                                val id = existingId ?: conversationStore.createConversation(owner).id
+                                conversationStore.appendMessage(owner, id, ConversationRole.USER, value)
+                                id
+                            }.also { activeConversationId = it }
+                        } else {
+                            null
+                        }
+                        if (owner != null) {
+                            val updatedHistory = withContext(Dispatchers.IO) {
+                                conversationStore.listConversations(owner)
+                            }
+                            savedConversations.clear()
+                            savedConversations.addAll(updatedHistory)
+                        }
+
                         val completion: AiCompletion = aiProvider.complete(request)
                         if (requestGeneration != sessionGeneration) return@launch
+                        if (owner != null && conversationId != null) {
+                            withContext(Dispatchers.IO) {
+                                conversationStore.appendMessage(
+                                    owner, conversationId, ConversationRole.ASSISTANT, completion.content
+                                )
+                            }
+                        }
                         nextMessageId += 1
                         messages.add(ChatMessage(nextMessageId, completion.content, false))
                         if (messages.size > 100) messages.removeAt(0)
