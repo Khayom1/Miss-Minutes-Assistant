@@ -132,7 +132,7 @@ class PluginRegistry(
                     description = manifest.description,
                     capability = handler.capability,
                     arguments = handler.argumentSchema.toMap(),
-                    requiresConfirmation = action.requiresConfirmation || handler.requiresConfirmation,
+                    requiresConfirmation = action.requiresConfirmation || handler.requiresConfirmation || action.capability.requiresConfirmation,
                     connected = consentStore.isGranted(manifest.id),
                     access = access
                 )
@@ -198,7 +198,7 @@ class PluginRegistry(
             )
         }
 
-        if ((action.requiresConfirmation || handler.requiresConfirmation) && !request.userConfirmed) {
+        if ((action.requiresConfirmation || handler.requiresConfirmation || action.capability.requiresConfirmation) && !request.userConfirmed) {
             return denied(
                 now, request, action, "This action requires explicit confirmation.",
                 PluginExecutionStatus.CONFIRMATION_REQUIRED
