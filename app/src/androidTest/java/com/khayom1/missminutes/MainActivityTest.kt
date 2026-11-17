@@ -434,7 +434,7 @@ class MainActivityTest {
         }
 
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("new-user@example.test").assertIsDisplayed()
+        composeRule.onNodeWithText("new-user@example.test").performScrollTo().assertIsDisplayed()
         assertEquals(
             0,
             composeRule.onAllNodesWithText("Private pending prompt from old account")
