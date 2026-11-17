@@ -3,6 +3,8 @@ set -euo pipefail
 
 manifest="app/src/main/AndroidManifest.xml"
 gradle_file="app/build.gradle.kts"
+root_gradle_file="build.gradle.kts"
+workflow_file=".github/workflows/android.yml"
 
 require_match() {
   local pattern="$1"
@@ -17,6 +19,12 @@ require_match 'compileSdk[[:space:]]*=[[:space:]]*37' "$gradle_file"
 require_match 'targetSdk[[:space:]]*=[[:space:]]*37' "$gradle_file"
 require_match 'minSdk[[:space:]]*=[[:space:]]*26' "$gradle_file"
 require_match 'VERSION_17' "$gradle_file"
+require_match 'kotlin-gradle-plugin:2[.]4[.]21' "$root_gradle_file"
+require_match 'gradle-version: "9[.]5[.]0"' "$workflow_file"
+if grep -Eq 'id\("org[.]jetbrains[.]kotlin[.]android"\)' "$root_gradle_file" "$gradle_file"; then
+  echo "Android platform policy failed: use AGP built-in Kotlin, not the legacy Android Kotlin plugin." >&2
+  exit 1
+fi
 require_match 'android:allowBackup="false"' "$manifest"
 require_match 'android:usesCleartextTraffic="false"' "$manifest"
 require_match 'android:foregroundServiceType="microphone"' "$manifest"
