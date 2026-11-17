@@ -29,12 +29,17 @@ import com.khayom1.missminutes.ai.SessionStore
 import com.khayom1.missminutes.ai.SupabaseAuthRepository
 import com.khayom1.missminutes.ai.SupabaseAuthSession
 import com.khayom1.missminutes.voice.WakeWordServiceState
+import com.khayom1.missminutes.memory.AndroidKeystoreConversationCipher
+import com.khayom1.missminutes.memory.LocalConversationStore
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.rules.RuleChain
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityTest {
@@ -47,6 +52,8 @@ class MainActivityTest {
     private lateinit var sessionManager: SessionManager
     private lateinit var aiProvider: FakeAiProvider
     private lateinit var apiKeyStore: MemoryApiKeyStore
+    private lateinit var conversationStore: LocalConversationStore
+    private lateinit var conversationDatabaseName: String
 
     private class MemoryStore : SessionStore {
         private var session: SupabaseAuthSession? = null
@@ -113,6 +120,13 @@ class MainActivityTest {
         )
         aiProvider = FakeAiProvider()
         apiKeyStore = MemoryApiKeyStore()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        conversationDatabaseName = "ui-memory-test-${UUID.randomUUID()}.db"
+        conversationStore = LocalConversationStore(
+            context,
+            AndroidKeystoreConversationCipher("miss_minutes_test_conversation_aes_v1"),
+            conversationDatabaseName
+        )
         composeRule.setContent {
             com.khayom1.missminutes.ui.MissMinutesApp(
                 sessionManager = sessionManager,
@@ -131,13 +145,20 @@ class MainActivityTest {
                     ) = onError()
                     override fun stop() = Unit
                     override fun close() = Unit
-                }
+                },
+                conversationStore = conversationStore
             )
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Sign in to Miss Minutes")
                 .fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    @After
+    fun tearDown() {
+        conversationStore.close()
+        InstrumentationRegistry.getInstrumentation().targetContext.deleteDatabase(conversationDatabaseName)
     }
 
     private fun signIn() {
@@ -197,6 +218,47 @@ class MainActivityTest {
             ),
             aiProvider.lastRequest?.messages?.last()
         )
+    }
+
+    @Test
+    fun historyPersistsConversationAndCanOpenIt() {
+        signIn()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Persistent conversation title")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Mock AI response").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("History").performClick()
+        composeRule.onNodeWithText("Persistent conversation title").assertIsDisplayed()
+        composeRule.onNodeWithText("Open").performClick()
+        composeRule.onNodeWithText("Persistent conversation title").assertIsDisplayed()
+        composeRule.onNodeWithText("Mock AI response").assertIsDisplayed()
+    }
+
+    @Test
+    fun savedMemoryIsSentOnlyAfterExplicitOptIn() {
+        signIn()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("memory_input").performScrollTo()
+        composeRule.onNodeWithTag("memory_input").performTextInput("Prefers concise Tajik explanations")
+        composeRule.onNodeWithText("Save memory").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 2_000) {
+            composeRule.onAllNodesWithText("Prefers concise Tajik explanations").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        val memorySwitch = composeRule.onNodeWithTag("memory_context_toggle")
+        memorySwitch.performScrollTo().assertIsOff()
+        memorySwitch.performClick()
+        composeRule.onNodeWithText("Chat").performClick()
+        composeRule.onNodeWithTag("chat_input").performTextInput("How should you explain?")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            aiProvider.lastRequest?.messages?.any { it.role.name == "SYSTEM" } == true
+        }
+        val memoryContext = aiProvider.lastRequest!!.messages.first()
+        assertEquals("SYSTEM", memoryContext.role.name)
+        assertTrue(memoryContext.content.contains("Prefers concise Tajik explanations"))
     }
 
     @Test
