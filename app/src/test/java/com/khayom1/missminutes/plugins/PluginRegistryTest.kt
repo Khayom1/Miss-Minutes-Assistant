@@ -376,4 +376,42 @@ class PluginRegistryTest {
         override val capability = PluginCapability.DEVICE_INFORMATION
         override fun execute(arguments: Map<String, PluginValue>) = action()
     }
+
+    @Test
+    fun compiledHandlerConfirmationCannotBeDisabledByImportedManifest() {
+        var calls = 0
+        val protectedHandler = object : PluginActionHandler {
+            override val actionId = "read_info"
+            override val capability = PluginCapability.DEVICE_INFORMATION
+            override val requiresConfirmation = true
+            override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
+                calls++
+                return PluginActionOutput(true, "completed")
+            }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(protectedHandler),
+            consentStore = PluginConsentStore { true },
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker
+        )
+        val importedManifest = manifest.copy(
+            actions = manifest.actions.map { it.copy(requiresConfirmation = false) }
+        )
+        assertTrue(registry.install(importedManifest))
+        assertTrue(registry.connectedTools().single().requiresConfirmation)
+
+        val request = PluginExecutionRequest(
+            "test_plugin",
+            "read_info",
+            mapOf("locale" to PluginValue.Text("en"))
+        )
+        val denied = registry.execute(request)
+        assertEquals(PluginExecutionStatus.CONFIRMATION_REQUIRED, denied.status)
+        assertEquals(0, calls)
+
+        val approved = registry.execute(request.copy(userConfirmed = true))
+        assertEquals(PluginExecutionStatus.SUCCEEDED, approved.status)
+        assertEquals(1, calls)
+    }
 }
