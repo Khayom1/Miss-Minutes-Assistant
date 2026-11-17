@@ -10,7 +10,7 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 | P1 | Complete | ChatGPT-like Compose UI foundation |
 | P2 | In progress | Direct DeepSeek connection using a user-owned, locally encrypted API key; CI and API 35 instrumentation passed, live provider request still required |
 | P3 | In progress | On-device TTS, permission-gated offline wake phrase, speech input and hosted ElevenLabs adapter |
-| P4 | Not started | Persistent local conversation history and memory, optional authenticated sync |
+| P4 | In progress | Persistent encrypted local conversation history and user-controlled memory; optional authenticated sync remains deferred |
 | P5 | Not started | Explicitly permissioned Android-native capabilities |
 | P6 | Not started | Typed plugin/skill manifest, capability allowlist and execution boundary |
 | P7 | Not started | Bounded multi-step agent/task orchestration |
@@ -51,9 +51,9 @@ P2 acceptance:
 - Missing or rejected DeepSeek keys produce clear, typed UI errors without exposing credentials or signing the user out of Supabase.
 - Provider error bodies and credentials are not returned to or logged by the app.
 - Live provider test is recorded only when the user supplies a valid DeepSeek API key in the app and a real request succeeds.
-- The P3 branch remains separate until P2 is accepted.
+- P3 remains a separate Draft PR until the deferred P2 live-provider and P3 physical-device acceptance checks are completed at P8. Later implementation phases may be stacked on its exact CI-tested head without merging it to main.
 
-## P3 — Hybrid voice (not started)
+## P3 — Hybrid voice (automated gates passed; final device acceptance deferred)
 
 - Speech-to-text input and text-to-speech output behind provider-neutral interfaces.
 - ElevenLabs hosted voice adapter with API credentials held server-side.
@@ -61,7 +61,7 @@ P2 acceptance:
 - Runtime permission, microphone indicator, cancellation and timeout handling.
 - No raw audio retained by default; user-controlled opt-in for any persistence.
 
-## P4 — Persistent memory and history (not started)
+## P4 — Persistent memory and history (in progress)
 
 - Local conversation storage with schema versioning and migration tests.
 - User-visible delete, export and retention controls.
