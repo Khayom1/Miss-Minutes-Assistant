@@ -7,14 +7,12 @@ import com.khayom1.missminutes.ai.AndroidSessionStore
 import com.khayom1.missminutes.ai.DefaultSupabaseAuthRepository
 import com.khayom1.missminutes.ai.OkHttpAiHttpTransport
 import com.khayom1.missminutes.ai.SessionManager
-import com.khayom1.missminutes.ai.AndroidTtsPlayback
-import com.khayom1.missminutes.ai.OkHttpTtsHttpTransport
-import com.khayom1.missminutes.ai.SupabaseElevenLabsTtsProvider
+import com.khayom1.missminutes.ai.AndroidTtsProvider
 import com.khayom1.missminutes.ai.SupabaseDeepSeekProvider
 import com.khayom1.missminutes.ui.MissMinutesApp
 
 class MainActivity : ComponentActivity() {
-    private var ttsPlayback: AndroidTtsPlayback? = null
+    private var ttsProvider: AndroidTtsProvider? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -34,28 +32,22 @@ class MainActivity : ComponentActivity() {
             transport = transport
         )
 
-        val playback = AndroidTtsPlayback(applicationContext)
-        ttsPlayback = playback
-        val ttsProvider = SupabaseElevenLabsTtsProvider(
-            functionUrl = "${BuildConfig.SUPABASE_URL.trimEnd('/')}/functions/v1/miss-minutes-tts",
-            publishableKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY,
-            accessTokenSource = sessionManager,
-            transport = OkHttpTtsHttpTransport()
-        )
+        val localTts = AndroidTtsProvider(applicationContext)
+        ttsProvider = localTts
 
         setContent {
             MissMinutesApp(
                 sessionManager = sessionManager,
                 aiProvider = aiProvider,
                 ttsProvider = ttsProvider,
-                ttsPlayback = playback
+                ttsProvider = localTts
             )
         }
     }
 
     override fun onDestroy() {
-        ttsPlayback?.close()
-        ttsPlayback = null
+        ttsProvider?.close()
+        ttsProvider = null
         super.onDestroy()
     }
 }
