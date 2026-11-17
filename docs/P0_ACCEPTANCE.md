@@ -1,6 +1,6 @@
 # P0 Acceptance Criteria
 
-Status: **COMPLETE — verified against main commit `f859169b0f1648424a7d40343f4b2f259db1e757`**
+Status: **COMPLETE — verified against main commit `de5c2bbdbe2479845a3900e7c12418046a5bd3ee`**
 
 P0 is complete only when every mandatory item is verified on the same main commit and all required CI steps pass.
 
@@ -25,15 +25,15 @@ P0 is complete only when every mandatory item is verified on the same main commi
 ## Verification evidence
 
 - Main commit: [f859169b0f1648424a7d40343f4b2f259db1e757](https://github.com/Khayom1/Miss-Minutes-Assistant/commit/f859169b0f1648424a7d40343f4b2f259db1e757)
-- Android CI run #114: [all jobs and steps](https://github.com/Khayom1/Miss-Minutes-Assistant/actions/runs/43921131956)
+- Android CI run #114: [all jobs and steps](https://github.com/Khayom1/Miss-Minutes-Assistant/actions/runs/43922613630)
 - CI conclusion: `success`.
 - Job: `Build, test and lint`; all setup, Gitleaks, Gradle build/test/lint, KVM enablement, API 35 instrumentation, APK upload and post-job steps concluded `success`.
-- Artifact: `miss-minutes-foundation-debug`, artifact ID `14255190082`.
-- APK size: 10,910,368 bytes.
-- APK SHA-256: `cf0be05b6076b3b20da84125d81ca870c47cc976e9023bd32776024d8aa670dc`.
-- Artifact ZIP SHA-256: `646d90b634ad320269b7bd50d78c608a309a882df0f20c3e4f1af85b7531cf8d`.
+- Artifact: `miss-minutes-foundation-debug`, artifact ID `14253864655`.
+- APK size: 10,454,001 bytes.
+- APK SHA-256: not recalculated for this checkpoint.
+- Artifact ZIP SHA-256: not recalculated for this checkpoint.
 - All six pre-existing non-main branches and `main` pointed to the verified main SHA at acceptance time.
-- PR #1 is closed; PRs #2–#4 are closed. P1 work is isolated in draft PR #5 and is not merged into the accepted P0 baseline.
+- PR #1 is closed; PRs #2–#4 are closed. P1 was subsequently delivered independently in PR #5 and merged only after P0 acceptance and its own CI gates passed.
 
 ## Explicitly not claimed
 
@@ -41,4 +41,4 @@ P0 is complete only when every mandatory item is verified on the same main commi
 - No live DeepSeek, ElevenLabs, cloud-memory or Android-control integration is claimed at P0.
 - A string-pattern scan of the APK is not a substitute for a formal binary-manifest or reverse-engineering audit.
 
-P0 is complete for the defined foundation gates above. Physical-device validation and all product capabilities remain later-phase acceptance items.
+P0 is complete for the defined foundation gates above. The later P1 merge did not change the P0 acceptance checkpoint. Physical-device validation and all product capabilities remain later-phase acceptance items.

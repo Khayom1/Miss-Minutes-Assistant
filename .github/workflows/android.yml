@@ -50,6 +50,16 @@ jobs:
       - name: Scan tracked working tree for secrets
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
 
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Run Supabase AI gateway unit tests
+        run: deno test supabase/functions/miss-minutes-ai/index_test.ts
+
+      # DeepSeek inference now calls the official provider directly from Android.
+      # No live Supabase AI gateway is required by the Android client.
       - name: Run unit tests, build APK and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
 
