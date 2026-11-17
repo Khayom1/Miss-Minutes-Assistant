@@ -21,6 +21,7 @@ import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AuthFlowResult
 import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.TtsProvider
+import com.khayom1.missminutes.ai.SpeechInputProvider
 import com.khayom1.missminutes.ai.SessionStore
 import com.khayom1.missminutes.ai.SupabaseAuthRepository
 import com.khayom1.missminutes.ai.SupabaseAuthSession
@@ -112,6 +113,15 @@ class MainActivityTest {
                 apiKeyStore = apiKeyStore,
                 ttsProvider = object : TtsProvider {
                     override fun speak(text: String, onDone: () -> Unit, onError: () -> Unit) = onDone()
+                    override fun stop() = Unit
+                    override fun close() = Unit
+                },
+                speechInputProvider = object : SpeechInputProvider {
+                    override fun start(
+                        locale: java.util.Locale,
+                        onResult: (String) -> Unit,
+                        onError: () -> Unit
+                    ) = onError()
                     override fun stop() = Unit
                     override fun close() = Unit
                 }
