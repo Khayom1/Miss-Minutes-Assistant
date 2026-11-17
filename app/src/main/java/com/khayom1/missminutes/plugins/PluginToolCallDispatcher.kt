@@ -49,18 +49,33 @@ class PluginToolCallDispatcher(
                     )
                     PluginValue.Text(primitive.content)
                 }
-                PluginValueType.INTEGER -> PluginValue.Number(
-                    primitive.longOrNull ?: return rejected(
+                PluginValueType.INTEGER -> {
+                    // kotlinx.serialization's numeric accessors also parse quoted strings.
+                    // Require a native JSON number so model output cannot blur schema types.
+                    if (primitive.isString) return rejected(
                         PluginExecutionStatus.INVALID_ARGUMENTS,
                         "Tool argument type does not match its schema."
                     )
-                )
-                PluginValueType.BOOLEAN -> PluginValue.Flag(
-                    primitive.booleanOrNull ?: return rejected(
+                    PluginValue.Number(
+                        primitive.longOrNull ?: return rejected(
+                            PluginExecutionStatus.INVALID_ARGUMENTS,
+                            "Tool argument type does not match its schema."
+                        )
+                    )
+                }
+                PluginValueType.BOOLEAN -> {
+                    // A JSON string such as "true" is not a JSON boolean.
+                    if (primitive.isString) return rejected(
                         PluginExecutionStatus.INVALID_ARGUMENTS,
                         "Tool argument type does not match its schema."
                     )
-                )
+                    PluginValue.Flag(
+                        primitive.booleanOrNull ?: return rejected(
+                            PluginExecutionStatus.INVALID_ARGUMENTS,
+                            "Tool argument type does not match its schema."
+                        )
+                    )
+                }
             }
             values[name] = value
         }
