@@ -41,7 +41,7 @@ Status: initial source/configuration review recorded; automated release-candidat
 
 ## Dependency inventory reviewed
 
-Direct Android dependencies are version-pinned in app/build.gradle.kts and the root plugin declarations: AndroidX Compose BOM, Activity Compose, Core KTX, Lifecycle Runtime, WorkManager, Kotlin serialization/coroutines, OkHttp, Android Gradle Plugin and Kotlin 2.2.21. The exact resolved runtime graph is exported by CI for each P8 candidate. A successful build is not equivalent to a CVE scan; dependency vulnerability review must be performed against the uploaded resolved graph before a public production release.
+The initial compatibility review found Kotlin Gradle Plugin 2.2.21 paired with Android Gradle Plugin 8.13.2, outside Kotlin 2.2's fully supported AGP range. The P8 branch upgrades the Kotlin Android, Compose and serialization plugins together to 2.4.21. Kotlin's official compatibility matrix lists 2.4.20–2.4.21 as fully supporting AGP 8.5.2–9.3.1 and Gradle 7.6.3–9.7; this repository uses AGP 8.13.2 and Gradle 8.13. Direct Android dependencies are otherwise version-pinned in app/build.gradle.kts: AndroidX Compose BOM, Activity Compose, Core KTX, Lifecycle Runtime, WorkManager, Kotlin serialization/coroutines and OkHttp. The exact resolved runtime graph is exported by CI for each P8 candidate. A successful build is not equivalent to a CVE scan; dependency vulnerability review must be performed against the uploaded resolved graph before a public production release.
 
 ## Security acceptance
 
