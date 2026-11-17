@@ -1,6 +1,7 @@
 package com.khayom1.missminutes
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import android.Manifest
@@ -179,7 +180,7 @@ class MainActivityTest {
 
     @Test
     fun guestModeOpensAssistantWithoutSupabaseRegistration() {
-        composeRule.onNodeWithText("Continue as guest — no account needed").assertIsDisplayed()
+        composeRule.onNodeWithTag("auth_continue_guest").assertIsDisplayed()
         composeRule.onNodeWithTag("auth_continue_guest").performClick()
         waitForChatScreen()
 
@@ -190,8 +191,28 @@ class MainActivityTest {
             composeRule.onAllNodesWithText("Mock AI response").fetchSemanticsNodes().isNotEmpty()
         }
 
+        assertTrue(conversationStore.listConversations("guest-local").isNotEmpty())
+        assertTrue(conversationStore.listConversations("test-user-" + "user@example.test".hashCode()).isEmpty())
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("Continue as guest — no account needed").assertIsDisplayed()
+        composeRule.onNodeWithText("Guest (local only)").assertIsDisplayed()
+    }
+
+    @Test
+    fun guestProviderCredentialFailureDoesNotForceAccountRegistration() {
+        composeRule.onNodeWithTag("auth_continue_guest").assertIsDisplayed()
+        composeRule.onNodeWithTag("auth_continue_guest").performClick()
+        waitForChatScreen()
+
+        aiProvider.nextError = AiProviderException.AuthenticationRequired()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Check guest credentials")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(
+                "Add your DeepSeek API key in Settings to use AI replies. Guest conversations remain on this device."
+            ).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
+        composeRule.onNodeWithText("Sign in to Miss Minutes").assertDoesNotExist()
     }
 
     @Test
