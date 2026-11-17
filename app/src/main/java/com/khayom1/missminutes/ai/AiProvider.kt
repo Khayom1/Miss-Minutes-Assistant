@@ -104,7 +104,15 @@ sealed class AiProviderException(message: String, cause: Throwable? = null) :
         AiProviderException("The AI service returned an invalid response.", cause)
 }
 
+data class AiProviderCapabilities(
+    val supportsStructuredTools: Boolean = false,
+    val isLocal: Boolean = false
+)
+
 interface AiProvider {
+    val capabilities: AiProviderCapabilities
+        get() = AiProviderCapabilities()
+
     suspend fun complete(request: AiRequest): AiCompletion
 }
 
@@ -138,6 +146,8 @@ interface LocalInferenceRuntime {
 class OptionalLocalAiProvider(
     private val runtime: LocalInferenceRuntime
 ) : AiProvider {
+    override val capabilities = AiProviderCapabilities(supportsStructuredTools = false, isLocal = true)
+
     override suspend fun complete(request: AiRequest): AiCompletion {
         if (!runtime.isAvailable() || request.tools.isNotEmpty() ||
             request.messages.any { it.role == AiRole.TOOL || it.toolCalls.isNotEmpty() }
