@@ -161,14 +161,18 @@ class MainActivityTest {
         InstrumentationRegistry.getInstrumentation().targetContext.deleteDatabase(conversationDatabaseName)
     }
 
+    private fun waitForChatScreen() {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("chat_input").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     private fun signIn() {
         composeRule.onNodeWithTag("auth_email").performTextInput("user@example.test")
         composeRule.onNodeWithTag("auth_password").performTextInput("correct-horse-battery")
         composeRule.onNodeWithTag("auth_submit").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("How can I help?")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+        waitForChatScreen()
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
     }
 
     @Test
@@ -232,8 +236,14 @@ class MainActivityTest {
         composeRule.onNodeWithText("History").performClick()
         composeRule.onNodeWithText("Persistent conversation title").assertIsDisplayed()
         composeRule.onNodeWithText("Open").performClick()
-        composeRule.onNodeWithText("Persistent conversation title").assertIsDisplayed()
-        composeRule.onNodeWithText("Mock AI response").assertIsDisplayed()
+        // The same conversation title is also rendered in History, so wait for
+        // the Chat-only composer before asserting that navigation completed.
+        waitForChatScreen()
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Mock AI response").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Mock AI response").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -250,7 +260,10 @@ class MainActivityTest {
 
         composeRule.onNodeWithText("History").performClick()
         composeRule.onNodeWithText("New conversation").performClick()
+        // Navigation happens after the new row is committed and loaded off the UI thread.
+        waitForChatScreen()
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+        composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
 
         lateCompletion.complete(AiCompletion(content = "Late original conversation response", model = "test-mock"))
         composeRule.waitForIdle()
