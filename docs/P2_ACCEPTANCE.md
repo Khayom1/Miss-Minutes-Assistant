@@ -39,4 +39,4 @@ The earlier server-side authenticated gateway work in PRs #6 and #7 was not merg
 - A live DeepSeek request with a real user-supplied key has **not** been performed or claimed.
 - Physical Samsung Galaxy A35 5G / Android 17 testing has **not** been performed or claimed.
 
-P2 is not accepted until a real DeepSeek response is recorded from the app with a valid user-supplied key. Physical Samsung testing is not claimed and remains a later device-validation item.
+The automated P2 implementation gate is accepted. Final provider acceptance remains pending until a real DeepSeek response is recorded from the app with a valid user-supplied key at the P8 handoff. Physical Samsung testing is not claimed.
