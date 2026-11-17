@@ -6,7 +6,7 @@
 - `compileSdk = 37` and `targetSdk = 37`.
 - Java bytecode remains Java 17.
 - Android Gradle Plugin is pinned to 9.3.1; Gradle is pinned to 9.5.0.
-- Kotlin remains 2.4.21 and uses AGP built-in Kotlin support. The legacy `org.jetbrains.kotlin.android` application plugin is no longer applied.
+- Kotlin Gradle plugin 2.4.21 is pinned explicitly as AGP's built-in Kotlin runtime dependency. The legacy `org.jetbrains.kotlin.android` application plugin is no longer applied; Compose and serialization compiler plugins remain.
 - CI runs the complete instrumentation suite on API 37 and retains an API 35 compatibility run.
 
 ## Android 17 behavior audit
