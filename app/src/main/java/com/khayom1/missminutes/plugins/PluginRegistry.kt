@@ -42,6 +42,25 @@ class PluginRegistry(
         return true
     }
 
+    /** Grants consent only when the durable metadata audit can also be recorded. */
+    @Synchronized
+    fun grantConsent(pluginId: String): Boolean {
+        if (!PLUGIN_ID.matches(pluginId) || !manifests.containsKey(pluginId)) return false
+        val mutableStore = consentStore as? MutablePluginConsentStore ?: return false
+        return try {
+            mutableStore.setGranted(pluginId, true)
+            if (!record(PluginAuditEntry(clockMillis(), pluginId, "consent", "consent_granted"))) {
+                mutableStore.setGranted(pluginId, false)
+                false
+            } else {
+                true
+            }
+        } catch (_: Exception) {
+            runCatching { mutableStore.setGranted(pluginId, false) }
+            false
+        }
+    }
+
     /**
      * Revocation is a security-reducing operation and remains available even if
      * the plugin is currently absent from the in-memory registry.
