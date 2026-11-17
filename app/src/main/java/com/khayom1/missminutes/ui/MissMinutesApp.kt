@@ -1395,39 +1395,37 @@ private fun HistoryScreen(
     var memoryKey by rememberSaveable { mutableStateOf("") }
     var memoryValue by rememberSaveable { mutableStateOf("") }
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(copy.historyTitle, style = MaterialTheme.typography.headlineMedium)
         Text(actions.retention, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onNew) { Text(actions.newConversation) }
-            TextButton(onClick = onExport, enabled = conversations.isNotEmpty()) { Text(actions.export) }
+            TextButton(onClick = onExport, enabled = conversations.isNotEmpty() || memories.isNotEmpty()) { Text(actions.export) }
         }
         if (conversations.isEmpty()) {
             Text(actions.empty, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(conversations, key = { it.id }) { conversation ->
-                    Card {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(conversation.title, fontWeight = FontWeight.Medium)
-                                Text(
-                                    java.text.DateFormat.getDateTimeInstance().format(
-                                        java.util.Date(conversation.updatedAtEpochMillis)
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                TextButton(onClick = { onOpen(conversation) }) { Text(copy.chat) }
-                            }
-                            TextButton(onClick = { pendingDelete = conversation }) { Text(actions.delete) }
+            conversations.forEach { conversation ->
+                Card {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(conversation.title, fontWeight = FontWeight.Medium)
+                            Text(
+                                java.text.DateFormat.getDateTimeInstance().format(
+                                    java.util.Date(conversation.updatedAtEpochMillis)
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            TextButton(onClick = { onOpen(conversation) }) { Text(copy.chat) }
                         }
+                        TextButton(onClick = { pendingDelete = conversation }) { Text(actions.delete) }
                     }
                 }
             }
