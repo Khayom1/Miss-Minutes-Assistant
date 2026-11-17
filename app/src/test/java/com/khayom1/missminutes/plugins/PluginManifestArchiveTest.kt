@@ -103,6 +103,7 @@ class PluginManifestArchiveTest {
             handlers = listOf(object : PluginActionHandler {
                 override val actionId = "read_info"
                 override val capability = PluginCapability.DEVICE_INFORMATION
+                override val argumentSchema = restored.actions.single().arguments
                 override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                     executed = true
                     return PluginActionOutput(true, "ok")
