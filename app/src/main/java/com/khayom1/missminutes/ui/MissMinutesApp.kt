@@ -895,12 +895,14 @@ fun MissMinutesApp(
     val deleteAllLocalData: () -> Unit = {
         currentOwnerId?.let { owner ->
             scope.launch {
-                withContext(Dispatchers.IO) {
-                    conversationStore.deleteAll(owner)
-                    conversationStore.createConversation(owner)
-                }
+                withContext(Dispatchers.IO) { conversationStore.deleteAll(owner) }
                 confirmDeleteAll = false
-                loadConversation(owner)
+                activeConversationId = null
+                messages.clear()
+                conversationSummaries = emptyList()
+                memoryItems = emptyList()
+                memoryDraft = ""
+                aiHasResponded = false
             }
         }
     }
