@@ -960,121 +960,6 @@ fun MissMinutesApp(
         }
     }
 
-    val continueAsGuest: () -> Unit = {
-        if (!authBusy && !isRestoring) {
-            authBusy = true
-            sessionGeneration += 1
-            authMessage = null
-            authPassword = ""
-            scope.launch {
-                try {
-                    loadConversation(GUEST_OWNER_ID)
-                    isGuestSession = true
-                    userEmail = copy.guestAccount
-                    selectedScreenName = AppScreen.Chat.name
-                    isAuthenticated = true
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    authMessage = copy.sendFailed
-                } finally {
-                    authBusy = false
-                }
-            }
-        }
-    }
-
-    val submitAuth: () -> Unit = {
-        if (!authBusy) {
-            authBusy = true
-            scope.launch {
-                authMessage = null
-                try {
-                    if (isSignUp) {
-                        val result = sessionManager.signUp(authEmail.trim(), authPassword)
-                        val session = result.session
-                        if (session != null) {
-                            sessionGeneration += 1
-                            isGuestSession = false
-                            isAuthenticated = true
-                            userEmail = session.email ?: authEmail.trim()
-                            authEmail = userEmail
-                            authPassword = ""
-                            loadConversation(session.userId)
-                        } else {
-                            isSignUp = false
-                            authPassword = ""
-                            authMessage = copy.emailConfirmation
-                        }
-                    } else {
-                        val session = sessionManager.signIn(authEmail.trim(), authPassword)
-                        sessionGeneration += 1
-                        isGuestSession = false
-                        isAuthenticated = true
-                        userEmail = session.email ?: authEmail.trim()
-                        authEmail = userEmail
-                        authPassword = ""
-                        loadConversation(session.userId)
-                    }
-                } catch (_: SupabaseAuthException.InvalidCredentials) {
-                    authMessage = copy.invalidCredentials
-                } catch (_: SupabaseAuthException.RateLimited) {
-                    authMessage = copy.authRateLimited
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    authMessage = copy.authUnavailable
-                } finally {
-                    authBusy = false
-                }
-            }
-        }
-    }
-
-    val signOut: () -> Unit = {
-        if (!authBusy) {
-            authBusy = true
-            disableWakeListening()
-            sessionGeneration += 1
-            isAuthenticated = false
-            isGuestSession = false
-            userEmail = ""
-            authEmail = ""
-            authPassword = ""
-            messages = emptyList()
-            currentOwnerId = null
-            activeConversationId = null
-            conversationSummaries = emptyList()
-            memoryItems = emptyList()
-            memoryDraft = ""
-            memoryContextEnabled = false
-            exportPayload = null
-            exportError = null
-            pendingDeleteConversationId = null
-            confirmDeleteAll = false
-            memoryMessage = null
-            ttsProvider.stop()
-            speakingMessageId = null
-            voiceError = null
-            draft = ""
-            aiHasResponded = false
-            chatError = null
-            isSending = false
-            selectedScreenName = AppScreen.Chat.name
-            scope.launch {
-                try {
-                    sessionManager.signOut()
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    // Local credentials are cleared by SessionManager even if revocation fails.
-                } finally {
-                    authBusy = false
-                }
-            }
-        }
-    }
-
     val saveApiKey: () -> Unit = {
         val candidate = apiKeyInput.trim()
         if (candidate.isNotEmpty() && !apiKeySaving) {
@@ -1215,43 +1100,8 @@ fun MissMinutesApp(
                             chatError = copy.apiKeyRequired
                         }
                     } catch (_: AiProviderException.AuthenticationRequired) {
-                        if (requestGeneration != sessionGeneration) return@launch
-                        if (isGuestSession) {
-                            // Provider credentials are independent from local guest access.
+                        if (requestGeneration == sessionGeneration) {
                             chatError = copy.apiKeyRequired
-                        } else {
-                            sessionGeneration += 1
-                            authBusy = true
-                            disableWakeListening()
-                            isAuthenticated = false
-                            userEmail = ""
-                            authEmail = ""
-                            authPassword = ""
-                            messages = emptyList()
-                            currentOwnerId = null
-                            activeConversationId = null
-                            conversationSummaries = emptyList()
-                            memoryItems = emptyList()
-                            memoryContextEnabled = false
-                            exportPayload = null
-                            exportError = null
-                            pendingDeleteConversationId = null
-                            memoryMessage = null
-                            draft = ""
-                            aiHasResponded = false
-                            chatError = null
-                            isSending = false
-                            selectedScreenName = AppScreen.Chat.name
-                            authMessage = copy.sessionExpired
-                            try {
-                                sessionManager.signOut()
-                            } catch (error: CancellationException) {
-                                throw error
-                            } catch (_: Exception) {
-                                // SessionManager always clears local tokens in its finally block.
-                            } finally {
-                                authBusy = false
-                            }
                         }
                     } catch (_: ConversationLimitReachedException) {
                         if (requestGeneration == sessionGeneration &&
@@ -1426,23 +1276,6 @@ fun MissMinutesApp(
     MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
         when {
             isRestoring -> LoadingScreen()
-            !isAuthenticated -> AuthScreen(
-                copy = copy,
-                email = authEmail,
-                password = authPassword,
-                isSignUp = isSignUp,
-                isBusy = authBusy,
-                message = authMessage,
-                onEmailChange = { authEmail = it },
-                onPasswordChange = { if (it.length <= 128) authPassword = it },
-                onModeChange = {
-                    isSignUp = !isSignUp
-                    authMessage = null
-                    authPassword = ""
-                },
-                onSubmit = submitAuth,
-                onContinueAsGuest = continueAsGuest
-            )
             else -> {
                 val screen = AppScreen.valueOf(selectedScreenName).let { if (it == AppScreen.Dashboard) AppScreen.Chat else it }
                 Scaffold(
@@ -1596,7 +1429,6 @@ fun MissMinutesApp(
                                         }
                                     }
                                 },
-                                onSignOut = signOut,
                                 backupCategories = backupCategories,
                                 onToggleBackupCategory = { category ->
                                     backupCategories = if (category in backupCategories) {
@@ -2096,7 +1928,6 @@ private fun SettingsScreen(
     onDeleteMemory: (String) -> Unit,
     onRetentionChange: (Int) -> Unit,
     onMemoryContextChange: (Boolean) -> Unit,
-    onSignOut: () -> Unit,
     backupCategories: Set<BackupArchive.Category>,
     onToggleBackupCategory: (BackupArchive.Category) -> Unit,
     backupPassword: String,
@@ -2709,14 +2540,6 @@ private fun SettingsScreen(
                 }
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(copy.account, fontWeight = FontWeight.SemiBold)
-            Text(email, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Button(onClick = onSignOut, enabled = !isBusy) {
-                Text(if (isBusy) copy.wait else copy.signOut)
-            }
-        }
-        Spacer(modifier = Modifier.padding(top = 8.dp))
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(copy.about, fontWeight = FontWeight.SemiBold)
             Text("${ProductIdentity.NAME} · ${copy.version} ${ProductIdentity.VERSION_NAME}")
