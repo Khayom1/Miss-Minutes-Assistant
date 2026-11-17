@@ -24,6 +24,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.MainActivity
+import com.khayom1.missminutes.backup.AndroidAppSettingsStore
 import java.util.Locale
 
 /**
@@ -38,6 +39,7 @@ class MissMinutesWakeWordService : Service() {
     private var active = false
     private var wakeHandled = false
     private val retryBackoff = RecognitionRetryBackoff()
+    private var serviceCopy = VoiceServiceCopyProvider.forLanguage("en")
 
     private val restartListening = Runnable {
         if (active && !wakeHandled) startListening()
@@ -76,33 +78,40 @@ class MissMinutesWakeWordService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
+        if (WakeWordServicePolicy.shouldStop(intent?.action)) {
             stopWakeWordService()
             return START_NOT_STICKY
         }
+        if (!WakeWordServicePolicy.shouldStart(intent?.action)) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        serviceCopy = VoiceServiceCopyProvider.forLanguage(
+            AndroidAppSettingsStore(this).loadAppearance().language
+        )
+        createNotificationChannel()
         if (active) return START_NOT_STICKY
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            publishState(false, "On-device speech recognition requires Android 12 or later.")
+            publishState(false, serviceCopy.android12Required)
             postStatusNotification("On-device speech recognition requires Android 12 or later.")
             stopSelf(startId)
             return START_NOT_STICKY
         }
         if (!isOnDeviceRecognizerAvailable()) {
-            publishState(false, "On-device speech recognition is unavailable.")
+            publishState(false, serviceCopy.recognizerUnavailable)
             postStatusNotification(
-                "On-device speech recognition is unavailable. Wake phrase listening was not started."
+                serviceCopy.recognizerUnavailable
             )
             stopSelf(startId)
             return START_NOT_STICKY
         }
 
         if (!hasRequiredPermissions()) {
-            publishState(false, "Microphone and notification permissions are required.")
+            publishState(false, serviceCopy.permissionsRequired)
             postStatusNotification("Microphone and notification permissions are required.")
             stopSelf(startId)
             return START_NOT_STICKY
@@ -113,7 +122,7 @@ class MissMinutesWakeWordService : Service() {
             active = true
             wakeHandled = false
             retryBackoff.reset()
-            publishState(true, "Offline wake phrase listening is active.")
+            publishState(true, serviceCopy.listeningState)
             if (!createOnDeviceRecognizer()) {
                 failClosed()
                 return START_NOT_STICKY
@@ -203,7 +212,7 @@ class MissMinutesWakeWordService : Service() {
         active = false
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
-        publishState(false, "Miss Minutes heard. Tap to open the assistant.")
+        publishState(false, serviceCopy.wakeHeard)
         stopForeground(STOP_FOREGROUND_REMOVE)
         postStatusNotification("Miss Minutes heard. Tap to open the assistant.")
         stopSelf()
@@ -214,7 +223,7 @@ class MissMinutesWakeWordService : Service() {
         wakeHandled = true
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
-        publishState(false, "Wake phrase listening stopped. Check on-device speech recognition and permissions.")
+        publishState(false, serviceCopy.stoppedWithError)
         stopForeground(STOP_FOREGROUND_REMOVE)
         postStatusNotification("Wake phrase listening stopped. Check on-device speech recognition and permissions.")
         stopSelf()
@@ -225,7 +234,7 @@ class MissMinutesWakeWordService : Service() {
         wakeHandled = true
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
-        publishState(false, "Offline wake phrase listening is off.")
+        publishState(false, serviceCopy.stopped)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -252,10 +261,10 @@ class MissMinutesWakeWordService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Miss Minutes wake phrase",
+                serviceCopy.channelName,
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Visible while the user-enabled offline wake phrase listener is active."
+                description = serviceCopy.channelDescription
                 setShowBadge(false)
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -277,13 +286,13 @@ class MissMinutesWakeWordService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Miss Minutes is listening")
-            .setContentText("Offline wake phrase: “Miss Minutes”")
+            .setContentTitle(serviceCopy.listeningTitle)
+            .setContentText(serviceCopy.listeningText)
             .setContentIntent(openApp)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(0, "Stop listening", stopService)
+            .addAction(0, serviceCopy.stopAction, stopService)
             .build()
     }
 
