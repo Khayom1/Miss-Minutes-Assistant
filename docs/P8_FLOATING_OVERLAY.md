@@ -1,30 +1,24 @@
-# P8 — Floating Assistant Overlay
+# P8 Floating Overlay — User-Controlled Launcher
 
-## Scope
+The floating overlay is a lightweight launcher for Miss Minutes. It is separate from the microphone service, plugin runtime, and task scheduler.
 
-The floating overlay is a lightweight, user-controlled launcher for Miss Minutes. It is intentionally separate from the voice service, plugin runtime and agent task scheduler.
+## Contract
 
-## Permission and lifecycle
+- The user explicitly enables Android overlay permission in system settings.
+- The overlay appears only after an explicit in-app user action.
+- Tapping it opens the existing MainActivity; it does not execute tools, start a task, or begin listening.
+- It has a visible close/stop path and does not restart at boot.
+- It does not require an account or sign-in.
+- It is not an animated character or 3D avatar renderer. A 3D avatar is not part of this product.
 
-1. The user opens Settings and taps Show bubble.
-2. If Android's draw-over-other-apps permission is missing, the app opens the system permission page. Returning to Miss Minutes does not start the overlay automatically; the user must tap Show bubble again.
-3. The app starts a private specialUse foreground service only from that explicit foreground interaction.
-4. The service checks Settings.canDrawOverlays again before creating a TYPE_APPLICATION_OVERLAY window.
-5. The persistent notification includes a Stop action. Stopping the service removes the window immediately.
-6. If permission is revoked or window creation fails, the service exits without retrying or attempting to regain permission.
+## Lifecycle
 
-## Security boundaries
+- Overlay permission is checked before display.
+- The overlay service is stopped when the user disables it or revokes permission.
+- The launcher is not a bypass for Android background or microphone restrictions.
+- Force Stop and OS process management can stop the service; the app must not claim otherwise.
 
-- The service is exported=false; other applications cannot start it directly.
-- The overlay only opens MainActivity. It does not invoke plugins, device tools, agent tasks, microphone capture or speech recognition.
-- The overlay does not request accessibility-service privileges or root access.
-- The app does not start the overlay at boot or after sign-in.
-- The overlay permission is not included in backups and is never inferred from plugin consent.
-- The Android foreground-service notification exposes a direct stop action.
+## Acceptance
 
-## Platform notes
-
-- Requires Android's special Display over other apps permission.
-- Uses the specialUse foreground-service type on Android 14+ and a low-importance persistent notification.
-- Android may still stop the service under force-stop, permission revocation or system resource pressure.
-- This component is a floating launcher surface, not the animated 3D character renderer. The 3D avatar remains an independent rendering milestone.
+- Manifest contract and permission-gate tests pass.
+- Physical Samsung Galaxy A35 / Android 17 testing must verify drag bounds, touch targets, permission UX, stop behavior, and behavior after process recreation.
