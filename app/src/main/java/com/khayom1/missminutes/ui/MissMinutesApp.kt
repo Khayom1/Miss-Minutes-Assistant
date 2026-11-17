@@ -1599,15 +1599,14 @@ fun MissMinutesApp(
                                     pluginAuditEntries = pluginAuditLog.readRecent()
                                 },
                                 onRunPluginAction = { actionId ->
-                                    val result = pluginRegistry.execute(
+                                    pluginRegistry.execute(
                                         PluginExecutionRequest(
                                             pluginId = AndroidDeviceStatusPlugin.PLUGIN_ID,
                                             actionId = actionId
                                         )
                                     )
-                                    pluginAuditEntries = pluginAuditLog.readRecent()
-                                    result
                                 },
+                                onRefreshPluginAudit = { pluginAuditEntries = pluginAuditLog.readRecent() },
                                 agentOrchestrator = agentOrchestrator,
                                 agentTaskEnabled = androidPluginConsent &&
                                     deviceGrants[DeviceToolCapability.DEVICE_INFO] == true &&
@@ -2158,6 +2157,7 @@ private fun SettingsScreen(
     pluginConsent: Boolean,
     onPluginConsentChange: (Boolean) -> Unit,
     onRunPluginAction: (String) -> PluginExecutionResult,
+    onRefreshPluginAudit: () -> Unit,
     agentOrchestrator: AgentOrchestrator,
     agentTaskEnabled: Boolean,
     onDeviceGrantChange: (DeviceToolCapability, Boolean) -> Unit,
@@ -2731,6 +2731,7 @@ private fun SettingsScreen(
                                 val result = withContext(Dispatchers.IO) {
                                     onRunPluginAction("device_info")
                                 }
+                                onRefreshPluginAudit()
                                 deviceToolMessage = pluginResultText(result)
                             }
                         }
@@ -2744,6 +2745,7 @@ private fun SettingsScreen(
                                 val result = withContext(Dispatchers.IO) {
                                     onRunPluginAction("battery_status")
                                 }
+                                onRefreshPluginAudit()
                                 deviceToolMessage = pluginResultText(result)
                             }
                         }
