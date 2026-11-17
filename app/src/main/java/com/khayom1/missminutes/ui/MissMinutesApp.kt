@@ -772,6 +772,41 @@ fun MissMinutesApp(
         }
     }
 
+    val exportSelectedPlugin: (String) -> Unit = { pluginId ->
+        val manifest = pluginRegistry.installedPlugins().firstOrNull { it.id == pluginId }
+        if (manifest == null) {
+            backupError = "The selected plugin is not installed."
+        } else if (backupPassword.length < 10) {
+            backupError = "Enter a backup password of at least 10 characters in Settings."
+        } else {
+            val passwordCopy = backupPassword.toCharArray()
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                try {
+                    val payloads = withContext(Dispatchers.IO) {
+                        BackupPayloadAdapters.encode(
+                            setOf(BackupArchive.Category.PLUGINS),
+                            null,
+                            null,
+                            listOf(manifest)
+                        )
+                    }
+                    val bytes = withContext(Dispatchers.IO) {
+                        BackupArchive.instance.encode(payloads, passwordCopy)
+                    }
+                    pendingBackupBytes = bytes
+                    createBackupLauncher.launch("miss-minutes-plugin-$pluginId.mmb")
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Plugin backup could not be created."
+                    backupBusy = false
+                } finally {
+                    passwordCopy.fill('\\u0000')
+                }
+            }
+        }
+    }
+
     val confirmBackupRestore: () -> Unit = {
         val owner = currentOwnerId
         val incoming = pendingRestorePayload
@@ -1572,6 +1607,8 @@ fun MissMinutesApp(
                                 backupStatus = backupStatus,
                                 backupError = backupError,
                                 backupBusy = backupBusy,
+                                pluginManifests = pluginRegistry.installedPlugins(),
+                                onExportPlugin = exportSelectedPlugin,
                                 onCreateBackup = createEncryptedBackup,
                                 onChooseBackup = {
                                     if (backupPassword.length >= 10) {
@@ -2057,6 +2094,8 @@ private fun SettingsScreen(
     backupStatus: String?,
     backupError: String?,
     backupBusy: Boolean,
+    pluginManifests: List<com.khayom1.missminutes.plugins.PluginManifest>,
+    onExportPlugin: (String) -> Unit,
     onCreateBackup: () -> Unit,
     onChooseBackup: () -> Unit,
     onConfirmBackupRestore: () -> Unit,
@@ -2608,6 +2647,8 @@ private fun SettingsScreen(
             status = backupStatus,
             error = backupError,
             busy = backupBusy,
+            pluginManifests = pluginManifests,
+            onExportPlugin = onExportPlugin,
             onCreateBackup = onCreateBackup,
             onChooseBackup = onChooseBackup,
             onConfirmRestore = onConfirmBackupRestore,
