@@ -42,7 +42,8 @@ fun buildAiContextMessages(
         result += AiMessage(AiRole.USER, memoryText)
     }
     val prefixCount = if (memoryText != null) 2 else 0
-    result += history.filter { it.role != AiRole.SYSTEM }.takeLast(maxHistoryMessages)
+    val historyLimit = minOf(maxHistoryMessages, if (memoryText != null) 17 else 19)
+    result += history.filter { it.role != AiRole.SYSTEM }.takeLast(historyLimit)
     result += AiMessage(AiRole.USER, currentUserMessage)
 
     while (
