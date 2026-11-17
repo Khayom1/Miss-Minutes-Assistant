@@ -1,7 +1,6 @@
 package com.khayom1.missminutes
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import android.Manifest
@@ -194,7 +193,7 @@ class MainActivityTest {
         assertTrue(conversationStore.listConversations("guest-local").isNotEmpty())
         assertTrue(conversationStore.listConversations("test-user-" + "user@example.test".hashCode()).isEmpty())
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("Guest (local only)").assertIsDisplayed()
+        composeRule.onNodeWithText("Guest (local only)").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -212,7 +211,7 @@ class MainActivityTest {
             ).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
-        composeRule.onNodeWithText("Sign in to Miss Minutes").assertDoesNotExist()
+        assertTrue(composeRule.onAllNodesWithText("Sign in to Miss Minutes").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
