@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
@@ -1288,7 +1289,14 @@ private fun ChatScreen(
     speechListening: Boolean,
     speechError: String?,
     onSpeechInput: () -> Unit
-) {
+) { 
+    val messageListState = rememberLazyListState()
+    LaunchedEffect(messages.lastOrNull()?.id) {
+        if (messages.isNotEmpty()) {
+            messageListState.animateScrollToItem(messages.lastIndex)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1307,6 +1315,7 @@ private fun ChatScreen(
             )
         }
         LazyColumn(
+            state = messageListState,
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
