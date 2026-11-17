@@ -13,7 +13,14 @@ import com.khayom1.missminutes.plugins.PluginRegistry
 
 /** Builds the same restricted, consent-gated runtime for both UI and background work. */
 internal object AgentTaskRuntime {
-    fun create(context: Context): AgentOrchestrator {
+    @Volatile
+    private var cached: AgentOrchestrator? = null
+
+    fun get(context: Context): AgentOrchestrator = cached ?: synchronized(this) {
+        cached ?: build(context).also { cached = it }
+    }
+
+    private fun build(context: Context): AgentOrchestrator {
         val appContext = context.applicationContext
         val authorization = SharedPreferencesDeviceToolAuthorization(appContext)
         val deviceEngine = DeviceToolEngine(
