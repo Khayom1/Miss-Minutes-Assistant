@@ -73,6 +73,69 @@ class AiToolExecutionLoopTest {
     }
 
     @Test
+    fun reusedToolCallIdsAcrossRoundsAreRejectedBeforeSecondExecution() = runBlocking {
+        val provider = ScriptedProvider(
+            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
+            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}")))
+        )
+        var executions = 0
+        val error = runCatching {
+            AiToolExecutionLoop(provider, AiToolExecutor {
+                executions++
+                AiToolExecutionResult("ok")
+            }).complete(
+                AiRequest(
+                    messages = listOf(AiMessage(AiRole.USER, "Check battery")),
+                    tools = listOf(tool)
+                )
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is AiProviderException.InvalidResponse)
+        assertEquals(1, executions)
+    }
+
+    @Test
+    fun toolResultsAreTruncatedToRemainingConversationBudget() = runBlocking {
+        val provider = ScriptedProvider(
+            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
+            AiCompletion("done", "deepseek-chat")
+        )
+        val initialMessages = listOf(
+            AiMessage(AiRole.SYSTEM, "a".repeat(8_000)),
+            AiMessage(AiRole.SYSTEM, "b".repeat(8_000)),
+            AiMessage(AiRole.USER, "c".repeat(3_500))
+        )
+        AiToolExecutionLoop(provider, AiToolExecutor {
+            AiToolExecutionResult("x".repeat(1_000))
+        }).complete(AiRequest(messages = initialMessages, tools = listOf(tool)))
+
+        val followUp = provider.requests[1].messages
+        assertEquals(20_000, followUp.sumOf { it.content.length })
+        assertEquals(500, followUp.last().content.length)
+        assertEquals(AiRole.TOOL, followUp.last().role)
+    }
+
+    @Test
+    fun toolLoopRejectsMessageCountOverflowBeforeExecuting() = runBlocking {
+        val provider = ScriptedProvider(
+            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}")))
+        )
+        val messages = (1..31).map { AiMessage(AiRole.SYSTEM, "system") } +
+            AiMessage(AiRole.USER, "final user message")
+        var executions = 0
+        val error = runCatching {
+            AiToolExecutionLoop(provider, AiToolExecutor {
+                executions++
+                AiToolExecutionResult("should not execute")
+            }).complete(AiRequest(messages = messages, tools = listOf(tool)))
+        }.exceptionOrNull()
+
+        assertTrue(error is AiProviderException.InvalidResponse)
+        assertEquals(0, executions)
+    }
+
+    @Test
     fun toolRoundLimitStopsUnboundedModelLoops() = runBlocking {
         val provider = ScriptedProvider(
             AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
