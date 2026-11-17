@@ -2356,7 +2356,19 @@ private fun SettingsScreen(
                         onCheckedChange = onDarkThemeChange,
                         modifier = Modifier.testTag("dark_mode_switch").semantics {
                             contentDescription = copy.darkMode
-                            stateDescription = if (darkTheme) "On" else "Off"
+                            stateDescription = if (darkTheme) {
+                                when (language) {
+                                    AppLanguage.Tajik -> "Фаъол"
+                                    AppLanguage.Russian -> "Включено"
+                                    AppLanguage.English -> "On"
+                                }
+                            } else {
+                                when (language) {
+                                    AppLanguage.Tajik -> "Хомӯш"
+                                    AppLanguage.Russian -> "Выключено"
+                                    AppLanguage.English -> "Off"
+                                }
+                            }
                         }
                     )
                 }
@@ -2676,7 +2688,19 @@ private fun SettingsScreen(
                                 AppLanguage.Russian -> "Согласие на плагин состояния Android"
                                 AppLanguage.English -> "Android status plugin consent"
                             }
-                            stateDescription = if (pluginConsent) "Enabled" else "Disabled"
+                            stateDescription = if (pluginConsent) {
+                                when (language) {
+                                    AppLanguage.Tajik -> "Фаъол"
+                                    AppLanguage.Russian -> "Включено"
+                                    AppLanguage.English -> "Enabled"
+                                }
+                            } else {
+                                when (language) {
+                                    AppLanguage.Tajik -> "Хомӯш"
+                                    AppLanguage.Russian -> "Выключено"
+                                    AppLanguage.English -> "Disabled"
+                                }
+                            }
                         }
                     )
                 }
@@ -2718,7 +2742,19 @@ private fun SettingsScreen(
                             onCheckedChange = { onDeviceGrantChange(capability, it) },
                             modifier = Modifier.testTag("device_capability_${capability.name.lowercase()}").semantics {
                                 contentDescription = label
-                                stateDescription = if (deviceGrants[capability] == true) "Enabled" else "Disabled"
+                                stateDescription = if (deviceGrants[capability] == true) {
+                                    when (language) {
+                                        AppLanguage.Tajik -> "Фаъол"
+                                        AppLanguage.Russian -> "Включено"
+                                        AppLanguage.English -> "Enabled"
+                                    }
+                                } else {
+                                    when (language) {
+                                        AppLanguage.Tajik -> "Хомӯш"
+                                        AppLanguage.Russian -> "Выключено"
+                                        AppLanguage.English -> "Disabled"
+                                    }
+                                }
                             }
                         )
                     }
@@ -2888,7 +2924,19 @@ private fun SettingsScreen(
                                 AppLanguage.Russian -> "Добавлять локальную память в запросы ИИ"
                                 AppLanguage.English -> "Include local memory in AI requests"
                             }
-                            stateDescription = if (memoryContextEnabled) "On" else "Off"
+                            stateDescription = if (memoryContextEnabled) {
+                                when (language) {
+                                    AppLanguage.Tajik -> "Фаъол"
+                                    AppLanguage.Russian -> "Включено"
+                                    AppLanguage.English -> "On"
+                                }
+                            } else {
+                                when (language) {
+                                    AppLanguage.Tajik -> "Хомӯш"
+                                    AppLanguage.Russian -> "Выключено"
+                                    AppLanguage.English -> "Off"
+                                }
+                            }
                         }
                     )
                 }
