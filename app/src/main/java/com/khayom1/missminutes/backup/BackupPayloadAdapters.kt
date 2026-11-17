@@ -1,7 +1,6 @@
 package com.khayom1.missminutes.backup
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -69,7 +68,9 @@ object BackupPayloadAdapters {
             ?: throw IllegalArgumentException("Conversation backup schema is invalid.")
         require(version in 1..2) { "Unsupported conversation backup version." }
         require(payload["exportedAt"]?.jsonPrimitive?.content?.toLongOrNull() != null)
-        require(payload["retentionDays"]?.jsonPrimitive?.content?.toIntOrNull() in setOf(0, 30, 90, 365))
+        val retentionDays = payload["retentionDays"]?.jsonPrimitive?.content?.toIntOrNull()
+            ?: throw IllegalArgumentException("Conversation retention setting is invalid.")
+        require(retentionDays in setOf(0, 30, 90, 365))
         val conversations = payload["conversations"]?.jsonArray
             ?: throw IllegalArgumentException("Conversation list is missing.")
         val memories = payload["memory"]?.jsonArray
