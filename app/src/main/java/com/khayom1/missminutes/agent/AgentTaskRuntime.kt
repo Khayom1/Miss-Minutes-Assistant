@@ -8,6 +8,7 @@ import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import com.khayom1.missminutes.memory.AndroidKeystoreConversationCipher
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
+import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.FilePluginAuditLog
 import com.khayom1.missminutes.plugins.PluginRegistry
 
@@ -33,7 +34,15 @@ internal object AgentTaskRuntime {
             handlers = AndroidDeviceStatusPlugin.handlers(deviceEngine),
             consentStore = consentStore,
             auditLog = FilePluginAuditLog(appContext)
-        ).apply { install(AndroidDeviceStatusPlugin.manifest()) }
+        ).apply {
+            install(AndroidDeviceStatusPlugin.manifest())
+            // Restore declarative manifests after process death. Registry.install
+            // validates every action against compiled handlers, so unknown plugins
+            // remain inert and cannot load arbitrary code.
+            AndroidPluginManifestStore(appContext).load().forEach { manifest ->
+                runCatching { install(manifest) }
+            }
+        }
         val store = AndroidAgentTaskStateStore(
             appContext,
             AndroidKeystoreConversationCipher("miss_minutes_agent_tasks_aes_v1")
