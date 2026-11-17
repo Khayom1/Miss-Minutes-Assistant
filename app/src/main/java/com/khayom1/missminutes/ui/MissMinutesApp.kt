@@ -1403,7 +1403,7 @@ fun MissMinutesApp(
                 onContinueAsGuest = continueAsGuest
             )
             else -> {
-                val screen = AppScreen.valueOf(selectedScreenName)
+                val screen = AppScreen.valueOf(selectedScreenName).let { if (it == AppScreen.Dashboard) AppScreen.Chat else it }
                 Scaffold(
                     topBar = {
                         CenterAlignedTopAppBar(
