@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Process
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -314,17 +315,26 @@ class MissMinutesWakeWordService : Service() {
 object WakeWordServiceState {
     private const val PREFERENCES = "miss_minutes_voice_state"
     private const val ENABLED = "wake_word_enabled"
+    private const val SERVICE_PID = "wake_service_pid"
 
-    fun isEnabled(context: Context): Boolean =
-        context.applicationContext
+    fun isEnabled(context: Context): Boolean {
+        val preferences = context.applicationContext
             .getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-            .getBoolean(ENABLED, false)
+        val enabled = preferences.getBoolean(ENABLED, false)
+        val recordedPid = preferences.getInt(SERVICE_PID, -1)
+        if (enabled && recordedPid == Process.myPid()) return true
+        if (enabled) {
+            preferences.edit().putBoolean(ENABLED, false).remove(SERVICE_PID).apply()
+        }
+        return false
+    }
 
     fun setEnabled(context: Context, enabled: Boolean) {
-        context.applicationContext
+        val editor = context.applicationContext
             .getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(ENABLED, enabled)
-            .apply()
+        if (enabled) editor.putInt(SERVICE_PID, Process.myPid()) else editor.remove(SERVICE_PID)
+        editor.apply()
     }
 }
