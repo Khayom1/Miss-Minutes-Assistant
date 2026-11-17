@@ -155,6 +155,7 @@ class DirectDeepSeekProvider(
         if (message.toolCalls.size > MAX_TOOL_CALLS) throw AiProviderException.InvalidResponse()
 
         val calls = message.toolCalls.map { call ->
+            if (call.type != "function") throw AiProviderException.InvalidResponse()
             val validId = call.id.takeIf { it.matches(TOOL_ID) }
                 ?: throw AiProviderException.InvalidResponse()
             val validName = call.function.name.takeIf { it.matches(TOOL_NAME) }
