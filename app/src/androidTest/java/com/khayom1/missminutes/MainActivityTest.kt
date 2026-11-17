@@ -395,7 +395,6 @@ class MainActivityTest {
     }
 
     @Test
-    @Test
     fun runtimeProfileChangesTheActualRequestBudgetAndPersistsLocally() {
         assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
