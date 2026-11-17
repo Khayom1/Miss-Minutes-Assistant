@@ -489,6 +489,7 @@ fun MissMinutesApp(
     var memoryDraft by rememberSaveable { mutableStateOf("") }
     var memoryMessage by remember { mutableStateOf<String?>(null) }
     var exportPayload by remember { mutableStateOf<String?>(null) }
+    var exportError by remember { mutableStateOf<String?>(null) }
     var pendingDeleteConversationId by remember { mutableStateOf<String?>(null) }
     var confirmDeleteAll by remember { mutableStateOf(false) }
     val copy = copyFor(language)
@@ -888,7 +889,20 @@ fun MissMinutesApp(
     val exportLocalData: () -> Unit = {
         currentOwnerId?.let { owner ->
             scope.launch {
-                exportPayload = withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
+                val result = runCatching {
+                    withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
+                }
+                result.onSuccess {
+                    exportPayload = it
+                    exportError = null
+                }.onFailure {
+                    exportPayload = null
+                    exportError = when (language) {
+                        AppLanguage.English -> "Export is larger than the 2 MB safety limit. Delete older records and retry."
+                        AppLanguage.Russian -> "Экспорт превышает безопасный лимит 2 МБ. Удалите старые записи и повторите попытку."
+                        AppLanguage.Tajik -> "Содирот аз ҳадди бехатари 2 МБ зиёд аст. Сабтҳои кӯҳнаро пок карда, боз кӯшиш кунед."
+                    }
+                }
             }
         }
     }
@@ -1063,6 +1077,7 @@ fun MissMinutesApp(
                                 language = language,
                                 conversations = conversationSummaries,
                                 exportPayload = exportPayload,
+                                exportError = exportError,
                                 pendingDeleteConversationId = pendingDeleteConversationId,
                                 confirmDeleteAll = confirmDeleteAll,
                                 onNewConversation = startNewConversation,
@@ -1401,6 +1416,7 @@ private fun HistoryScreen(
     language: AppLanguage,
     conversations: List<ConversationSummary>,
     exportPayload: String?,
+    exportError: String?,
     pendingDeleteConversationId: String?,
     confirmDeleteAll: Boolean,
     onNewConversation: () -> Unit,
@@ -1431,6 +1447,9 @@ private fun HistoryScreen(
         }
         TextButton(onClick = onRequestDeleteAll, enabled = conversations.isNotEmpty()) {
             Text(labels[2], color = MaterialTheme.colorScheme.error)
+        }
+        if (exportError != null) {
+            Text(exportError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         if (conversations.isEmpty()) {
             Text(copy.historyEmpty, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1468,6 +1487,10 @@ private fun HistoryScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(labels[8], style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (language == AppLanguage.Tajik) "Нусхабардорӣ маълумотро ба буфери мубодила мегузорад." else if (language == AppLanguage.Russian) "Копирование помещает данные в буфер обмена." else "Copy places the full export on the system clipboard.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Text(exportPayload.take(1_500), style = MaterialTheme.typography.bodySmall)
                 }
             },
