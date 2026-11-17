@@ -55,8 +55,10 @@ class AgentOrchestratorTest {
     @Test
     fun sensitiveActionWaitsForExplicitApproval() {
         var calls = 0
-        val engine = orchestrator { _, _ ->
+        var confirmed = false
+        val engine = orchestrator { request, _ ->
             calls++
+            confirmed = request.userConfirmed
             PluginExecutionResult(true, "done", PluginCapability.DEVICE_INFORMATION)
         }
         engine.create(plan(listOf(node("sensitive", approval = true))))
@@ -68,6 +70,7 @@ class AgentOrchestratorTest {
         val result = engine.advance("task_1") as AgentAdvanceResult.Progress
         assertEquals(AgentTaskStatus.SUCCEEDED, result.state.status)
         assertEquals(1, calls)
+        assertTrue(confirmed)
     }
 
     @Test
