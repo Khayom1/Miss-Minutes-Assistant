@@ -44,16 +44,14 @@ Deliverables:
 - Android email/password sign-in/sign-up, session restore/refresh and sign-out are wired to the app UI.
 - Session tokens are stored only as AES-256-GCM ciphertext using a non-exportable Android Keystore key; passwords are transient UI state.
 - Supabase Auth remains an independent account/session feature; the DeepSeek request path does not send Supabase JWTs or Supabase keys.
-- Supabase `sb_secret_*` credentials are sent on `apikey` only; legacy service-role JWT fallback uses the Bearer header.
-- The edge handler streams and caps request bodies before parsing and does not consume quota when provider configuration is missing.
 
 P2 acceptance:
-- Deno edge-function tests and Android unit tests pass.
+- Android unit tests and API 35 instrumentation tests pass; legacy edge-function tests remain regression coverage only.
 - Gitleaks, APK/lint, API 35 instrumentation and artifact upload pass on the exact P2 head.
-- Auth rejects missing/expired sessions; server quota blocks over-limit calls before provider egress.
+- Missing or rejected DeepSeek keys produce clear, typed UI errors without exposing credentials or signing the user out of Supabase.
 - Provider error bodies and credentials are not returned to or logged by the app.
 - Live provider test is recorded only when the user supplies a valid DeepSeek API key in the app and a real request succeeds.
-- No P3 work starts until P2 is accepted.
+- The P3 branch remains separate until P2 is accepted.
 
 ## P3 — Hybrid voice (not started)
 
