@@ -711,6 +711,10 @@ fun MissMinutesApp(
                                 darkTheme = darkTheme,
                                 email = userEmail,
                                 isBusy = authBusy,
+                                wakeEnabled = wakeEnabled,
+                                wakeMessage = wakeMessage,
+                                onEnableWakeListening = enableWakeListening,
+                                onDisableWakeListening = disableWakeListening,
                                 onLanguageChange = { selectedLanguageName = it.name },
                                 onDarkThemeChange = { darkTheme = it },
                                 onSignOut = signOut
@@ -1003,6 +1007,10 @@ private fun SettingsScreen(
     darkTheme: Boolean,
     email: String,
     isBusy: Boolean,
+    wakeEnabled: Boolean,
+    wakeMessage: String?,
+    onEnableWakeListening: () -> Unit,
+    onDisableWakeListening: () -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
     onDarkThemeChange: (Boolean) -> Unit,
     onSignOut: () -> Unit
@@ -1010,6 +1018,7 @@ private fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -1047,6 +1056,47 @@ private fun SettingsScreen(
                 )
             }
         }
+        val wakeTitle = when (language) {
+            AppLanguage.English -> "Offline wake phrase"
+            AppLanguage.Russian -> "Офлайн-фраза активации"
+            AppLanguage.Tajik -> "Ибораи бедоркунии офлайн"
+        }
+        val wakeDisclosure = when (language) {
+            AppLanguage.English -> "When enabled, Miss Minutes keeps the microphone active through an Android foreground service while this feature is on. Audio is processed only by Android's on-device speech recognizer; there is no cloud fallback or audio upload. A persistent notification is shown. Android may stop the service because of Force stop, permission changes or system restrictions."
+            AppLanguage.Russian -> "При включении Miss Minutes использует микрофон через фоновую службу Android, пока функция активна. Звук обрабатывается только встроенным офлайн-распознавателем Android; облачного резервного режима и отправки аудио нет. Постоянное уведомление обязательно. Android может остановить службу при принудительной остановке, отзыве разрешений или системных ограничениях."
+            AppLanguage.Tajik -> "Ҳангоми фаъол будан Miss Minutes микрофонро тавассути хидмати пешзаминаи Android истифода мебарад. Овоз танҳо дар дастгоҳ коркард мешавад; ба абр фиристода намешавад ва роҳи эҳтиётии онлайн вуҷуд надорад. Огоҳиномаи доимӣ нишон дода мешавад. Android метавонад хидматро ҳангоми Force stop, бекор шудани иҷозат ё маҳдудияти система қатъ кунад."
+        }
+        val wakeStart = when (language) {
+            AppLanguage.English -> "Enable microphone listening"
+            AppLanguage.Russian -> "Включить прослушивание"
+            AppLanguage.Tajik -> "Фаъол кардани гӯшкунии микрофон"
+        }
+        val wakeStop = when (language) {
+            AppLanguage.English -> "Stop listening"
+            AppLanguage.Russian -> "Остановить прослушивание"
+            AppLanguage.Tajik -> "Қатъ кардани гӯшкунӣ"
+        }
+        val wakeState = when (language) {
+            AppLanguage.English -> if (wakeEnabled) "Listening requested" else "Not listening"
+            AppLanguage.Russian -> if (wakeEnabled) "Прослушивание запрошено" else "Не прослушивает"
+            AppLanguage.Tajik -> if (wakeEnabled) "Гӯшкунӣ дархост шудааст" else "Гӯш намекунад"
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(wakeTitle, fontWeight = FontWeight.SemiBold)
+            Text("Miss Minutes", fontWeight = FontWeight.Medium)
+            Text(wakeDisclosure, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text(wakeState, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            if (wakeMessage != null) {
+                Text(wakeMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            Button(
+                onClick = if (wakeEnabled) onDisableWakeListening else onEnableWakeListening,
+                enabled = !isBusy,
+                modifier = Modifier.testTag("wake_phrase_toggle")
+            ) {
+                Text(if (wakeEnabled) wakeStop else wakeStart)
+            }
+        }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(copy.account, fontWeight = FontWeight.SemiBold)
             Text(email, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1054,7 +1104,7 @@ private fun SettingsScreen(
                 Text(if (isBusy) copy.wait else copy.signOut)
             }
         }
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.padding(top = 8.dp))
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(copy.about, fontWeight = FontWeight.SemiBold)
             Text("${ProductIdentity.NAME} · ${copy.version} ${ProductIdentity.VERSION_NAME}")
