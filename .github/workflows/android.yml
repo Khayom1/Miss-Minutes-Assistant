@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: android-ci-${{ github.ref }}
@@ -131,6 +132,46 @@ jobs:
           disable-animations: true
           script: gradle --no-daemon connectedDebugAndroidTest
 
+      - name: Verify APK package, version and signature metadata
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$ANDROID_SDK_ROOT/build-tools/37.0.0"
+          AAPT="$BUILD_TOOLS/aapt"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          unzip -tq "$DEBUG_APK"
+          unzip -tq "$RELEASE_APK"
+          DEBUG_BADGING="$("$AAPT" dump badging "$DEBUG_APK")"
+          RELEASE_BADGING="$("$AAPT" dump badging "$RELEASE_APK")"
+          printf '%s\n' "$DEBUG_BADGING" > app/build/release-evidence/debug-badging.txt
+          printf '%s\n' "$RELEASE_BADGING" > app/build/release-evidence/release-badging.txt
+          for BADGING in "$DEBUG_BADGING" "$RELEASE_BADGING"; do
+            printf '%s\n' "$BADGING" | grep -F "package: name='com.khayom1.missminutes'"
+            printf '%s\n' "$BADGING" | grep -F "sdkVersion:'26'"
+            printf '%s\n' "$BADGING" | grep -F "targetSdkVersion:'37'"
+          done
+          DEBUG_VERSION="$(printf '%s\n' "$DEBUG_BADGING" | sed -n "s/^package:.*versionCode='\\([^']*\\)'.*versionName='\\([^']*\\)'.*/\\1 \\2/p")"
+          RELEASE_VERSION="$(printf '%s\n' "$RELEASE_BADGING" | sed -n "s/^package:.*versionCode='\\([^']*\\)'.*versionName='\\([^']*\\)'.*/\\1 \\2/p")"
+          test -n "$DEBUG_VERSION"
+          test "$DEBUG_VERSION" = "$RELEASE_VERSION"
+          "$APKSIGNER" verify --verbose --print-certs "$DEBUG_APK" > app/build/release-evidence/debug-signature.txt 2>&1
+          if "$APKSIGNER" verify --verbose --print-certs "$RELEASE_APK" > app/build/release-evidence/release-signature.txt 2>&1; then
+            echo "Release APK is signed without an authorized owner-controlled release key." >&2
+            exit 1
+          fi
+          grep -Eqi "DOES NOT VERIFY|No signatures|not signed" app/build/release-evidence/release-signature.txt
+          {
+            echo "applicationId=com.khayom1.missminutes"
+            echo "version=$DEBUG_VERSION"
+            echo "minSdk=26"
+            echo "targetSdk=37"
+            echo "debugSignature=verified; see debug-signature.txt"
+            echo "releaseSignature=unsigned; owner-controlled release signing is required"
+          } > app/build/release-evidence/apk-metadata.txt
+
       - name: Generate APK checksums
         run: |
           sha256sum app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk > app/build/release-evidence/SHA256SUMS.txt
@@ -145,3 +186,17 @@ jobs:
             app/build/release-evidence/
           if-no-files-found: error
           retention-days: 14
+
+  dependency-review:
+    name: Dependency vulnerability review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Review dependency changes against known advisories
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: false
