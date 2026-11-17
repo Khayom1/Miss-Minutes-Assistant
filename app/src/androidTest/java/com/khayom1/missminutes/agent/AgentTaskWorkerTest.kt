@@ -12,6 +12,7 @@ import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -53,7 +54,7 @@ class AgentTaskWorkerTest {
     }
 
     @Test
-    fun workerReloadsImportedManifestAndStillRequiresExplicitConsent() = runBlocking {
+    fun workerReloadsImportedManifestAndStillRequiresExplicitConsent() = runBlocking<Unit> {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val builtIn = AndroidDeviceStatusPlugin.manifest()
         val imported = builtIn.copy(
