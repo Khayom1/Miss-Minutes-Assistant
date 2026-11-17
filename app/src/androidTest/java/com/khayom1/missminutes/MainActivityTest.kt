@@ -11,6 +11,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.khayom1.missminutes.ai.AiCompletion
+import com.khayom1.missminutes.ai.AndroidTtsPlayback
+import com.khayom1.missminutes.ai.TtsProvider
+import androidx.test.core.app.ApplicationProvider
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
 import com.khayom1.missminutes.ai.AiProviderException
@@ -95,7 +98,11 @@ class MainActivityTest {
         composeRule.setContent {
             com.khayom1.missminutes.ui.MissMinutesApp(
                 sessionManager = sessionManager,
-                aiProvider = aiProvider
+                aiProvider = aiProvider,
+                ttsProvider = object : TtsProvider {
+                    override suspend fun synthesize(text: String): ByteArray = byteArrayOf(1, 2, 3)
+                },
+                ttsPlayback = AndroidTtsPlayback(ApplicationProvider.getApplicationContext())
             )
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
