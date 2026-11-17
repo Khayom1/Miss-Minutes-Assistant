@@ -53,6 +53,17 @@ class AgentOrchestratorTest {
     }
 
     @Test
+    fun restoresMostRecentlyUpdatedTaskFromTheStore() {
+        val engine = orchestrator { _, _ ->
+            PluginExecutionResult(true, "ok", PluginCapability.DEVICE_INFORMATION)
+        }
+        engine.create(plan(listOf(node("first"))))
+        now += 1_000L
+        engine.create(plan(listOf(node("second")), id = "task_2"))
+        assertEquals("task_2", engine.latestTask()?.plan?.id)
+    }
+
+    @Test
     fun sensitiveActionWaitsForExplicitApproval() {
         var calls = 0
         var confirmed = false
