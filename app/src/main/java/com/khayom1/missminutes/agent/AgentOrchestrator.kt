@@ -118,7 +118,7 @@ class AgentOrchestrator(
     fun create(plan: AgentTaskPlan): AgentTaskState {
         validate(plan)
         val now = clockMillis()
-        require(plan.deadlineAtMillis > now) { "Task deadline must be in the future." }
+        require(plan.deadlineAtMillis > now && plan.deadlineAtMillis - now <= MAX_TASK_DURATION_MILLIS) { "Task deadline must be within the 24-hour execution window." }
         val nodes = plan.nodes.associate { node ->
             node.id to AgentNodeState(node.id, idempotencyKey = "${plan.id}:${node.id}")
         }
@@ -326,6 +326,7 @@ class AgentOrchestrator(
     private companion object {
         val ID = Regex("^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
         const val MAX_RESULT_CHARACTERS = 1_000
+        const val MAX_TASK_DURATION_MILLIS = 24 * 60 * 60 * 1_000L
         val TERMINAL = setOf(
             AgentTaskStatus.SUCCEEDED,
             AgentTaskStatus.FAILED,
