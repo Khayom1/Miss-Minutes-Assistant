@@ -15,6 +15,9 @@ import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -169,10 +172,10 @@ class BackupArchive private constructor() {
         val manifestBytes = entries.remove(MANIFEST_ENTRY)
             ?: throw IllegalArgumentException("Backup manifest is missing.")
         val manifest = Json.parseToJsonElement(manifestBytes.toString(Charsets.UTF_8)).jsonObject
-        val version = manifest["schemaVersion"]?.toString()?.toIntOrNull()
+        val version = manifest["schemaVersion"]?.jsonPrimitive?.content?.toIntOrNull()
             ?: throw IllegalArgumentException("Backup schema version is missing.")
         require(version in 1..CURRENT_SCHEMA_VERSION) { "This backup was created by a newer app version." }
-        val exportedAt = manifest["exportedAtEpochMillis"]?.toString()?.toLongOrNull()
+        val exportedAt = manifest["exportedAtEpochMillis"]?.jsonPrimitive?.content?.toLongOrNull()
             ?: throw IllegalArgumentException("Backup timestamp is invalid.")
         val declared = manifest["categories"]?.jsonArray?.map {
             runCatching { Category.valueOf(it.jsonPrimitive.content) }
