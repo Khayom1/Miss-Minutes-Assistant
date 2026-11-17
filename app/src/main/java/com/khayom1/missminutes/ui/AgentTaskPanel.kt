@@ -34,7 +34,7 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 
 @Composable
-fun AgentTaskPanel(
+internal fun AgentTaskPanel(
     orchestrator: AgentOrchestrator,
     language: AppLanguage,
     enabled: Boolean
