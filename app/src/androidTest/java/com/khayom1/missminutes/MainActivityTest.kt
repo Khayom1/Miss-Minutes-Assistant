@@ -178,6 +178,23 @@ class MainActivityTest {
     }
 
     @Test
+    fun guestModeOpensAssistantWithoutSupabaseRegistration() {
+        composeRule.onNodeWithText("Continue as guest — no account needed").assertIsDisplayed()
+        composeRule.onNodeWithTag("auth_continue_guest").performClick()
+        waitForChatScreen()
+
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Hello without an account")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Mock AI response").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("Continue as guest — no account needed").assertIsDisplayed()
+    }
+
+    @Test
     fun authenticationScreenAcceptsSignInBeforeOpeningAssistant() {
         composeRule.onNodeWithText("Sign in to Miss Minutes").assertIsDisplayed()
         composeRule.onNodeWithTag("auth_submit").assertIsDisplayed()
