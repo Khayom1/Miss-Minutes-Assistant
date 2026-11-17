@@ -226,7 +226,7 @@ class MainActivityTest {
 
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("user@example.test").assertIsDisplayed()
+        composeRule.onNodeWithText("user@example.test").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -242,7 +242,7 @@ class MainActivityTest {
         composeRule.onNodeWithText("Conversation history").assertIsDisplayed()
 
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("App settings").assertIsDisplayed()
+        composeRule.onAllNodesWithText("App settings").onFirst().assertIsDisplayed()
 
         composeRule.onNodeWithText("New").performClick()
         waitForChatScreen()
@@ -260,7 +260,7 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Check the authenticated chat").assertIsDisplayed()
+        composeRule.onNodeWithText("Check the authenticated chat").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Mock AI response").performScrollTo().assertIsDisplayed()
         assertEquals(
             AiMessage(
@@ -335,6 +335,7 @@ class MainActivityTest {
         memorySwitch.performScrollTo().assertIsOff()
         memorySwitch.performClick()
         composeRule.onNodeWithText("New").performClick()
+        waitForChatScreen()
         composeRule.onNodeWithTag("chat_input").performTextInput("How should you explain?")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -387,7 +388,7 @@ class MainActivityTest {
         }
 
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("new-user@example.test").assertIsDisplayed()
+        composeRule.onNodeWithText("new-user@example.test").performScrollTo().assertIsDisplayed()
         assertEquals(
             0,
             composeRule.onAllNodesWithText("Private conversation from previous account")
@@ -501,7 +502,7 @@ class MainActivityTest {
         composeRule.onNodeWithText("Settings").performClick()
 
         composeRule.onNodeWithText("Русский").performClick()
-        composeRule.onNodeWithText("Настройки приложения").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Настройки приложения").onFirst().assertIsDisplayed()
         composeRule.onNodeWithText("Язык").assertIsDisplayed()
 
         composeRule.onNodeWithText("Тоҷикӣ").performClick()
