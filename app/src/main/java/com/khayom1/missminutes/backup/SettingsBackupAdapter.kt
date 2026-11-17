@@ -34,13 +34,13 @@ object SettingsBackupAdapter {
             "Unsupported settings backup version."
         }
         val value = Settings(
-            language = payload["language"]?.jsonPrimitive?.content ?: error("Language is missing."),
+            language = payload["language"]?.jsonPrimitive?.content ?: throw IllegalArgumentException("Language is missing."),
             darkMode = payload["darkMode"]?.jsonPrimitive?.content?.toBooleanStrictOrNull()
-                ?: error("Dark mode value is invalid."),
+                ?: throw IllegalArgumentException("Dark mode value is invalid."),
             retentionDays = payload["retentionDays"]?.jsonPrimitive?.content?.toIntOrNull()
-                ?: error("Retention value is invalid."),
+                ?: throw IllegalArgumentException("Retention value is invalid."),
             memoryContextEnabled = payload["memoryContextEnabled"]?.jsonPrimitive?.content?.toBooleanStrictOrNull()
-                ?: error("Memory setting is invalid.")
+                ?: throw IllegalArgumentException("Memory setting is invalid.")
         )
         validate(value)
         return value
