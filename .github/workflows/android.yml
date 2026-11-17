@@ -88,11 +88,11 @@ jobs:
           trap 'adb emu kill >/dev/null 2>&1 || kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
           adb wait-for-device
           for attempt in $(seq 1 90); do
-            BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r')"
+            BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
             if [ "$BOOTED" = "1" ]; then break; fi
             sleep 5
           done
-          if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r')" != "1" ]; then
+          if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; then
             adb logcat -d | tail -200
             exit 1
           fi
