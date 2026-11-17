@@ -20,10 +20,10 @@ class TtsBackgroundPlaybackGuardTest {
             onStopped = { calls += "clear-ui" }
         )
 
-        guard.onStateChanged(owner.lifecycle, Lifecycle.Event.ON_RESUME)
+        guard.onStateChanged(owner, Lifecycle.Event.ON_RESUME)
         assertEquals(emptyList<String>(), calls)
 
-        guard.onStateChanged(owner.lifecycle, Lifecycle.Event.ON_STOP)
+        guard.onStateChanged(owner, Lifecycle.Event.ON_STOP)
         assertEquals(listOf("stop", "clear-ui"), calls)
     }
 }
