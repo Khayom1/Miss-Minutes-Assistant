@@ -56,6 +56,8 @@ import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.SessionManager
+import com.khayom1.missminutes.ai.TtsProvider
+import com.khayom1.missminutes.ai.AndroidTtsPlayback
 import com.khayom1.missminutes.ai.SupabaseAuthException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -127,7 +129,11 @@ private data class UiCopy(
     val sending: String,
     val sendFailed: String,
     val conversationTooLong: String,
-    val aiRateLimited: String
+    val aiRateLimited: String,
+    val speak: String,
+    val stopSpeaking: String,
+    val voicePreparing: String,
+    val voiceFailed: String
 )
 
 private fun copyFor(language: AppLanguage): UiCopy = when (language) {
@@ -179,7 +185,11 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         sending = "Thinking…",
         sendFailed = "No response received. Check your connection and server configuration.",
         conversationTooLong = "This conversation is too long to send. Start a new conversation.",
-        aiRateLimited = "The AI request limit was reached. Try again shortly."
+        aiRateLimited = "The AI request limit was reached. Try again shortly.",
+        speak = "Speak",
+        stopSpeaking = "Stop voice",
+        voicePreparing = "Preparing voice…",
+        voiceFailed = "Voice playback failed. Check TTS configuration."
     )
     AppLanguage.Russian -> UiCopy(
         chat = "Чат",
@@ -229,7 +239,11 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         sending = "Думаю…",
         sendFailed = "Ответ не получен. Проверьте интернет и настройки сервера.",
         conversationTooLong = "Диалог слишком длинный. Начните новый диалог.",
-        aiRateLimited = "Достигнут лимит запросов ИИ. Попробуйте немного позже."
+        aiRateLimited = "Достигнут лимит запросов ИИ. Попробуйте немного позже.",
+        speak = "Озвучить",
+        stopSpeaking = "Остановить",
+        voicePreparing = "Подготовка голоса…",
+        voiceFailed = "Не удалось воспроизвести голос. Проверьте настройки TTS."
     )
     AppLanguage.Tajik -> UiCopy(
         chat = "Чат",
@@ -279,7 +293,11 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         sending = "Фикр карда истодаам…",
         sendFailed = "Ҷавоб гирифта нашуд. Интернет ва танзимоти серверро санҷед.",
         conversationTooLong = "Гуфтугӯ хеле дароз аст. Гуфтугӯи нав оғоз кунед.",
-        aiRateLimited = "Маҳдудияти дархостҳои AI расид. Каме баъд кӯшиш кунед."
+        aiRateLimited = "Маҳдудияти дархостҳои AI расид. Каме баъд кӯшиш кунед.",
+        speak = "Хондан",
+        stopSpeaking = "Истодан",
+        voicePreparing = "Овоз омода мешавад…",
+        voiceFailed = "Пахши овоз ноком шуд. Танзимоти TTS-ро санҷед."
     )
 }
 
@@ -287,7 +305,9 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
 @Composable
 fun MissMinutesApp(
     sessionManager: SessionManager,
-    aiProvider: AiProvider
+    aiProvider: AiProvider,
+    ttsProvider: TtsProvider,
+    ttsPlayback: AndroidTtsPlayback
 ) {
     val scope = rememberCoroutineScope()
     var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
@@ -307,6 +327,8 @@ fun MissMinutesApp(
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
+    var speakingMessageId by remember { mutableStateOf<Long?>(null) }
+    var voiceError by remember { mutableStateOf<String?>(null) }
     var nextMessageId by remember { mutableStateOf(0L) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val language = AppLanguage.valueOf(selectedLanguageName)
@@ -385,6 +407,9 @@ fun MissMinutesApp(
             authEmail = ""
             authPassword = ""
             messages.clear()
+            ttsPlayback.stop()
+            speakingMessageId = null
+            voiceError = null
             draft = ""
             aiHasResponded = false
             chatError = null
@@ -489,6 +514,40 @@ fun MissMinutesApp(
         }
     }
 
+
+    val speakMessage: (ChatMessage) -> Unit = { message ->
+        if (!message.isUser) {
+            if (speakingMessageId == message.id) {
+                ttsPlayback.stop()
+                speakingMessageId = null
+            } else {
+                ttsPlayback.stop()
+                speakingMessageId = message.id
+                voiceError = null
+                scope.launch {
+                    try {
+                        val audio = ttsProvider.synthesize(message.text)
+                        if (speakingMessageId == message.id) {
+                            ttsPlayback.play(
+                                audio = audio,
+                                onCompleted = { speakingMessageId = null },
+                                onError = {
+                                    speakingMessageId = null
+                                    voiceError = copy.voiceFailed
+                                }
+                            )
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        speakingMessageId = null
+                        voiceError = copy.voiceFailed
+                    }
+                }
+            }
+        }
+    }
+
     MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
         when {
             isRestoring -> LoadingScreen()
@@ -553,7 +612,11 @@ fun MissMinutesApp(
                                 isSending = isSending,
                                 error = chatError,
                                 onDraftChange = { draft = it },
-                                onSend = submitMessage
+                                onSend = submitMessage,
+                                speakingMessageId = speakingMessageId,
+                                voiceError = voiceError,
+                                voicePreparing = copy.voicePreparing,
+                                onSpeak = speakMessage
                             )
                             AppScreen.Dashboard -> DashboardScreen(
                                 copy = copy,
@@ -689,7 +752,11 @@ private fun ChatScreen(
     isSending: Boolean,
     error: String?,
     onDraftChange: (String) -> Unit,
-    onSend: () -> Unit
+    onSend: () -> Unit,
+    speakingMessageId: Long?,
+    voiceError: String?,
+    voicePreparing: String,
+    onSpeak: (ChatMessage) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -713,8 +780,18 @@ private fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(messages, key = { it.id }) { message ->
-                MessageBubble(message = message, youLabel = copy.you)
+                MessageBubble(
+                    message = message,
+                    youLabel = copy.you,
+                    speakLabel = if (speakingMessageId == message.id) copy.stopSpeaking else copy.speak,
+                    onSpeak = { onSpeak(message) }
+                )
             }
+        }
+        if (voiceError != null) {
+            Text(voiceError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        } else if (speakingMessageId != null) {
+            Text(voicePreparing, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Text(
             text = copy.gatewayNotice,
@@ -754,7 +831,12 @@ private fun ChatScreen(
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage, youLabel: String) {
+private fun MessageBubble(
+    message: ChatMessage,
+    youLabel: String,
+    speakLabel: String,
+    onSpeak: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -772,6 +854,11 @@ private fun MessageBubble(message: ChatMessage, youLabel: String) {
                 fontWeight = FontWeight.SemiBold
             )
             Text(text = message.text)
+            if (!message.isUser) {
+                TextButton(onClick = onSpeak, modifier = Modifier.testTag("tts_message")) {
+                    Text(speakLabel)
+                }
+            }
         }
     }
 }

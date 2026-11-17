@@ -8,8 +8,8 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 |---|---|---|
 | P0 | Complete | Clean Android foundation, architecture/security baseline, CI and repository stabilization |
 | P1 | Complete | ChatGPT-like Compose UI foundation |
-| P2 | In progress | Authenticated AI provider gateway, DeepSeek proxy and optional local inference contract |
-| P3 | Not started | Hybrid speech input/output and ElevenLabs adapter |
+| P2 | CI passed; live provider acceptance pending | Authenticated AI provider gateway, DeepSeek proxy and optional local inference contract |
+| P3 | In progress | TTS-only first slice: authenticated ElevenLabs male voice output; STT deferred |
 | P4 | Not started | Persistent local conversation history and memory, optional authenticated sync |
 | P5 | Not started | Explicitly permissioned Android-native capabilities |
 | P6 | Not started | Typed plugin/skill manifest, capability allowlist and execution boundary |
@@ -55,11 +55,23 @@ P2 acceptance:
 - The exact deployed function version is inspected with `verify_jwt=true`; the service-role header semantics are verified by Deno tests.
 - No P3 work starts until P2 is accepted.
 
-## P3 — Hybrid voice (not started)
+## P3 — TTS-first voice (in progress)
 
-- Speech-to-text input and text-to-speech output behind provider-neutral interfaces.
-- ElevenLabs hosted voice adapter with API credentials held server-side.
-- Android/offline voice fallback with truthful capability status.
+First delivery is deliberately limited to text-to-speech; STT, microphone permission and speech input are deferred.
+
+- Authenticated Supabase Edge Function `miss-minutes-tts`; `verify_jwt=true`.
+- ElevenLabs API key stays in Edge Function secrets; no provider credential in APK.
+- Fixed natural male voice profile: Daniel (`onwK4e9ZLuTAKqWW03F9`) with `eleven_multilingual_v2`.
+- Text input is capped at 3,000 characters; MP3 output is capped at 5 MiB.
+- Per-user quota: 5 TTS requests per minute; normalized errors, timeouts and no audio persistence by default.
+- Android chat assistant messages expose speak/stop controls; playback uses a temporary cache file deleted on completion/stop.
+- Live playback requires `ELEVENLABS_API_KEY` in Supabase Edge Function secrets and a real authenticated user session.
+
+## P3 — Remaining voice scope (not started)
+
+- Speech-to-text input behind a provider-neutral interface (deferred).
+- Additional voice providers (deferred).
+- Offline voice fallback with truthful capability status (deferred).
 - Runtime permission, microphone indicator, cancellation and timeout handling.
 - No raw audio retained by default; user-controlled opt-in for any persistence.
 

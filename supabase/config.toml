@@ -2,3 +2,6 @@ project_id = "bgfcpnlxztziigrsyuqp"
 
 [functions.miss-minutes-ai]
 verify_jwt = true
+
+[functions.miss-minutes-tts]
+verify_jwt = true
