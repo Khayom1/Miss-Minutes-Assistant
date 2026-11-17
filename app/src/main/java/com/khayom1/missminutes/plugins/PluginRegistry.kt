@@ -1,5 +1,14 @@
 package com.khayom1.missminutes.plugins
 
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Future
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+
 /**
  * Closed-world plugin dispatcher. Only handlers compiled into the app can run;
  * manifests are declarative schemas and never load or execute third-party code.
@@ -76,26 +85,39 @@ class PluginRegistry(
         globalCallTimes.addLast(now)
         localTimes.addLast(now)
 
-        val started = System.nanoTime()
+        val task: Future<PluginActionOutput> = try {
+            EXECUTOR.submit<PluginActionOutput> { handler.execute(request.arguments) }
+        } catch (_: RejectedExecutionException) {
+            record(PluginAuditEntry(now, manifest.id, action.id, "capacity_exceeded"))
+            return PluginExecutionResult(false, "Plugin execution capacity is full.", action.capability)
+        }
         return try {
-            val output = handler.execute(request.arguments)
-            val elapsed = (System.nanoTime() - started) / 1_000_000L
-            if (elapsed > manifest.maxExecutionMillis) {
-                record(PluginAuditEntry(now, manifest.id, action.id, "timeout"))
-                PluginExecutionResult(false, "Plugin exceeded its execution budget.", action.capability)
-            } else if (output.message.length > maxOutputCharacters) {
+            val output = task.get(manifest.maxExecutionMillis, TimeUnit.MILLISECONDS)
+            if (output.message.length > maxOutputCharacters) {
                 record(PluginAuditEntry(now, manifest.id, action.id, "oversized_output"))
                 PluginExecutionResult(false, "Plugin output exceeded the allowed size.", action.capability)
             } else {
                 record(PluginAuditEntry(now, manifest.id, action.id, if (output.success) "success" else "failed"))
                 PluginExecutionResult(output.success, output.message, action.capability)
             }
-        } catch (_: SecurityException) {
-            record(PluginAuditEntry(now, manifest.id, action.id, "permission_denied"))
-            PluginExecutionResult(false, "Android denied this plugin operation.", action.capability)
-        } catch (_: Exception) {
-            record(PluginAuditEntry(now, manifest.id, action.id, "failed"))
-            PluginExecutionResult(false, "Plugin operation failed safely.", action.capability)
+        } catch (_: TimeoutException) {
+            task.cancel(true)
+            record(PluginAuditEntry(now, manifest.id, action.id, "timeout"))
+            PluginExecutionResult(false, "Plugin exceeded its execution budget.", action.capability)
+        } catch (error: ExecutionException) {
+            val cause = error.cause
+            val outcome = if (cause is SecurityException) "permission_denied" else "failed"
+            record(PluginAuditEntry(now, manifest.id, action.id, outcome))
+            PluginExecutionResult(
+                false,
+                if (cause is SecurityException) "Android denied this plugin operation." else "Plugin operation failed safely.",
+                action.capability
+            )
+        } catch (_: InterruptedException) {
+            task.cancel(true)
+            Thread.currentThread().interrupt()
+            record(PluginAuditEntry(now, manifest.id, action.id, "cancelled"))
+            PluginExecutionResult(false, "Plugin operation was cancelled.", action.capability)
         }
     }
 
@@ -187,6 +209,17 @@ class PluginRegistry(
     }
 
     private companion object {
+        private val EXECUTOR = ThreadPoolExecutor(
+            2,
+            2,
+            0L,
+            TimeUnit.MILLISECONDS,
+            ArrayBlockingQueue(4),
+            ThreadFactory { runnable ->
+                Thread(runnable, "miss-minutes-plugin").apply { isDaemon = true }
+            },
+            ThreadPoolExecutor.AbortPolicy()
+        )
         val PLUGIN_ID = Regex("^[a-z][a-z0-9_.-]{2,63}$")
         val ACTION_ID = Regex("^[a-z][a-z0-9_.-]{1,47}$")
         val FIELD_ID = Regex("^[a-z][a-z0-9_]{0,31}$")
