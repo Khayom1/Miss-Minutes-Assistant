@@ -14,6 +14,7 @@ import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
 import com.khayom1.missminutes.ai.AiProviderException
+import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import kotlinx.coroutines.CompletableDeferred
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AuthFlowResult
@@ -34,6 +35,7 @@ class MainActivityTest {
 
     private lateinit var sessionManager: SessionManager
     private lateinit var aiProvider: FakeAiProvider
+    private lateinit var apiKeyStore: MemoryApiKeyStore
 
     private class MemoryStore : SessionStore {
         private var session: SupabaseAuthSession? = null
@@ -47,6 +49,13 @@ class MainActivityTest {
         override fun clear() {
             session = null
         }
+    }
+
+    private class MemoryApiKeyStore : DeepSeekApiKeyStore {
+        var key: String? = null
+        override fun load(): String? = key
+        override fun save(apiKey: String) { key = apiKey }
+        override fun clear() { key = null }
     }
 
     private class FakeAuthRepository : SupabaseAuthRepository {
@@ -92,10 +101,12 @@ class MainActivityTest {
             nowEpochSeconds = { 1_000L }
         )
         aiProvider = FakeAiProvider()
+        apiKeyStore = MemoryApiKeyStore()
         composeRule.setContent {
             com.khayom1.missminutes.ui.MissMinutesApp(
                 sessionManager = sessionManager,
-                aiProvider = aiProvider
+                aiProvider = aiProvider,
+                apiKeyStore = apiKeyStore
             )
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -246,6 +257,21 @@ class MainActivityTest {
             composeRule.onAllNodesWithText("Late response from old account")
                 .fetchSemanticsNodes().size
         )
+    }
+
+    @Test
+    fun settingsSavesAndRemovesUserOwnedDeepSeekKey() {
+        signIn()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("deepseek_api_key")
+            .performTextInput("sk-user-owned-test-key-123456")
+        composeRule.onNodeWithText("Save API key").performClick()
+        composeRule.waitUntil(timeoutMillis = 2_000) {
+            apiKeyStore.key == "sk-user-owned-test-key-123456"
+        }
+        composeRule.onNodeWithText("Key is stored securely on this device.").assertIsDisplayed()
+        composeRule.onNodeWithText("Remove key").performClick()
+        assertEquals(null, apiKeyStore.key)
     }
 
     @Test
