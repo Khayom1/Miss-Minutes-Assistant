@@ -9,12 +9,20 @@ import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AgentTaskRuntimeTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
+
+    @Test
+    fun runtimeIsRebuiltForEachUiOrWorkerEntry() {
+        val first = AgentTaskRuntime.get(context)
+        val second = AgentTaskRuntime.get(context)
+        assertNotSame(first, second)
+    }
 
     @Test
     fun backgroundRuntimeLoadsPersistedManifestButNeverRestoresConsent() {
