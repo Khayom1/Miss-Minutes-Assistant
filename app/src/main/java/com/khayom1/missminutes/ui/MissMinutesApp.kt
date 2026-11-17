@@ -1,7 +1,9 @@
 package com.khayom1.missminutes.ui
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -327,6 +330,23 @@ fun MissMinutesApp(
     val context = LocalContext.current
     var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
     var wakeMessage by remember { mutableStateOf<String?>(null) }
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: android.content.Context?, intent: Intent?) {
+                if (intent?.action == MissMinutesWakeWordService.ACTION_STATE_CHANGED) {
+                    wakeEnabled = intent.getBooleanExtra(MissMinutesWakeWordService.EXTRA_ENABLED, false)
+                    wakeMessage = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_MESSAGE)
+                }
+            }
+        }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(MissMinutesWakeWordService.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        onDispose { context.unregisterReceiver(receiver) }
+    }
     val wakePermissions = remember {
         buildList {
             add(Manifest.permission.RECORD_AUDIO)
