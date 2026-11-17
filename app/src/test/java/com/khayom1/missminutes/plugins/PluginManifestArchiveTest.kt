@@ -3,6 +3,8 @@ package com.khayom1.missminutes.plugins
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -64,6 +66,15 @@ class PluginManifestArchiveTest {
         ).jsonObject
         assertThrows(IllegalArgumentException::class.java) {
             PluginManifestArchive.decode(invalidEnum)
+        }
+    }
+
+    @Test
+    fun rejectsUnknownTopLevelFields() {
+        val payload = PluginManifestArchive.encode(listOf(manifest)).toMutableMap()
+        payload["apiKey"] = JsonPrimitive("secret")
+        assertThrows(IllegalArgumentException::class.java) {
+            PluginManifestArchive.decode(JsonObject(payload))
         }
     }
 
