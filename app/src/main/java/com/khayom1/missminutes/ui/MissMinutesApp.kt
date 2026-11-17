@@ -64,6 +64,7 @@ import com.khayom1.missminutes.ProductIdentity
 import com.khayom1.missminutes.data.AndroidConversationStore
 import com.khayom1.missminutes.data.ConversationRole
 import com.khayom1.missminutes.data.StoredConversation
+import com.khayom1.missminutes.data.StoredMemory
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
@@ -502,6 +503,7 @@ fun MissMinutesApp(
     var currentOwnerId by remember { mutableStateOf<String?>(null) }
     var activeConversationId by remember { mutableStateOf<String?>(null) }
     val savedConversations = remember { mutableStateListOf<StoredConversation>() }
+    val savedMemories = remember { mutableStateListOf<StoredMemory>() }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
@@ -521,15 +523,18 @@ fun MissMinutesApp(
         messages.clear()
         activeConversationId = null
         savedConversations.clear()
+        savedMemories.clear()
         val owner = currentOwnerId ?: return@LaunchedEffect
         val restored = withContext(Dispatchers.IO) {
             conversationStore.deleteOlderThan(owner, System.currentTimeMillis() - DEFAULT_RETENTION_MILLIS)
             val conversations = conversationStore.listConversations(owner)
             val latest = conversations.firstOrNull()
             val restoredMessages = latest?.let { conversationStore.loadMessages(owner, it.id) }.orEmpty()
-            conversations to (latest?.id to restoredMessages)
+            val memories = conversationStore.listMemories(owner)
+            Triple(conversations, latest?.id to restoredMessages, memories)
         }
         savedConversations.addAll(restored.first)
+        savedMemories.addAll(restored.third)
         val (conversationId, restoredMessages) = restored.second
         activeConversationId = conversationId
         restoredMessages.forEach { stored ->
