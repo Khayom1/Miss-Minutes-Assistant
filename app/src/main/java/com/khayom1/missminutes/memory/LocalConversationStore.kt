@@ -68,6 +68,11 @@ class LocalConversationStore(
     ): String {
         validateOwner(ownerId)
         require(title.isNotBlank() && title.length <= MAX_TITLE_CHARS)
+        val existingCount = readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM conversations WHERE owner_id = ?",
+            arrayOf(ownerId)
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
+        check(existingCount < MAX_CONVERSATIONS) { "The local conversation limit has been reached." }
         val id = UUID.randomUUID().toString()
         val values = ContentValues().apply {
             put("id", id)
@@ -243,6 +248,11 @@ class LocalConversationStore(
         validateOwner(ownerId)
         val normalized = content.trim()
         require(normalized.isNotEmpty() && normalized.length <= MAX_MEMORY_CHARS)
+        val existingCount = readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM memory_items WHERE owner_id = ?",
+            arrayOf(ownerId)
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
+        check(existingCount < MAX_MEMORY_ITEMS) { "The local memory limit has been reached." }
         val id = UUID.randomUUID().toString()
         val values = ContentValues().apply {
             put("id", id)
@@ -455,9 +465,9 @@ class LocalConversationStore(
         const val MAX_MESSAGE_CHARS = 8_000
         const val MAX_MEMORY_CHARS = 2_000
         const val MAX_TITLE_CHARS = 96
-        const val MAX_CONVERSATIONS = 100
+        const val MAX_CONVERSATIONS = 1_000
         const val MAX_MESSAGES_PER_CONVERSATION = 500
-        const val MAX_MEMORY_ITEMS = 200
+        const val MAX_MEMORY_ITEMS = 1_000
         const val MILLIS_PER_DAY = 86_400_000L
         val ALLOWED_RETENTION_DAYS = setOf(0, 30, 90, 365)
         private const val MAX_OWNER_ID_CHARS = 128
