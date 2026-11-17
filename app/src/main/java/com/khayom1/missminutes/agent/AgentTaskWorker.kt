@@ -25,7 +25,7 @@ class AgentTaskWorker(
             ?: return@withContext Result.failure()
 
         try {
-            val orchestrator = AgentTaskRuntime.create(applicationContext)
+            val orchestrator = AgentTaskRuntime.get(applicationContext)
             repeat(MAX_ADVANCES_PER_RUN) {
                 if (isStopped) return@withContext Result.success()
                 when (val result = orchestrator.advance(taskId)) {
