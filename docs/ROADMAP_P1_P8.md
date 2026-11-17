@@ -9,7 +9,7 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 | P0 | Complete | Clean Android foundation, architecture/security baseline, CI and repository stabilization |
 | P1 | Complete | ChatGPT-like Compose UI foundation |
 | P2 | CI passed; live provider acceptance pending | Authenticated AI provider gateway, DeepSeek proxy and optional local inference contract |
-| P3 | In progress | TTS-only first slice: authenticated ElevenLabs male voice output; STT deferred |
+| P3 | In progress | TTS-only first slice: Android on-device TextToSpeech; cloud voice providers deferred |
 | P4 | Not started | Persistent local conversation history and memory, optional authenticated sync |
 | P5 | Not started | Explicitly permissioned Android-native capabilities |
 | P6 | Not started | Typed plugin/skill manifest, capability allowlist and execution boundary |
@@ -53,19 +53,19 @@ P2 acceptance:
 - Provider error bodies and credentials are not returned to or logged by the app.
 - Live provider test is recorded only when a valid Supabase Auth session and server-side DeepSeek secret are configured.
 - The exact deployed function version is inspected with `verify_jwt=true`; the service-role header semantics are verified by Deno tests.
-- P3 code may be prepared on a dependent draft branch at the owner's direction, but it must not merge or be accepted until P2 is accepted. Live P3 testing remains gated on the server-side ElevenLabs secret.
+- P3 code may be prepared on a dependent draft branch at the owner's direction, but it must not merge or be accepted until P2 is accepted.
 
 ## P3 — TTS-first voice (in progress)
 
-First delivery is deliberately limited to text-to-speech; STT, microphone permission and speech input are deferred.
+First delivery is deliberately limited to text-to-speech; STT, microphone permission and live voice conversations are deferred.
 
-- Authenticated Supabase Edge Function `miss-minutes-tts`; `verify_jwt=true`.
-- ElevenLabs API key stays in Edge Function secrets; no provider credential in APK.
-- Fixed natural male voice profile: Daniel (`onwK4e9ZLuTAKqWW03F9`) with `eleven_multilingual_v2`.
-- Text input is capped at 3,000 characters; MP3 output is capped at 5 MiB.
-- Per-user quota: 5 TTS requests per minute; normalized errors, timeouts and no audio persistence by default.
-- Android chat assistant messages expose speak/stop controls; playback uses a temporary cache file deleted on completion/stop.
-- Live playback requires `ELEVENLABS_API_KEY` in Supabase Edge Function secrets and a real authenticated user session.
+- Android native TextToSpeech engine; no cloud TTS provider.
+- Selects the best available installed offline voice matching the device locale.
+- Uses Speak/Stop controls for assistant messages.
+- TTS text is processed on-device; no TTS API, API key, server function or audio upload.
+- Graceful failure when no compatible local voice is installed.
+- Stops speech on user cancellation/sign-out and shuts down the engine with the Activity lifecycle.
+- Device-specific voice quality and Tajik language availability must be verified on physical hardware.
 
 ## P3 — Remaining voice scope (not started)
 
