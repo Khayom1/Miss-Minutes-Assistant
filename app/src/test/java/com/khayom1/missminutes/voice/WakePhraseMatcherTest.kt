@@ -26,6 +26,13 @@ class WakePhraseMatcherTest {
     }
 
     @Test
+    fun usesOnlyThePrimaryRecognitionHypothesis() {
+        assertTrue(WakePhraseMatcher.matchesRecognitionCandidates(listOf("Miss Minutes", "Hey Miss Minutes")))
+        assertFalse(WakePhraseMatcher.matchesRecognitionCandidates(listOf("Hey Miss Minutes", "Miss Minutes")))
+        assertFalse(WakePhraseMatcher.matchesRecognitionCandidates(emptyList()))
+    }
+
+    @Test
     fun rejectsNearMatchesAndEmptyInput() {
         assertFalse(WakePhraseMatcher.matches(""))
         assertFalse(WakePhraseMatcher.matches("Miss Minute"))
