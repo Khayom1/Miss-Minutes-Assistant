@@ -92,6 +92,8 @@ import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
 import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
+import com.khayom1.missminutes.plugins.LocalPluginPackageManager
+import com.khayom1.missminutes.plugins.PluginManifest
 import com.khayom1.missminutes.plugins.FilePluginAuditLog
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
@@ -364,6 +366,9 @@ fun MissMinutesApp(
             pluginManifestStore.load().forEach { manifest -> runCatching { install(manifest) } }
         }
     }
+    val pluginPackageManager = remember(pluginRegistry, pluginConsentStore, pluginManifestStore) {
+        LocalPluginPackageManager(pluginRegistry, pluginConsentStore, pluginManifestStore)
+    }
     var pluginConsentSnapshot by remember(pluginRegistry) {
         mutableStateOf(
             pluginRegistry.installedPlugins().associate { it.id to pluginConsentStore.isGranted(it.id) }
@@ -508,6 +513,8 @@ fun MissMinutesApp(
     var backupPreview by remember { mutableStateOf<BackupArchive.Preview?>(null) }
     var pendingRestorePayload by remember { mutableStateOf<BackupPayloadAdapters.RestoredPayloads?>(null) }
     var pendingBackupBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingPluginPackageBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingPluginImport by remember { mutableStateOf<List<PluginManifest>?>(null) }
     var backupStatus by remember { mutableStateOf<String?>(null) }
     var backupError by remember { mutableStateOf<String?>(null) }
     var backupBusy by remember { mutableStateOf(false) }
@@ -584,6 +591,81 @@ fun MissMinutesApp(
                     backupError = error.message ?: "Backup could not be read."
                 } finally {
                     passwordCopy.fill('\u0000')
+                    backupBusy = false
+                }
+            }
+        }
+    }
+
+    val createPluginPackageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        val bytes = pendingPluginPackageBytes
+        if (uri != null && bytes != null) {
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        val output = context.contentResolver.openOutputStream(uri, "w")
+                            ?: throw IllegalStateException("The selected plugin package file could not be opened.")
+                        output.use { it.write(bytes) }
+                    }
+                    backupStatus = when (language) {
+                        AppLanguage.English -> "Plugin package exported. It contains metadata only."
+                        AppLanguage.Russian -> "Пакет плагина экспортирован. Он содержит только метаданные."
+                        AppLanguage.Tajik -> "Бастаи плагин содир шуд. Он танҳо метамаълумот дорад."
+                    }
+                    backupError = null
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Plugin package could not be saved."
+                } finally {
+                    bytes.fill(0)
+                    pendingPluginPackageBytes = null
+                    backupBusy = false
+                }
+            }
+        } else {
+            bytes?.fill(0)
+            pendingPluginPackageBytes = null
+            backupBusy = false
+        }
+    }
+
+    val openPluginPackageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                var bytes: ByteArray? = null
+                try {
+                    bytes = withContext(Dispatchers.IO) {
+                        val input = context.contentResolver.openInputStream(uri)
+                            ?: throw IllegalArgumentException("The selected plugin package could not be opened.")
+                        input.use { stream ->
+                            val output = ByteArrayOutputStream()
+                            val buffer = ByteArray(4_096)
+                            var total = 0
+                            while (true) {
+                                val count = stream.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                require(total <= LocalPluginPackageManager.MAX_PACKAGE_BYTES) {
+                                    "Plugin package exceeds the 256 KB size limit."
+                                }
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        }
+                    }
+                    pendingPluginImport = withContext(Dispatchers.IO) {
+                        pluginPackageManager.previewImport(requireNotNull(bytes))
+                    }
+                    backupStatus = null
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Plugin package could not be read."
+                } finally {
+                    bytes?.fill(0)
                     backupBusy = false
                 }
             }
@@ -739,6 +821,82 @@ fun MissMinutesApp(
                 } finally {
                     passwordCopy.fill('\u0000')
                 }
+            }
+        }
+    }
+
+    val exportPluginPackage: (String) -> Unit = { pluginId ->
+        backupBusy = true
+        backupError = null
+        scope.launch {
+            try {
+                val bytes = withContext(Dispatchers.IO) {
+                    pluginPackageManager.exportPackage(pluginId)
+                }
+                pendingPluginPackageBytes = bytes
+                createPluginPackageLauncher.launch("$pluginId.missplugin.json")
+            } catch (error: Exception) {
+                backupError = error.message ?: "Plugin package could not be exported."
+                backupBusy = false
+            }
+        }
+    }
+
+    val confirmPluginPackageImport: () -> Unit = {
+        val manifests = pendingPluginImport
+        if (manifests == null) {
+            backupError = "There is no validated plugin package to install."
+        } else {
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                try {
+                    val report = withContext(Dispatchers.IO) {
+                        pluginPackageManager.importManifests(manifests)
+                    }
+                    pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
+                        it.id to pluginConsentStore.isGranted(it.id)
+                    }
+                    pendingPluginImport = null
+                    backupStatus = when {
+                        report.installedIds.isEmpty() && report.rejectedIds.isNotEmpty() ->
+                            "No plugins installed. Existing or unsupported plugin ids were skipped."
+                        report.rejectedIds.isNotEmpty() ->
+                            "Installed ${report.installedIds.size}; skipped ${report.rejectedIds.size} existing or unsupported plugin(s)."
+                        else ->
+                            "Installed ${report.installedIds.size} plugin(s). They remain disconnected until you approve them."
+                    }
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Plugin package installation failed."
+                } finally {
+                    backupBusy = false
+                }
+            }
+        }
+    }
+
+    val uninstallPlugin: (String) -> Unit = { pluginId ->
+        backupBusy = true
+        backupError = null
+        scope.launch {
+            try {
+                val removed = withContext(Dispatchers.IO) {
+                    pluginPackageManager.uninstall(pluginId)
+                }
+                if (removed) {
+                    pluginConsentSnapshot = pluginConsentSnapshot - pluginId
+                    backupStatus = when (language) {
+                        AppLanguage.English -> "Plugin uninstalled and its connection revoked."
+                        AppLanguage.Russian -> "Плагин удалён, его подключение отозвано."
+                        AppLanguage.Tajik -> "Плагин нест шуд ва пайвастшавиаш бозхонд гардид."
+                    }
+                } else {
+                    backupError = "Plugin could not be uninstalled safely."
+                }
+            } catch (error: Exception) {
+                backupError = error.message ?: "Plugin could not be uninstalled."
+            } finally {
+                backupBusy = false
             }
         }
     }
@@ -1406,6 +1564,14 @@ fun MissMinutesApp(
                                     if (updated) pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to pluginConsentStore.isGranted(pluginId))
                                 },
                                 onExportPlugin = exportSelectedPlugin,
+                                onImportPluginPackage = {
+                                    openPluginPackageLauncher.launch(arrayOf("application/json", "text/json", "text/plain", "*/*"))
+                                },
+                                onExportPluginPackage = exportPluginPackage,
+                                onUninstallPlugin = uninstallPlugin,
+                                pendingPluginImport = pendingPluginImport,
+                                onConfirmPluginImport = confirmPluginPackageImport,
+                                onDismissPluginImport = { pendingPluginImport = null },
                                 onCreateBackup = createEncryptedBackup,
                                 onChooseBackup = {
                                     if (backupPassword.length >= 10) {
@@ -1798,6 +1964,12 @@ private fun SettingsScreen(
     pluginConsentStates: Map<String, Boolean>,
     onDeclarativePluginConsentChange: (String, Boolean) -> Unit,
     onExportPlugin: (String) -> Unit,
+    onImportPluginPackage: () -> Unit,
+    onExportPluginPackage: (String) -> Unit,
+    onUninstallPlugin: (String) -> Unit,
+    pendingPluginImport: List<PluginManifest>?,
+    onConfirmPluginImport: () -> Unit,
+    onDismissPluginImport: () -> Unit,
     onCreateBackup: () -> Unit,
     onChooseBackup: () -> Unit,
     onConfirmBackupRestore: () -> Unit,
@@ -2428,6 +2600,12 @@ private fun SettingsScreen(
             pluginConsentStates = pluginConsentStates,
             onPluginConsentChange = onDeclarativePluginConsentChange,
             onExportPlugin = onExportPlugin,
+            onImportPluginPackage = onImportPluginPackage,
+            onExportPluginPackage = onExportPluginPackage,
+            onUninstallPlugin = onUninstallPlugin,
+            pendingPluginImport = pendingPluginImport,
+            onConfirmPluginImport = onConfirmPluginImport,
+            onDismissPluginImport = onDismissPluginImport,
             onCreateBackup = onCreateBackup,
             onChooseBackup = onChooseBackup,
             onConfirmRestore = onConfirmBackupRestore,
