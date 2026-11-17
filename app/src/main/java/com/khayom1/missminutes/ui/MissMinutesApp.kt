@@ -2047,7 +2047,21 @@ private fun SettingsScreen(
     onDeleteMemory: (String) -> Unit,
     onRetentionChange: (Int) -> Unit,
     onMemoryContextChange: (Boolean) -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    backupCategories: Set<BackupArchive.Category>,
+    onToggleBackupCategory: (BackupArchive.Category) -> Unit,
+    backupPassword: String,
+    onBackupPasswordChange: (String) -> Unit,
+    backupConflictPolicy: RestoreConflictPolicy,
+    onBackupConflictPolicyChange: (RestoreConflictPolicy) -> Unit,
+    backupPreview: BackupArchive.Preview?,
+    backupStatus: String?,
+    backupError: String?,
+    backupBusy: Boolean,
+    onCreateBackup: () -> Unit,
+    onChooseBackup: () -> Unit,
+    onConfirmBackupRestore: () -> Unit,
+    onDismissBackupPreview: () -> Unit
 ) {
     val settingsScope = rememberCoroutineScope()
     Column(
@@ -2583,5 +2597,22 @@ private fun SettingsScreen(
             Text(copy.about, fontWeight = FontWeight.SemiBold)
             Text("${ProductIdentity.NAME} · ${copy.version} ${ProductIdentity.VERSION_NAME}")
         }
+        BackupRestorePanel(
+            language = language,
+            categories = backupCategories,
+            onToggleCategory = onToggleBackupCategory,
+            password = backupPassword,
+            onPasswordChange = onBackupPasswordChange,
+            conflictPolicy = backupConflictPolicy,
+            onConflictPolicyChange = onBackupConflictPolicyChange,
+            preview = backupPreview,
+            status = backupStatus,
+            error = backupError,
+            busy = backupBusy,
+            onCreateBackup = onCreateBackup,
+            onChooseBackup = onChooseBackup,
+            onConfirmRestore = onConfirmBackupRestore,
+            onDismissPreview = onDismissBackupPreview
+        )
     }
 }
