@@ -15,6 +15,7 @@ class AndroidPluginManifestStoreTest {
     @Test
     fun declarativeManifestsPersistWithoutConsentState() {
         val store = AndroidPluginManifestStore(context)
+        store.replace(emptyList())
         val manifest = AndroidDeviceStatusPlugin.manifest()
         store.replace(listOf(manifest))
         assertEquals(listOf(manifest), AndroidPluginManifestStore(context).load())
@@ -36,6 +37,7 @@ class AndroidPluginManifestStoreTest {
     @Test
     fun importedManifestMergeReplacesByIdAndStaysMetadataOnly() {
         val store = AndroidPluginManifestStore(context)
+        store.replace(emptyList())
         val manifest = AndroidDeviceStatusPlugin.manifest()
         val merged = store.mergeImported(listOf(manifest))
         assertEquals(1, merged.size)
