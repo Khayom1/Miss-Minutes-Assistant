@@ -293,8 +293,11 @@ class MainActivityTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             aiProvider.lastRequest?.messages?.any { it.role.name == "SYSTEM" } == true
         }
-        val memoryContext = aiProvider.lastRequest!!.messages.first()
-        assertEquals("SYSTEM", memoryContext.role.name)
+        val requestMessages = aiProvider.lastRequest!!.messages
+        assertEquals("SYSTEM", requestMessages.first().role.name)
+        assertFalse(requestMessages.first().content.contains("Prefers concise Tajik explanations"))
+        val memoryContext = requestMessages[1]
+        assertEquals("USER", memoryContext.role.name)
         assertTrue(memoryContext.content.contains("Prefers concise Tajik explanations"))
     }
 
