@@ -74,6 +74,13 @@ import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.buildAiContextMessages
 import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.SupabaseAuthException
+import com.khayom1.missminutes.device.AndroidDeviceToolHost
+import com.khayom1.missminutes.device.DeviceToolCapability
+import com.khayom1.missminutes.device.DeviceToolCommand
+import com.khayom1.missminutes.device.DeviceToolEngine
+import com.khayom1.missminutes.device.DeviceToolResult
+import com.khayom1.missminutes.device.FileDeviceToolAuditLog
+import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
 import com.khayom1.missminutes.memory.ConversationSummary
@@ -364,6 +371,17 @@ fun MissMinutesApp(
     var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
     val language = AppLanguage.valueOf(selectedLanguageName)
     val context = LocalContext.current
+    val deviceAuthorization = remember(context) { SharedPreferencesDeviceToolAuthorization(context) }
+    val deviceToolEngine = remember(context) {
+        DeviceToolEngine(
+            authorization = deviceAuthorization,
+            host = AndroidDeviceToolHost(context),
+            auditLog = FileDeviceToolAuditLog(context)
+        )
+    }
+    var deviceGrants by remember(context) {
+        mutableStateOf(DeviceToolCapability.entries.associateWith(deviceAuthorization::isGranted))
+    }
     var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
     var wakeMessage by remember { mutableStateOf<String?>(null) }
     DisposableEffect(context) {
@@ -1147,6 +1165,16 @@ fun MissMinutesApp(
                                 memoryMessage = memoryMessage,
                                 retentionDays = retentionDays,
                                 memoryContextEnabled = memoryContextEnabled,
+                                deviceGrants = deviceGrants,
+                                onDeviceGrantChange = { capability, granted ->
+                                    deviceAuthorization.setGranted(capability, granted)
+                                    deviceGrants = deviceGrants + (capability to granted)
+                                },
+                                onRunDeviceCommand = { command, confirmed ->
+                                    deviceToolEngine.execute(
+                                        com.khayom1.missminutes.device.DeviceToolRequest(command, confirmed)
+                                    )
+                                },
                                 onMemoryDraftChange = { memoryDraft = it.take(LocalConversationStore.MAX_MEMORY_CHARS) },
                                 onAddMemory = addMemory,
                                 onDeleteMemory = deleteMemory,
@@ -1600,6 +1628,9 @@ private fun SettingsScreen(
     memoryMessage: String?,
     retentionDays: Int,
     memoryContextEnabled: Boolean,
+    deviceGrants: Map<DeviceToolCapability, Boolean>,
+    onDeviceGrantChange: (DeviceToolCapability, Boolean) -> Unit,
+    onRunDeviceCommand: (DeviceToolCommand, Boolean) -> com.khayom1.missminutes.device.DeviceToolResult,
     onMemoryDraftChange: (String) -> Unit,
     onAddMemory: () -> Unit,
     onDeleteMemory: (String) -> Unit,
@@ -1749,6 +1780,198 @@ private fun SettingsScreen(
                 modifier = Modifier.testTag("wake_phrase_toggle")
             ) {
                 Text(if (wakeEnabled) wakeStop else wakeStart)
+            }
+        }
+        var pendingDeviceCommand by remember { mutableStateOf<DeviceToolCommand?>(null) }
+        var deviceToolMessage by remember { mutableStateOf<String?>(null) }
+        var shareTextDraft by rememberSaveable { mutableStateOf("") }
+        fun deviceResultText(result: DeviceToolResult): String {
+            if (!result.success) {
+                return when (language) {
+                    AppLanguage.Tajik -> "Амал иҷозат дода нашуд ё иҷро нагардид."
+                    AppLanguage.Russian -> "Действие не разрешено или не выполнено."
+                    AppLanguage.English -> "The action was denied or could not be completed."
+                }
+            }
+            return when (result.capability) {
+                DeviceToolCapability.DEVICE_INFO -> when (language) {
+                    AppLanguage.Tajik -> "Дастгоҳ: ${result.message}"
+                    AppLanguage.Russian -> "Устройство: ${result.message}"
+                    AppLanguage.English -> "Device: ${result.message}"
+                }
+                DeviceToolCapability.BATTERY_STATUS -> when {
+                    result.message == "unavailable" -> when (language) {
+                        AppLanguage.Tajik -> "Сатҳи батарея дастрас нест."
+                        AppLanguage.Russian -> "Уровень батареи недоступен."
+                        AppLanguage.English -> "Battery level is unavailable."
+                    }
+                    language == AppLanguage.Tajik -> "Батарея: ${result.message}"
+                    language == AppLanguage.Russian -> "Батарея: ${result.message}"
+                    else -> "Battery: ${result.message}"
+                }
+                DeviceToolCapability.OPEN_WIFI_SETTINGS -> when (language) {
+                    AppLanguage.Tajik -> "Танзимоти Wi-Fi кушода шуд."
+                    AppLanguage.Russian -> "Настройки Wi-Fi открыты."
+                    AppLanguage.English -> "Wi-Fi settings opened."
+                }
+                DeviceToolCapability.OPEN_APP_SETTINGS -> when (language) {
+                    AppLanguage.Tajik -> "Танзимоти барнома кушода шуд."
+                    AppLanguage.Russian -> "Настройки приложения открыты."
+                    AppLanguage.English -> "App settings opened."
+                }
+                DeviceToolCapability.SHARE_TEXT -> when (language) {
+                    AppLanguage.Tajik -> "Менюи мубодила кушода шуд."
+                    AppLanguage.Russian -> "Меню отправки открыто."
+                    AppLanguage.English -> "Android share sheet opened."
+                }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Android device tools"
+                    AppLanguage.Russian -> "Инструменты Android"
+                    AppLanguage.Tajik -> "Абзорҳои Android"
+                },
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Each capability is off until you enable it. External actions always ask for confirmation. Activity is recorded without message content."
+                    AppLanguage.Russian -> "Каждая возможность выключена, пока вы её не разрешите. Внешние действия требуют подтверждения. Журнал не сохраняет содержимое сообщений."
+                    AppLanguage.Tajik -> "Ҳар имконият то иҷозати шумо хомӯш аст. Амалҳои беруна тасдиқ мехоҳанд. Журнал матни паёмҳоро нигоҳ намедорад."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            DeviceToolCapability.entries.forEach { capability ->
+                val label = when (capability) {
+                    DeviceToolCapability.DEVICE_INFO -> when (language) {
+                        AppLanguage.Tajik -> "Маълумоти дастгоҳ"
+                        AppLanguage.Russian -> "Сведения об устройстве"
+                        AppLanguage.English -> "Device information"
+                    }
+                    DeviceToolCapability.BATTERY_STATUS -> when (language) {
+                        AppLanguage.Tajik -> "Ҳолати батарея"
+                        AppLanguage.Russian -> "Состояние батареи"
+                        AppLanguage.English -> "Battery status"
+                    }
+                    DeviceToolCapability.OPEN_WIFI_SETTINGS -> when (language) {
+                        AppLanguage.Tajik -> "Танзимоти шабакаи бесим"
+                        AppLanguage.Russian -> "Настройки беспроводной сети"
+                        AppLanguage.English -> "Wireless network settings"
+                    }
+                    DeviceToolCapability.OPEN_APP_SETTINGS -> when (language) {
+                        AppLanguage.Tajik -> "Маълумоти барнома"
+                        AppLanguage.Russian -> "Сведения о приложении"
+                        AppLanguage.English -> "Application details"
+                    }
+                    DeviceToolCapability.SHARE_TEXT -> when (language) {
+                        AppLanguage.Tajik -> "Иҷозати мубодилаи матн"
+                        AppLanguage.Russian -> "Разрешить обмен текстом"
+                        AppLanguage.English -> "Text sharing permission"
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    Switch(
+                        checked = deviceGrants[capability] == true,
+                        onCheckedChange = { onDeviceGrantChange(capability, it) },
+                        modifier = Modifier.testTag("device_capability_${capability.name.lowercase()}")
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    enabled = deviceGrants[DeviceToolCapability.DEVICE_INFO] == true,
+                    onClick = {
+                        deviceToolMessage = deviceResultText(onRunDeviceCommand(DeviceToolCommand.ReadDeviceInfo, false))
+                    }
+                ) {
+                    Text(if (language == AppLanguage.Tajik) "Маълумот" else if (language == AppLanguage.Russian) "Устройство" else "Device info")
+                }
+                Button(
+                    enabled = deviceGrants[DeviceToolCapability.BATTERY_STATUS] == true,
+                    onClick = {
+                        deviceToolMessage = deviceResultText(onRunDeviceCommand(DeviceToolCommand.ReadBatteryStatus, false))
+                    }
+                ) {
+                    Text(if (language == AppLanguage.Tajik) "Батарея" else if (language == AppLanguage.Russian) "Батарея" else "Battery")
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    enabled = deviceGrants[DeviceToolCapability.OPEN_WIFI_SETTINGS] == true,
+                    onClick = { pendingDeviceCommand = DeviceToolCommand.OpenWifiSettings }
+                ) {
+                    Text(if (language == AppLanguage.Tajik) "Wi-Fi" else if (language == AppLanguage.Russian) "Wi-Fi" else "Wi-Fi settings")
+                }
+                TextButton(
+                    enabled = deviceGrants[DeviceToolCapability.OPEN_APP_SETTINGS] == true,
+                    onClick = { pendingDeviceCommand = DeviceToolCommand.OpenAppSettings }
+                ) {
+                    Text(if (language == AppLanguage.Tajik) "Танзимоти система" else if (language == AppLanguage.Russian) "Системные настройки" else "System settings")
+                }
+            }
+            OutlinedTextField(
+                value = shareTextDraft,
+                onValueChange = { shareTextDraft = it.take(1_000) },
+                enabled = deviceGrants[DeviceToolCapability.SHARE_TEXT] == true,
+                modifier = Modifier.fillMaxWidth().testTag("device_share_text"),
+                label = {
+                    Text(
+                        if (language == AppLanguage.Tajik) "Матни мубодилашаванда"
+                        else if (language == AppLanguage.Russian) "Текст для отправки"
+                        else "Text to share"
+                    )
+                },
+                maxLines = 3
+            )
+            TextButton(
+                enabled = deviceGrants[DeviceToolCapability.SHARE_TEXT] == true && shareTextDraft.isNotBlank(),
+                onClick = { pendingDeviceCommand = DeviceToolCommand.ShareText(shareTextDraft) }
+            ) {
+                Text(if (language == AppLanguage.Tajik) "Фиристодани матн" else if (language == AppLanguage.Russian) "Отправить текст" else "Send text")
+            }
+            if (deviceToolMessage != null) {
+                Text(deviceToolMessage!!, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            if (pendingDeviceCommand != null) {
+                AlertDialog(
+                    onDismissRequest = { pendingDeviceCommand = null },
+                    title = {
+                        Text(
+                            if (language == AppLanguage.Tajik) "Тасдиқи амал"
+                            else if (language == AppLanguage.Russian) "Подтвердите действие"
+                            else "Confirm action"
+                        )
+                    },
+                    text = {
+                        Text(
+                            when (pendingDeviceCommand) {
+                                is DeviceToolCommand.ShareText -> if (language == AppLanguage.Tajik) "Матни интихобшуда ба менюи мубодилаи Android дода мешавад. Давом диҳем?" else if (language == AppLanguage.Russian) "Выбранный текст будет передан в системное меню отправки Android. Продолжить?" else "The selected text will be passed to Android's share sheet. Continue?"
+                                else -> if (language == AppLanguage.Tajik) "Miss Minutes танзимоти Android-ро мекушояд. Иҷозат медиҳед?" else if (language == AppLanguage.Russian) "Miss Minutes откроет системные настройки Android. Разрешить?" else "Miss Minutes will open Android system settings. Continue?"
+                            }
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val command = pendingDeviceCommand
+                            pendingDeviceCommand = null
+                            if (command != null) deviceToolMessage = deviceResultText(onRunDeviceCommand(command, true))
+                        }) {
+                            Text(if (language == AppLanguage.Tajik) "Иҷозат" else if (language == AppLanguage.Russian) "Разрешить" else "Allow")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingDeviceCommand = null }) {
+                            Text(if (language == AppLanguage.Tajik) "Бекор" else if (language == AppLanguage.Russian) "Отмена" else "Cancel")
+                        }
+                    }
+                )
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
