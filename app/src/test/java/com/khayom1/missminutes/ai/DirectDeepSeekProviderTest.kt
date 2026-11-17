@@ -161,4 +161,26 @@ class DirectDeepSeekProviderTest {
         assertEquals("plugin_status", messages[2].jsonObject["name"]!!.jsonPrimitive.content)
     }
 
+
+    @Test
+    fun rejectsNonFunctionToolCallTypes() = runBlocking {
+        val response = AiHttpResponse(
+            200,
+            """{"model":"deepseek-chat","choices":[{"message":{"content":null,"tool_calls":[{"id":"call_1","type":"shell","function":{"name":"plugin_status","arguments":"{}"}}]}}]}"""
+        )
+        val schema = Json.parseToJsonElement(
+            """{"type":"object","properties":{},"required":[],"additionalProperties":false}"""
+        ).jsonObject
+        val requestWithTool = AiRequest(
+            messages = listOf(AiMessage(AiRole.USER, "Read device status")),
+            tools = listOf(AiToolDefinition("plugin_status", "Read device status", schema))
+        )
+        val error = runCatching {
+            DirectDeepSeekProvider(
+                DeepSeekApiKeySource { "sk-user-owned-test-key-123456" },
+                FakeTransport(response)
+            ).complete(requestWithTool)
+        }.exceptionOrNull()
+        assertTrue(error is AiProviderException.InvalidResponse)
+    }
 }
