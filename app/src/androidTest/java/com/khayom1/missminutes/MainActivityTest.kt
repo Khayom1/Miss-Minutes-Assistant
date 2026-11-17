@@ -179,7 +179,7 @@ class MainActivityTest {
 
     @Test
     fun guestModeOpensAssistantWithoutSupabaseRegistration() {
-        composeRule.onNodeWithTag("auth_continue_guest").assertIsDisplayed()
+        composeRule.onNodeWithTag("auth_continue_guest").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("auth_continue_guest").performClick()
         waitForChatScreen()
 
@@ -198,7 +198,7 @@ class MainActivityTest {
 
     @Test
     fun guestProviderCredentialFailureDoesNotForceAccountRegistration() {
-        composeRule.onNodeWithTag("auth_continue_guest").assertIsDisplayed()
+        composeRule.onNodeWithTag("auth_continue_guest").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("auth_continue_guest").performClick()
         waitForChatScreen()
 
