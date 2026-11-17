@@ -43,7 +43,9 @@ class AiToolExecutionLoop(
             }
 
             val baseCharacters = messages.sumOf { it.content.length } + completion.content.length
-            if (baseCharacters > MAX_MESSAGE_CHARACTERS) {
+            if (completion.content.length > MAX_MESSAGE_CONTENT_CHARACTERS ||
+                baseCharacters > MAX_MESSAGE_CHARACTERS
+            ) {
                 throw AiProviderException.InvalidResponse()
             }
             var remainingCharacters = MAX_MESSAGE_CHARACTERS - baseCharacters
@@ -86,6 +88,7 @@ class AiToolExecutionLoop(
     private companion object {
         const val MAX_MESSAGES = 32
         const val MAX_MESSAGE_CHARACTERS = 20_000
+        const val MAX_MESSAGE_CONTENT_CHARACTERS = 8_000
         const val MAX_TOOL_RESULT_CHARACTERS = 1_000
     }
 }
