@@ -247,7 +247,7 @@ class LocalConversationStoreTest {
             }.exceptionOrNull()
 
             assertTrue(error is IllegalStateException)
-            assertEquals(listOf("Preserve this chat"), store.listConversations("owner").map { it.title })
+            assertEquals(listOf("preserve this message"), store.listConversations("owner").map { it.title })
             assertEquals("preserve this message", store.getMessages("owner", existingId).single().content)
             assertEquals("preserve this memory", store.listMemory("owner").single().content)
             assertEquals(30, store.getRetentionDays("owner"))
