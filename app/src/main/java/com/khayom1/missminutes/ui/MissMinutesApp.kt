@@ -1471,11 +1471,12 @@ fun MissMinutesApp(
                                 language = language,
                                 conversations = conversationSummaries,
                                 exportPayload = exportPayload,
-                                exportError = exportError,
+                                exportError = exportError ?: backupError,
                                 pendingDeleteConversationId = pendingDeleteConversationId,
                                 confirmDeleteAll = confirmDeleteAll,
                                 onNewConversation = startNewConversation,
                                 onOpenConversation = openConversation,
+                                onExportConversation = exportSelectedConversation,
                                 onRequestDelete = { pendingDeleteConversationId = it },
                                 onConfirmDelete = { id -> deleteConversation(id) },
                                 onCancelDelete = { pendingDeleteConversationId = null },
@@ -1555,7 +1556,36 @@ fun MissMinutesApp(
                                         }
                                     }
                                 },
-                                onSignOut = signOut
+                                onSignOut = signOut,
+                                backupCategories = backupCategories,
+                                onToggleBackupCategory = { category ->
+                                    backupCategories = if (category in backupCategories) {
+                                        backupCategories - category
+                                    } else {
+                                        backupCategories + category
+                                    }
+                                },
+                                backupPassword = backupPassword,
+                                onBackupPasswordChange = { backupPassword = it.take(128) },
+                                backupConflictPolicy = backupConflictPolicy,
+                                onBackupConflictPolicyChange = { backupConflictPolicy = it },
+                                backupPreview = backupPreview,
+                                backupStatus = backupStatus,
+                                backupError = backupError,
+                                backupBusy = backupBusy,
+                                onCreateBackup = createEncryptedBackup,
+                                onChooseBackup = {
+                                    if (backupPassword.length >= 10) {
+                                        openBackupLauncher.launch(arrayOf("application/octet-stream", "application/*", "*/*"))
+                                    } else {
+                                        backupError = "Enter a backup password of at least 10 characters."
+                                    }
+                                },
+                                onConfirmBackupRestore = confirmBackupRestore,
+                                onDismissBackupPreview = {
+                                    backupPreview = null
+                                    pendingRestorePayload = null
+                                }
                             )
                         }
                     }
@@ -1864,6 +1894,7 @@ private fun HistoryScreen(
     confirmDeleteAll: Boolean,
     onNewConversation: () -> Unit,
     onOpenConversation: (String) -> Unit,
+    onExportConversation: (String) -> Unit,
     onRequestDelete: (String) -> Unit,
     onConfirmDelete: (String) -> Unit,
     onCancelDelete: () -> Unit,
@@ -1875,9 +1906,9 @@ private fun HistoryScreen(
 ) {
     val clipboard = LocalClipboardManager.current
     val labels = when (language) {
-        AppLanguage.English -> listOf("New conversation", "Export all data", "Delete all local data", "Open", "Delete", "messages", "Cancel", "Delete", "Export preview; copying happens only when you choose Copy")
-        AppLanguage.Russian -> listOf("Новый диалог", "Экспорт всех данных", "Удалить все локальные данные", "Открыть", "Удалить", "сообщений", "Отмена", "Удалить", "Предпросмотр экспорта; копирование выполняется только по вашему выбору")
-        AppLanguage.Tajik -> listOf("Гуфтугӯи нав", "Содироти ҳамаи маълумот", "Пок кардани ҳамаи маълумоти маҳаллӣ", "Кушодан", "Пок кардан", "паём", "Бекор кардан", "Пок кардан", "Намунаи содирот; нусхабардорӣ танҳо бо интихоби шумо иҷро мешавад")
+        AppLanguage.English -> listOf("New conversation", "Export all data", "Delete all local data", "Open", "Delete", "messages", "Cancel", "Delete", "Export preview; copying happens only when you choose Copy", "Encrypted export")
+        AppLanguage.Russian -> listOf("Новый диалог", "Экспорт всех данных", "Удалить все локальные данные", "Открыть", "Удалить", "сообщений", "Отмена", "Удалить", "Предпросмотр экспорта; копирование выполняется только по вашему выбору", "Зашифрованный экспорт")
+        AppLanguage.Tajik -> listOf("Гуфтугӯи нав", "Содироти ҳамаи маълумот", "Пок кардани ҳамаи маълумоти маҳаллӣ", "Кушодан", "Пок кардан", "паём", "Бекор кардан", "Пок кардан", "Намунаи содирот; нусхабардорӣ танҳо бо интихоби шумо иҷро мешавад", "Содироти рамзгузоришуда")
     }
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -1912,6 +1943,7 @@ private fun HistoryScreen(
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 TextButton(onClick = { onOpenConversation(conversation.id) }) { Text(labels[3]) }
+                                TextButton(onClick = { onExportConversation(conversation.id) }) { Text(labels[9]) }
                                 TextButton(onClick = { onRequestDelete(conversation.id) }) {
                                     Text(labels[4], color = MaterialTheme.colorScheme.error)
                                 }
