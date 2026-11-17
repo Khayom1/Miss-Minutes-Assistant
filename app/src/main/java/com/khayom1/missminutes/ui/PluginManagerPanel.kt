@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,7 @@ internal fun PluginManagerPanel(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text("Installed plugins", "Установленные плагины", "Плагинҳои насбшуда"),
+            modifier = Modifier.semantics { heading() },
             style = MaterialTheme.typography.titleMedium
         )
         Text(
@@ -112,8 +114,16 @@ internal fun PluginManagerPanel(
                                 modifier = Modifier
                                     .testTag("plugin_consent_${manifest.id}")
                                     .semantics {
-                                        contentDescription = "${manifest.displayName} plugin consent"
-                                        stateDescription = if (granted) "Enabled" else "Disabled"
+                                        contentDescription = text(
+                                            "${manifest.displayName} plugin consent",
+                                            "Разрешение плагина ${manifest.displayName}",
+                                            "Розигии плагини ${manifest.displayName}"
+                                        )
+                                        stateDescription = if (granted) {
+                                            text("Enabled", "Включено", "Фаъол")
+                                        } else {
+                                            text("Disabled", "Выключено", "Хомӯш")
+                                        }
                                     }
                             )
                             TextButton(
@@ -134,6 +144,7 @@ internal fun PluginManagerPanel(
 
         Text(
             text("Recent plugin activity", "Последние действия плагинов", "Фаъолияти охирини плагинҳо"),
+            modifier = Modifier.semantics { heading() },
             style = MaterialTheme.typography.titleSmall
         )
         if (auditEntries.isEmpty()) {
