@@ -84,7 +84,7 @@ import kotlinx.coroutines.withContext
 import com.khayom1.missminutes.ai.SpeechInputProvider
 import java.util.Locale
 
-private const val DEFAULT_RETENTION_MILLIS = 90L * 24 * 60 * 60 * 1_000
+private const val MILLIS_PER_DAY = 24L * 60 * 60 * 1_000
 
 private enum class AppScreen(val symbol: String) {
     Chat("✦"),
@@ -535,16 +535,13 @@ fun MissMinutesApp(
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val copy = copyFor(language)
 
-    LaunchedEffect(currentOwnerId, retentionDays) {
+    LaunchedEffect(currentOwnerId) {
         messages.clear()
         activeConversationId = null
         savedConversations.clear()
         savedMemories.clear()
         val owner = currentOwnerId ?: return@LaunchedEffect
         val restored = withContext(Dispatchers.IO) {
-            if (retentionDays > 0) {
-                conversationStore.deleteOlderThan(owner, System.currentTimeMillis() - retentionDays.toLong() * MILLIS_PER_DAY)
-            }
             val conversations = conversationStore.listConversations(owner)
             val latest = conversations.firstOrNull()
             val restoredMessages = latest?.let { conversationStore.loadMessages(owner, it.id) }.orEmpty()
@@ -558,6 +555,22 @@ fun MissMinutesApp(
         restoredMessages.forEach { stored ->
             nextMessageId += 1
             messages.add(ChatMessage(nextMessageId, stored.content, stored.role == ConversationRole.USER))
+        }
+    }
+
+    LaunchedEffect(currentOwnerId, retentionDays) {
+        val owner = currentOwnerId ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            if (retentionDays > 0) {
+                conversationStore.deleteOlderThan(
+                    owner,
+                    System.currentTimeMillis() - retentionDays.toLong() * MILLIS_PER_DAY
+                )
+            }
+            conversationStore.listConversations(owner)
+        }.let { latestHistory ->
+            savedConversations.clear()
+            savedConversations.addAll(latestHistory)
         }
     }
 
