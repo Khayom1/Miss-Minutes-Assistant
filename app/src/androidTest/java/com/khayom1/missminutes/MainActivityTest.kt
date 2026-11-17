@@ -391,6 +391,10 @@ class MainActivityTest {
             .performScrollTo()
             .performClick()
         composeRule.onNodeWithText("New").performClick()
+        // Creating/loading a conversation is asynchronous; wait for Chat to be
+        // composed before interacting with its input field.
+        waitForChatScreen()
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
         composeRule.onNodeWithTag("chat_input").performTextInput("What device tools are available?")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
