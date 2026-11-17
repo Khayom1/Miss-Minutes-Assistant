@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.khayom1.missminutes.memory.RestoreConflictPolicy
 import com.khayom1.missminutes.plugins.PluginManifest
 import com.khayom1.missminutes.plugins.PluginManifestArchive
 
@@ -53,6 +54,14 @@ object BackupPayloadAdapters {
         }
         return result
     }
+
+    fun safeConflictPolicy(
+        singleConversation: Boolean,
+        requested: RestoreConflictPolicy
+    ): RestoreConflictPolicy =
+        if (singleConversation && requested == RestoreConflictPolicy.REPLACE) {
+            RestoreConflictPolicy.MERGE
+        } else requested
 
     fun decode(decoded: BackupArchive.Decoded): RestoredPayloads {
         val rawChat = decoded.payloads[BackupArchive.Category.CHAT_HISTORY]
