@@ -4,6 +4,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -13,35 +14,82 @@ import okhttp3.RequestBody.Companion.toRequestBody
 enum class AiRole(val wireValue: String) {
     SYSTEM("system"),
     USER("user"),
-    ASSISTANT("assistant")
+    ASSISTANT("assistant"),
+    TOOL("tool")
+}
+
+data class AiToolDefinition(
+    val name: String,
+    val description: String,
+    val parameters: JsonObject
+) {
+    init {
+        require(name.matches(Regex("^[a-zA-Z0-9_-]{1,64}$")))
+        require(description.isNotBlank() && description.length <= 512)
+        require(parameters.toString().length <= 8_192)
+    }
+}
+
+data class AiToolCall(
+    val id: String,
+    val name: String,
+    val arguments: String
+) {
+    init {
+        require(id.matches(Regex("^[a-zA-Z0-9_-]{1,128}$")))
+        require(name.matches(Regex("^[a-zA-Z0-9_-]{1,64}$")))
+        require(arguments.length in 2..2_000)
+    }
 }
 
 data class AiMessage(
     val role: AiRole,
-    val content: String
+    val content: String,
+    val toolCallId: String? = null,
+    val name: String? = null,
+    val toolCalls: List<AiToolCall> = emptyList()
 )
 
 data class AiRequest(
     val messages: List<AiMessage>,
-    val maxOutputTokens: Int = 768
+    val maxOutputTokens: Int = 768,
+    val tools: List<AiToolDefinition> = emptyList()
 ) {
     init {
         require(messages.isNotEmpty()) { "At least one message is required." }
-        require(messages.size <= 20) { "A maximum of 20 messages is supported." }
-        require(messages.last().role == AiRole.USER) { "The final message must be from the user." }
-        require(maxOutputTokens in 1..768) { "maxOutputTokens must be between 1 and 768." }
-        require(messages.all { it.content.isNotBlank() && it.content.length <= 8_000 }) {
-            "Each message must contain 1–8,000 characters."
+        require(messages.size <= 32) { "A maximum of 32 messages is supported." }
+        require(messages.last().role == AiRole.USER || messages.last().role == AiRole.TOOL) {
+            "The final message must be from the user or a tool."
         }
-        require(messages.sumOf { it.content.length } <= 16_000) {
-            "The combined conversation must not exceed 16,000 characters."
+        require(maxOutputTokens in 1..768) { "maxOutputTokens must be between 1 and 768." }
+        require(messages.all {
+            (it.content.isNotBlank() || (it.role == AiRole.ASSISTANT && it.toolCalls.isNotEmpty())) &&
+                it.content.length <= 8_000
+        }) { "Each message must contain at most 8,000 characters and non-empty content unless it carries tool calls." }
+        require(messages.sumOf { it.content.length } <= 20_000) {
+            "The combined conversation must not exceed 20,000 characters."
+        }
+        require(messages.all { message ->
+            when (message.role) {
+                AiRole.TOOL -> !message.toolCallId.isNullOrBlank() &&
+                    !message.name.isNullOrBlank() && message.toolCalls.isEmpty()
+                AiRole.ASSISTANT -> message.toolCallId == null && message.name == null &&
+                    message.toolCalls.size <= 4
+                AiRole.SYSTEM, AiRole.USER -> message.toolCallId == null &&
+                    message.name == null && message.toolCalls.isEmpty()
+            }
+        }) { "Tool metadata is not valid for this message role." }
+        require(tools.size <= 16) { "A maximum of 16 tools is supported." }
+        require(tools.map { it.name }.distinct().size == tools.size) {
+            "Tool names must be unique."
         }
     }
 }
 
 data class AiCompletion(
     val content: String,
-    val model: String
+    val model: String,
+    val toolCalls: List<AiToolCall> = emptyList()
 )
 
 sealed class AiProviderException(message: String, cause: Throwable? = null) :
@@ -74,9 +122,9 @@ interface AiHttpTransport {
 }
 
 /**
- * Adapter seam for an optional on-device runtime (for example, a future
- * llama.cpp/JNI implementation). This class does not download a model or
- * assume that a model is installed.
+ * Adapter seam for an optional on-device runtime. It does not download a model
+ * or assume that a model is installed. Tool execution is unavailable until the
+ * local runtime exposes a structured tool-call contract.
  */
 interface LocalInferenceRuntime {
     fun isAvailable(): Boolean
@@ -91,7 +139,9 @@ class OptionalLocalAiProvider(
     private val runtime: LocalInferenceRuntime
 ) : AiProvider {
     override suspend fun complete(request: AiRequest): AiCompletion {
-        if (!runtime.isAvailable()) {
+        if (!runtime.isAvailable() || request.tools.isNotEmpty() ||
+            request.messages.any { it.role == AiRole.TOOL || it.toolCalls.isNotEmpty() }
+        ) {
             throw AiProviderException.Unavailable()
         }
 
@@ -136,9 +186,6 @@ class OkHttpAiHttpTransport(
 
         try {
             client.newCall(request).execute().use { response ->
-                // Bound bytes while reading. ResponseBody.string() buffers the
-                // entire upstream payload before a post-read size check, which
-                // could exhaust memory if the gateway or an intermediary misbehaves.
                 val text = response.body?.source()?.use { source ->
                     if (source.request(MAX_RESPONSE_BYTES + 1L)) {
                         throw AiProviderException.InvalidResponse()
