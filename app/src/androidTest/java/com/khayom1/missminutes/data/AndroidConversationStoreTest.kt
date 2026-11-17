@@ -110,7 +110,40 @@ class AndroidConversationStoreTest {
     }
 
     @Test
-    fun versionOneDatabaseMigratesToVersionTwoWithoutLosingRows() {
+    fun userControlledMemoriesAreEncryptedScopedAndIndividuallyDeletable() {
+        val first = store.saveMemory("owner-one", "Preferred language", "Tajik")
+        store.saveMemory("owner-one", "Study goal", "Become a dentist")
+        store.saveMemory("owner-two", "Preferred language", "Russian")
+
+        val updated = store.saveMemory("owner-one", "preferred LANGUAGE", "Russian")
+        assertEquals(first.id, updated.id)
+        assertEquals(2, store.listMemories("owner-one").size)
+        assertEquals("Russian", store.listMemories("owner-one").first { it.id == first.id }.value)
+        assertEquals(1, store.listMemories("owner-two").size)
+        assertTrue(store.deleteMemory("owner-one", first.id))
+        assertEquals(1, store.listMemories("owner-one").size)
+        assertEquals(1, store.clearMemories("owner-one"))
+        assertTrue(store.listMemories("owner-one").isEmpty())
+        assertEquals(1, store.listMemories("owner-two").size)
+    }
+
+    @Test
+    fun memoryPlaintextIsNotPresentInSqliteRows() {
+        store.saveMemory("owner-one", "private-key-phrase", "private-value-phrase")
+        val raw = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            raw.rawQuery("SELECT hex(key_cipher), hex(value_cipher) FROM memories", null).use {
+                assertTrue(it.moveToFirst())
+                assertFalse(it.getString(0).contains("70726976617465"))
+                assertFalse(it.getString(1).contains("70726976617465"))
+            }
+        } finally {
+            raw.close()
+        }
+    }
+
+    @Test
+    fun versionOneDatabaseMigratesToVersionThreeWithoutLosingRows() {
         store.close()
         val legacy = object : SQLiteOpenHelper(context, databaseName, null, 1) {
             override fun onCreate(db: SQLiteDatabase) {
