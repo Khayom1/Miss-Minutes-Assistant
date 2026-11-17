@@ -1,8 +1,15 @@
 package com.khayom1.missminutes.agent
 
+import com.khayom1.missminutes.plugins.PluginExecutionResult
 import com.khayom1.missminutes.plugins.PluginToolDescriptor
 
-/** Supplies the connected plugin tool catalog to the model/agent request builder. */
+/** Supplies connected tools and dispatches calls through the closed-world registry. */
 interface AgentActionCatalogProvider {
     fun availableTools(): List<PluginToolDescriptor>
+
+    fun executeToolCall(
+        toolName: String,
+        argumentsJson: String,
+        userConfirmed: Boolean = false
+    ): PluginExecutionResult
 }
