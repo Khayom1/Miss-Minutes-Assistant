@@ -64,6 +64,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.ProductIdentity
+import com.khayom1.missminutes.backup.AndroidAppSettingsStore
+import com.khayom1.missminutes.backup.BackupArchive
+import com.khayom1.missminutes.backup.BackupPayloadAdapters
+import com.khayom1.missminutes.backup.SettingsBackupAdapter
 import com.khayom1.missminutes.agent.AgentOrchestrator
 import com.khayom1.missminutes.agent.AgentTaskRuntime
 import com.khayom1.missminutes.ai.AiCompletion
@@ -86,6 +90,7 @@ import com.khayom1.missminutes.device.FileDeviceToolAuditLog
 import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
+import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.FilePluginAuditLog
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
@@ -97,12 +102,14 @@ import com.khayom1.missminutes.memory.ConversationSummary
 import com.khayom1.missminutes.memory.ConversationLimitReachedException
 import com.khayom1.missminutes.memory.LocalConversationStore
 import com.khayom1.missminutes.memory.MemoryItem
+import com.khayom1.missminutes.memory.RestoreConflictPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.khayom1.missminutes.ai.SpeechInputProvider
 import java.util.Locale
+import java.io.ByteArrayOutputStream
 
 private const val GUEST_OWNER_ID = "guest-local"
 
@@ -392,9 +399,12 @@ fun MissMinutesApp(
     conversationStore: LocalConversationStore
 ) {
     val scope = rememberCoroutineScope()
-    var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
-    val language = AppLanguage.valueOf(selectedLanguageName)
     val context = LocalContext.current
+    val appSettingsStore = remember(context) { AndroidAppSettingsStore(context) }
+    var selectedLanguageName by remember(context) {
+        mutableStateOf(when (appSettingsStore.loadAppearance().language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name })
+    }
+    val language = AppLanguage.valueOf(selectedLanguageName)
     val deviceAuthorization = remember(context) { SharedPreferencesDeviceToolAuthorization(context) }
     val deviceToolEngine = remember(context) {
         DeviceToolEngine(
@@ -404,12 +414,21 @@ fun MissMinutesApp(
         )
     }
     val pluginConsentStore = remember(context) { AndroidPluginConsentStore(context) }
-    val pluginRegistry = remember(context, deviceToolEngine) {
+    val pluginManifestStore = remember(context) { AndroidPluginManifestStore(context) }
+    val pluginRegistry = remember(context, deviceToolEngine, pluginManifestStore) {
         PluginRegistry(
             handlers = AndroidDeviceStatusPlugin.handlers(deviceToolEngine),
             consentStore = pluginConsentStore,
             auditLog = FilePluginAuditLog(context)
-        ).apply { install(AndroidDeviceStatusPlugin.manifest()) }
+        ).apply {
+            install(AndroidDeviceStatusPlugin.manifest())
+            pluginManifestStore.load().forEach { manifest -> runCatching { install(manifest) } }
+        }
+    }
+    var pluginConsentSnapshot by remember(pluginRegistry) {
+        mutableStateOf(
+            pluginRegistry.installedPlugins().associate { it.id to pluginConsentStore.isGranted(it.id) }
+        )
     }
     val agentOrchestrator = remember(context) { AgentTaskRuntime.get(context) }
     var androidPluginConsent by remember(context) {
@@ -511,7 +530,9 @@ fun MissMinutesApp(
         }
     }
     var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
-    var darkTheme by rememberSaveable { mutableStateOf(false) }
+    var darkTheme by remember(context) {
+        mutableStateOf(appSettingsStore.loadAppearance().darkMode)
+    }
     var draft by rememberSaveable { mutableStateOf("") }
     var authEmail by rememberSaveable { mutableStateOf("") }
     var authPassword by remember { mutableStateOf("") }
@@ -548,6 +569,96 @@ fun MissMinutesApp(
     var exportError by remember { mutableStateOf<String?>(null) }
     var pendingDeleteConversationId by remember { mutableStateOf<String?>(null) }
     var confirmDeleteAll by remember { mutableStateOf(false) }
+    var backupCategories by remember {
+        mutableStateOf(BackupArchive.Category.entries.toSet())
+    }
+    var backupPassword by remember { mutableStateOf("") }
+    var backupConflictPolicy by remember { mutableStateOf(RestoreConflictPolicy.MERGE) }
+    var backupPreview by remember { mutableStateOf<BackupArchive.Preview?>(null) }
+    var pendingRestorePayload by remember { mutableStateOf<BackupPayloadAdapters.RestoredPayloads?>(null) }
+    var pendingBackupBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var backupStatus by remember { mutableStateOf<String?>(null) }
+    var backupError by remember { mutableStateOf<String?>(null) }
+    var backupBusy by remember { mutableStateOf(false) }
+
+    val createBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val bytes = pendingBackupBytes
+        if (uri != null && bytes != null) {
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        val output = context.contentResolver.openOutputStream(uri, "w")
+                            ?: throw IllegalStateException("The selected backup file could not be opened.")
+                        output.use { it.write(bytes) }
+                    }
+                    backupStatus = when (language) {
+                        AppLanguage.English -> "Encrypted backup saved."
+                        AppLanguage.Russian -> "Зашифрованная копия сохранена."
+                        AppLanguage.Tajik -> "Нусхаи рамзгузоришуда нигоҳ дошта шуд."
+                    }
+                    backupError = null
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Backup could not be saved."
+                } finally {
+                    bytes.fill(0)
+                    pendingBackupBytes = null
+                    backupBusy = false
+                }
+            }
+        } else {
+            bytes?.fill(0)
+            pendingBackupBytes = null
+            backupBusy = false
+        }
+    }
+
+    val openBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val passwordCopy = backupPassword.toCharArray()
+            scope.launch {
+                backupBusy = true
+                backupError = null
+                try {
+                    val bytes = withContext(Dispatchers.IO) {
+                        val input = context.contentResolver.openInputStream(uri)
+                            ?: throw IllegalArgumentException("The selected backup file could not be opened.")
+                        input.use { stream ->
+                            val output = ByteArrayOutputStream()
+                            val buffer = ByteArray(8_192)
+                            var total = 0
+                            while (true) {
+                                val count = stream.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                require(total <= 4_600_000) { "Backup file exceeds the size limit." }
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        }
+                    }
+                    val decoded = withContext(Dispatchers.IO) {
+                        BackupArchive.instance.decode(bytes, passwordCopy)
+                    }
+                    val restored = withContext(Dispatchers.IO) {
+                        BackupPayloadAdapters.decode(decoded)
+                    }
+                    backupPreview = decoded.preview
+                    pendingRestorePayload = restored
+                    backupStatus = null
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Backup could not be read."
+                } finally {
+                    passwordCopy.fill('\u0000')
+                    backupBusy = false
+                }
+            }
+        }
+    }
+
     val copy = copyFor(language)
 
     suspend fun loadConversation(ownerId: String, preferredConversationId: String? = null) {
@@ -578,6 +689,216 @@ fun MissMinutesApp(
         retentionDays = snapshot.third.third.first
         memoryContextEnabled = snapshot.third.third.second
         aiHasResponded = messages.any { !it.isUser }
+    }
+
+    val createEncryptedBackup: () -> Unit = {
+        val owner = currentOwnerId
+        if (owner == null) {
+            backupError = "Local conversation store is not ready."
+        } else {
+            val selected = backupCategories.toSet()
+            val passwordCopy = backupPassword.toCharArray()
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                try {
+                    val payloads = withContext(Dispatchers.IO) {
+                        val chat = if (BackupArchive.Category.CHAT_HISTORY in selected) {
+                            conversationStore.exportAll(owner)
+                        } else null
+                        val settings = if (BackupArchive.Category.APP_SETTINGS in selected) {
+                            SettingsBackupAdapter.Settings(
+                                language = when (language) { AppLanguage.English -> "en"; AppLanguage.Russian -> "ru"; AppLanguage.Tajik -> "tg" },
+                                darkMode = darkTheme,
+                                retentionDays = conversationStore.getRetentionDays(owner),
+                                memoryContextEnabled = conversationStore.isMemoryContextEnabled(owner)
+                            )
+                        } else null
+                        val manifests = if (BackupArchive.Category.PLUGINS in selected) {
+                            pluginRegistry.installedPlugins()
+                        } else emptyList()
+                        BackupPayloadAdapters.encode(
+                            selected,
+                            chat,
+                            settings,
+                            manifests,
+                            conversationStore.getRetentionDays(owner)
+                        )
+                    }
+                    val bytes = withContext(Dispatchers.IO) {
+                        BackupArchive.instance.encode(payloads, passwordCopy)
+                    }
+                    pendingBackupBytes = bytes
+                    createBackupLauncher.launch("miss-minutes-backup.mmb")
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Backup could not be created."
+                    backupBusy = false
+                } finally {
+                    passwordCopy.fill('\u0000')
+                }
+            }
+        }
+    }
+
+    val exportSelectedConversation: (String) -> Unit = { conversationId ->
+        val owner = currentOwnerId
+        if (owner == null) {
+            backupError = "Local conversation store is not ready."
+        } else if (backupPassword.length < 10) {
+            backupError = "Enter a backup password of at least 10 characters in Settings."
+        } else {
+            val passwordCopy = backupPassword.toCharArray()
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                try {
+                    val payloads = withContext(Dispatchers.IO) {
+                        val selectedChat = conversationStore.exportConversation(owner, conversationId)
+                        BackupPayloadAdapters.encode(
+                            setOf(BackupArchive.Category.CHAT_HISTORY),
+                            selectedChat,
+                            null,
+                            emptyList(),
+                            conversationStore.getRetentionDays(owner)
+                        )
+                    }
+                    val bytes = withContext(Dispatchers.IO) {
+                        BackupArchive.instance.encode(payloads, passwordCopy)
+                    }
+                    pendingBackupBytes = bytes
+                    createBackupLauncher.launch("miss-minutes-chat.mmb")
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Conversation backup could not be created."
+                    backupBusy = false
+                } finally {
+                    passwordCopy.fill('\u0000')
+                }
+            }
+        }
+    }
+
+    val exportSelectedPlugin: (String) -> Unit = { pluginId ->
+        val manifest = pluginRegistry.installedPlugins().firstOrNull { it.id == pluginId }
+        if (manifest == null) {
+            backupError = "The selected plugin is not installed."
+        } else if (backupPassword.length < 10) {
+            backupError = "Enter a backup password of at least 10 characters in Settings."
+        } else {
+            val passwordCopy = backupPassword.toCharArray()
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                try {
+                    val payloads = withContext(Dispatchers.IO) {
+                        BackupPayloadAdapters.encode(
+                            setOf(BackupArchive.Category.PLUGINS),
+                            null,
+                            null,
+                            listOf(manifest)
+                        )
+                    }
+                    val bytes = withContext(Dispatchers.IO) {
+                        BackupArchive.instance.encode(payloads, passwordCopy)
+                    }
+                    pendingBackupBytes = bytes
+                    createBackupLauncher.launch("miss-minutes-plugin-$pluginId.mmb")
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Plugin backup could not be created."
+                    backupBusy = false
+                } finally {
+                    passwordCopy.fill('\u0000')
+                }
+            }
+        }
+    }
+
+    val confirmBackupRestore: () -> Unit = {
+        val owner = currentOwnerId
+        val incoming = pendingRestorePayload
+        if (owner == null || incoming == null) {
+            backupError = "There is no validated backup to restore."
+        } else {
+            backupBusy = true
+            backupError = null
+            scope.launch {
+                val oldAppearance = appSettingsStore.loadAppearance()
+                val oldRetention = withContext(Dispatchers.IO) { conversationStore.getRetentionDays(owner) }
+                val oldMemoryContext = withContext(Dispatchers.IO) { conversationStore.isMemoryContextEnabled(owner) }
+                val oldPlugins = pluginRegistry.installedPlugins()
+                val incomingPluginIds = incoming.pluginManifests.orEmpty().map { it.id }.toSet()
+                val oldConsents = incomingPluginIds.associateWith(pluginConsentStore::isGranted)
+                val oldChat = if (incoming.conversationExportJson != null) {
+                    withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
+                } else null
+                val newlyInstalled = mutableListOf<com.khayom1.missminutes.plugins.PluginManifest>()
+                var rejectedPlugins = 0
+                try {
+                    withContext(Dispatchers.IO) {
+                        incoming.pluginManifests.orEmpty().forEach { manifest ->
+                            pluginConsentStore.setGranted(manifest.id, false)
+                            try {
+                                if (pluginRegistry.install(manifest)) newlyInstalled += manifest
+                            } catch (_: IllegalArgumentException) {
+                                rejectedPlugins++
+                            }
+                        }
+                        pluginManifestStore.replace(pluginRegistry.installedPlugins())
+                        incoming.conversationExportJson?.let { json ->
+                            val effectivePolicy = BackupPayloadAdapters.safeConflictPolicy(
+                                incoming.singleConversation,
+                                backupConflictPolicy
+                            )
+                            conversationStore.restoreAll(owner, json, effectivePolicy, restoreSettings = false)
+                        }
+                        incoming.settings?.let { settings ->
+                            conversationStore.setRetentionDays(owner, settings.retentionDays)
+                            conversationStore.setMemoryContextEnabled(owner, settings.memoryContextEnabled)
+                            appSettingsStore.applyBackup(settings)
+                        }
+                    }
+                    incoming.settings?.let { settings ->
+                        selectedLanguageName = when (settings.language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name }
+                        darkTheme = settings.darkMode
+                    }
+                    if (AndroidDeviceStatusPlugin.PLUGIN_ID in incomingPluginIds) {
+                        androidPluginConsent = false
+                    }
+                    pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
+                        it.id to pluginConsentStore.isGranted(it.id)
+                    }
+                    loadConversation(owner)
+                    backupStatus = when {
+                        incoming.singleConversation && backupConflictPolicy == RestoreConflictPolicy.REPLACE ->
+                            "Selected chat restored using safe merge; other conversations were preserved."
+                        rejectedPlugins > 0 ->
+                            "Restore completed; $rejectedPlugins unsupported plugin manifest(s) were skipped."
+                        else ->
+                            "Backup restored. Imported plugins remain disabled until you approve them."
+                    }
+                    backupPreview = null
+                    pendingRestorePayload = null
+                    backupPassword = ""
+                } catch (error: Exception) {
+                    withContext(Dispatchers.IO) {
+                        newlyInstalled.forEach { pluginRegistry.uninstall(it.id) }
+                        pluginManifestStore.replace(oldPlugins)
+                        oldConsents.forEach { (id, granted) -> pluginConsentStore.setGranted(id, granted) }
+                        appSettingsStore.saveAppearance(oldAppearance.language, oldAppearance.darkMode)
+                        conversationStore.setRetentionDays(owner, oldRetention)
+                        conversationStore.setMemoryContextEnabled(owner, oldMemoryContext)
+                        if (oldChat != null) {
+                            conversationStore.restoreAll(owner, oldChat, RestoreConflictPolicy.REPLACE, restoreSettings = false)
+                        }
+                    }
+                    pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
+                        it.id to pluginConsentStore.isGranted(it.id)
+                    }
+                    backupError = error.message ?: "Backup restore failed and changes were rolled back."
+                } finally {
+                    backupBusy = false
+                }
+            }
+        }
     }
 
     val speechLocale = when (language) {
@@ -1135,7 +1456,7 @@ fun MissMinutesApp(
                 onContinueAsGuest = continueAsGuest
             )
             else -> {
-                val screen = AppScreen.valueOf(selectedScreenName)
+                val screen = AppScreen.valueOf(selectedScreenName).let { if (it == AppScreen.Dashboard) AppScreen.Chat else it }
                 Scaffold(
                     topBar = {
                         CenterAlignedTopAppBar(
@@ -1144,26 +1465,25 @@ fun MissMinutesApp(
                                     text = ProductIdentity.NAME,
                                     fontWeight = FontWeight.SemiBold
                                 )
+                            },
+                            actions = {
+                                TextButton(onClick = { selectedScreenName = AppScreen.History.name }) {
+                                    Text(copy.history)
+                                }
+                                TextButton(onClick = startNewConversation) {
+                                    Text(
+                                        when (language) {
+                                            AppLanguage.English -> "New"
+                                            AppLanguage.Russian -> "Новый"
+                                            AppLanguage.Tajik -> "Нав"
+                                        }
+                                    )
+                                }
+                                TextButton(onClick = { selectedScreenName = AppScreen.Settings.name }) {
+                                    Text(copy.settings)
+                                }
                             }
                         )
-                    },
-                    bottomBar = {
-                        NavigationBar {
-                            AppScreen.entries.forEach { item ->
-                                val label = when (item) {
-                                    AppScreen.Chat -> copy.chat
-                                    AppScreen.Dashboard -> copy.dashboard
-                                    AppScreen.History -> copy.history
-                                    AppScreen.Settings -> copy.settings
-                                }
-                                NavigationBarItem(
-                                    selected = screen == item,
-                                    onClick = { selectedScreenName = item.name },
-                                    icon = { Text(item.symbol, fontSize = 18.sp) },
-                                    label = { Text(label) }
-                                )
-                            }
-                        }
                     }
                 ) { innerPadding ->
                     Column(
@@ -1203,11 +1523,12 @@ fun MissMinutesApp(
                                 language = language,
                                 conversations = conversationSummaries,
                                 exportPayload = exportPayload,
-                                exportError = exportError,
+                                exportError = exportError ?: backupError,
                                 pendingDeleteConversationId = pendingDeleteConversationId,
                                 confirmDeleteAll = confirmDeleteAll,
                                 onNewConversation = startNewConversation,
                                 onOpenConversation = openConversation,
+                                onExportConversation = exportSelectedConversation,
                                 onRequestDelete = { pendingDeleteConversationId = it },
                                 onConfirmDelete = { id -> deleteConversation(id) },
                                 onCancelDelete = { pendingDeleteConversationId = null },
@@ -1233,8 +1554,14 @@ fun MissMinutesApp(
                                 wakeMessage = wakeMessage,
                                 onEnableWakeListening = enableWakeListening,
                                 onDisableWakeListening = disableWakeListening,
-                                onLanguageChange = { selectedLanguageName = it.name },
-                                onDarkThemeChange = { darkTheme = it },
+                                onLanguageChange = {
+                                    selectedLanguageName = it.name
+                                    appSettingsStore.saveAppearance(when (it) { AppLanguage.English -> "en"; AppLanguage.Russian -> "ru"; AppLanguage.Tajik -> "tg" }, darkTheme)
+                                },
+                                onDarkThemeChange = {
+                                    darkTheme = it
+                                    appSettingsStore.saveAppearance(when (language) { AppLanguage.English -> "en"; AppLanguage.Russian -> "ru"; AppLanguage.Tajik -> "tg" }, it)
+                                },
                                 memoryItems = memoryItems,
                                 memoryDraft = memoryDraft,
                                 memoryMessage = memoryMessage,
@@ -1281,7 +1608,45 @@ fun MissMinutesApp(
                                         }
                                     }
                                 },
-                                onSignOut = signOut
+                                onSignOut = signOut,
+                                backupCategories = backupCategories,
+                                onToggleBackupCategory = { category ->
+                                    backupCategories = if (category in backupCategories) {
+                                        backupCategories - category
+                                    } else {
+                                        backupCategories + category
+                                    }
+                                },
+                                backupPassword = backupPassword,
+                                onBackupPasswordChange = { backupPassword = it.take(128) },
+                                backupConflictPolicy = backupConflictPolicy,
+                                onBackupConflictPolicyChange = { backupConflictPolicy = it },
+                                backupPreview = backupPreview,
+                                backupStatus = backupStatus,
+                                backupError = backupError,
+                                backupBusy = backupBusy,
+                                pluginManifests = pluginRegistry.installedPlugins().filter {
+                                    it.id != AndroidDeviceStatusPlugin.PLUGIN_ID
+                                },
+                                pluginConsentStates = pluginConsentSnapshot,
+                                onDeclarativePluginConsentChange = { pluginId, granted ->
+                                    pluginConsentStore.setGranted(pluginId, granted)
+                                    pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to granted)
+                                },
+                                onExportPlugin = exportSelectedPlugin,
+                                onCreateBackup = createEncryptedBackup,
+                                onChooseBackup = {
+                                    if (backupPassword.length >= 10) {
+                                        openBackupLauncher.launch(arrayOf("application/octet-stream", "application/*", "*/*"))
+                                    } else {
+                                        backupError = "Enter a backup password of at least 10 characters."
+                                    }
+                                },
+                                onConfirmBackupRestore = confirmBackupRestore,
+                                onDismissBackupPreview = {
+                                    backupPreview = null
+                                    pendingRestorePayload = null
+                                }
                             )
                         }
                     }
@@ -1590,6 +1955,7 @@ private fun HistoryScreen(
     confirmDeleteAll: Boolean,
     onNewConversation: () -> Unit,
     onOpenConversation: (String) -> Unit,
+    onExportConversation: (String) -> Unit,
     onRequestDelete: (String) -> Unit,
     onConfirmDelete: (String) -> Unit,
     onCancelDelete: () -> Unit,
@@ -1601,9 +1967,9 @@ private fun HistoryScreen(
 ) {
     val clipboard = LocalClipboardManager.current
     val labels = when (language) {
-        AppLanguage.English -> listOf("New conversation", "Export all data", "Delete all local data", "Open", "Delete", "messages", "Cancel", "Delete", "Export preview; copying happens only when you choose Copy")
-        AppLanguage.Russian -> listOf("Новый диалог", "Экспорт всех данных", "Удалить все локальные данные", "Открыть", "Удалить", "сообщений", "Отмена", "Удалить", "Предпросмотр экспорта; копирование выполняется только по вашему выбору")
-        AppLanguage.Tajik -> listOf("Гуфтугӯи нав", "Содироти ҳамаи маълумот", "Пок кардани ҳамаи маълумоти маҳаллӣ", "Кушодан", "Пок кардан", "паём", "Бекор кардан", "Пок кардан", "Намунаи содирот; нусхабардорӣ танҳо бо интихоби шумо иҷро мешавад")
+        AppLanguage.English -> listOf("New conversation", "Export all data", "Delete all local data", "Open", "Delete", "messages", "Cancel", "Delete", "Export preview; copying happens only when you choose Copy", "Encrypted export")
+        AppLanguage.Russian -> listOf("Новый диалог", "Экспорт всех данных", "Удалить все локальные данные", "Открыть", "Удалить", "сообщений", "Отмена", "Удалить", "Предпросмотр экспорта; копирование выполняется только по вашему выбору", "Зашифрованный экспорт")
+        AppLanguage.Tajik -> listOf("Гуфтугӯи нав", "Содироти ҳамаи маълумот", "Пок кардани ҳамаи маълумоти маҳаллӣ", "Кушодан", "Пок кардан", "паём", "Бекор кардан", "Пок кардан", "Намунаи содирот; нусхабардорӣ танҳо бо интихоби шумо иҷро мешавад", "Содироти рамзгузоришуда")
     }
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -1638,6 +2004,7 @@ private fun HistoryScreen(
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 TextButton(onClick = { onOpenConversation(conversation.id) }) { Text(labels[3]) }
+                                TextButton(onClick = { onExportConversation(conversation.id) }) { Text(labels[9]) }
                                 TextButton(onClick = { onRequestDelete(conversation.id) }) {
                                     Text(labels[4], color = MaterialTheme.colorScheme.error)
                                 }
@@ -1741,7 +2108,25 @@ private fun SettingsScreen(
     onDeleteMemory: (String) -> Unit,
     onRetentionChange: (Int) -> Unit,
     onMemoryContextChange: (Boolean) -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    backupCategories: Set<BackupArchive.Category>,
+    onToggleBackupCategory: (BackupArchive.Category) -> Unit,
+    backupPassword: String,
+    onBackupPasswordChange: (String) -> Unit,
+    backupConflictPolicy: RestoreConflictPolicy,
+    onBackupConflictPolicyChange: (RestoreConflictPolicy) -> Unit,
+    backupPreview: BackupArchive.Preview?,
+    backupStatus: String?,
+    backupError: String?,
+    backupBusy: Boolean,
+    pluginManifests: List<com.khayom1.missminutes.plugins.PluginManifest>,
+    pluginConsentStates: Map<String, Boolean>,
+    onDeclarativePluginConsentChange: (String, Boolean) -> Unit,
+    onExportPlugin: (String) -> Unit,
+    onCreateBackup: () -> Unit,
+    onChooseBackup: () -> Unit,
+    onConfirmBackupRestore: () -> Unit,
+    onDismissBackupPreview: () -> Unit
 ) {
     val settingsScope = rememberCoroutineScope()
     Column(
@@ -2277,5 +2662,26 @@ private fun SettingsScreen(
             Text(copy.about, fontWeight = FontWeight.SemiBold)
             Text("${ProductIdentity.NAME} · ${copy.version} ${ProductIdentity.VERSION_NAME}")
         }
+        BackupRestorePanel(
+            language = language,
+            categories = backupCategories,
+            onToggleCategory = onToggleBackupCategory,
+            password = backupPassword,
+            onPasswordChange = onBackupPasswordChange,
+            conflictPolicy = backupConflictPolicy,
+            onConflictPolicyChange = onBackupConflictPolicyChange,
+            preview = backupPreview,
+            status = backupStatus,
+            error = backupError,
+            busy = backupBusy,
+            pluginManifests = pluginManifests,
+            pluginConsentStates = pluginConsentStates,
+            onPluginConsentChange = onDeclarativePluginConsentChange,
+            onExportPlugin = onExportPlugin,
+            onCreateBackup = onCreateBackup,
+            onChooseBackup = onChooseBackup,
+            onConfirmRestore = onConfirmBackupRestore,
+            onDismissPreview = onDismissBackupPreview
+        )
     }
 }

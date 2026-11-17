@@ -534,7 +534,8 @@ class LocalConversationStore(
     fun restoreAll(
         ownerId: String,
         exportJson: String,
-        conflictPolicy: RestoreConflictPolicy
+        conflictPolicy: RestoreConflictPolicy,
+        restoreSettings: Boolean = true
     ): RestoreSummary {
         validateOwner(ownerId)
         require(exportJson.toByteArray(Charsets.UTF_8).size <= MAX_EXPORT_BYTES) {
@@ -686,7 +687,7 @@ class LocalConversationStore(
                 })
                 importedMemories++
             }
-            if (conflictPolicy == RestoreConflictPolicy.REPLACE) {
+            if (conflictPolicy == RestoreConflictPolicy.REPLACE && restoreSettings) {
                 db.insertWithOnConflict("user_settings", null, ContentValues().apply {
                     put("owner_id", ownerId)
                     put("retention_days", retentionDays)

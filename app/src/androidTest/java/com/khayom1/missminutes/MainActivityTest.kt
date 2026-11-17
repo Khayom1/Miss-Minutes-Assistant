@@ -123,6 +123,9 @@ class MainActivityTest {
         aiProvider = FakeAiProvider()
         apiKeyStore = MemoryApiKeyStore()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.getSharedPreferences("app_preferences", 0).edit().clear().commit()
+        context.getSharedPreferences("plugin_manifest_store", 0).edit().clear().commit()
+        context.getSharedPreferences("plugin_user_consent", 0).edit().clear().commit()
         conversationDatabaseName = "ui-memory-test-${UUID.randomUUID()}.db"
         conversationStore = LocalConversationStore(
             context,
@@ -222,23 +225,28 @@ class MainActivityTest {
         signIn()
 
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
-        composeRule.onNodeWithText("Dashboard").performClick()
-        composeRule.onNodeWithText("user@example.test").assertIsDisplayed()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("user@example.test").performScrollTo().assertIsDisplayed()
     }
 
     @Test
-    fun bottomNavigationOpensDashboardHistoryAndSettings() {
+    fun topControlsExposeHistoryNewChatAndSettingsOnly() {
         signIn()
 
-        composeRule.onNodeWithText("Dashboard").performClick()
-        composeRule.onNodeWithText("Your workspace").assertIsDisplayed()
-        composeRule.onNodeWithText("AI provider").assertIsDisplayed()
+        composeRule.onNodeWithText("History").assertIsDisplayed()
+        composeRule.onNodeWithText("New").assertIsDisplayed()
+        composeRule.onNodeWithText("Settings").assertIsDisplayed()
+        assertEquals(0, composeRule.onAllNodesWithText("Dashboard").fetchSemanticsNodes().size)
 
         composeRule.onNodeWithText("History").performClick()
         composeRule.onNodeWithText("Conversation history").assertIsDisplayed()
 
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("App settings").assertIsDisplayed()
+        composeRule.onAllNodesWithText("App settings").get(0).assertIsDisplayed()
+
+        composeRule.onNodeWithText("New").performClick()
+        waitForChatScreen()
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
     }
 
     @Test
@@ -252,7 +260,11 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Check the authenticated chat").assertIsDisplayed()
+        val ownerId = "test-user-${"user@example.test".hashCode()}"
+        val savedConversation = conversationStore.listConversations(ownerId).single()
+        val savedMessages = conversationStore.getMessages(ownerId, savedConversation.id)
+        assertTrue(savedMessages.any { it.role == LocalConversationStore.ROLE_USER && it.content == "Check the authenticated chat" })
+        assertTrue(savedMessages.any { it.role == LocalConversationStore.ROLE_ASSISTANT && it.content == "Mock AI response" })
         composeRule.onNodeWithText("Mock AI response").performScrollTo().assertIsDisplayed()
         assertEquals(
             AiMessage(
@@ -326,7 +338,8 @@ class MainActivityTest {
         val memorySwitch = composeRule.onNodeWithTag("memory_context_toggle")
         memorySwitch.performScrollTo().assertIsOff()
         memorySwitch.performClick()
-        composeRule.onNodeWithText("Chat").performClick()
+        composeRule.onNodeWithText("New").performClick()
+        waitForChatScreen()
         composeRule.onNodeWithTag("chat_input").performTextInput("How should you explain?")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -378,8 +391,8 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Dashboard").performClick()
-        composeRule.onNodeWithText("new-user@example.test").assertIsDisplayed()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("new-user@example.test").performScrollTo().assertIsDisplayed()
         assertEquals(
             0,
             composeRule.onAllNodesWithText("Private conversation from previous account")
@@ -424,8 +437,8 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Dashboard").performClick()
-        composeRule.onNodeWithText("new-user@example.test").assertIsDisplayed()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("new-user@example.test").performScrollTo().assertIsDisplayed()
         assertEquals(
             0,
             composeRule.onAllNodesWithText("Private pending prompt from old account")
@@ -466,6 +479,18 @@ class MainActivityTest {
     }
 
     @Test
+    fun settingsExposeEncryptedBackupAndRestoreControls() {
+        signIn()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("Backup and restore").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Backup password (at least 10 characters)")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "The backup is password-encrypted. API keys, Android permissions and plugin consent are never included."
+        ).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun settingsCanToggleDarkTheme() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
@@ -481,11 +506,11 @@ class MainActivityTest {
         composeRule.onNodeWithText("Settings").performClick()
 
         composeRule.onNodeWithText("Русский").performClick()
-        composeRule.onNodeWithText("Настройки приложения").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Настройки приложения").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Язык").assertIsDisplayed()
 
         composeRule.onNodeWithText("Тоҷикӣ").performClick()
-        composeRule.onNodeWithText("Танзимоти барнома").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Танзимоти барнома").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Забон").assertIsDisplayed()
     }
 

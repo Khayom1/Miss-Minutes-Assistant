@@ -36,7 +36,7 @@ object PluginManifestArchive {
     fun decode(payload: JsonObject): List<PluginManifest> {
         require(payload.toString().toByteArray(Charsets.UTF_8).size <= MAX_ARCHIVE_BYTES)
         require(payload.keys == setOf("schemaVersion", "plugins")) { "Unknown plugin archive fields." }
-        val version = payload["schemaVersion"]?.jsonPrimitive?.content?.toIntOrNull()
+        val version = payload["schemaVersion"]?.jsonPrimitive?.takeIf { !it.isString }?.content?.toIntOrNull()
             ?: throw IllegalArgumentException("Plugin archive schema version is missing.")
         require(version == SCHEMA_VERSION) { "Unsupported plugin archive version." }
         val entries = payload["plugins"]?.jsonArray
@@ -51,41 +51,60 @@ object PluginManifestArchive {
             val parsedActions = actions.map { rawAction ->
                 val action = rawAction.jsonObject
                 require(action.keys == setOf("id", "capability", "requiresConfirmation", "arguments"))
-                val argumentsObject = action["arguments"]?.jsonObject ?: JsonObject(emptyMap())
+                val argumentsObject = action["arguments"]?.jsonObject
+                    ?: throw IllegalArgumentException("Plugin action arguments are missing.")
                 require(argumentsObject.size <= 8)
                 val arguments = argumentsObject.mapValues { (key, rawField) ->
                     val field = rawField.jsonObject
-                    val allowed = field["allowedValues"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet() ?: emptySet()
-                    require(allowed.size <= 32)
+                    require(field.keys.all {
+                        it in setOf("name", "type", "required", "maxLength", "minimum", "maximum", "allowedValues")
+                    })
+                    require(field.keys.containsAll(setOf("name", "type", "required", "maxLength", "allowedValues")))
+                    val allowed = field["allowedValues"]?.jsonArray?.map {
+                        it.jsonPrimitive.also { primitive -> require(primitive.isString) }.content
+                    }?.toSet() ?: emptySet()
+                    require(allowed.size <= 32 && field["allowedValues"]?.jsonArray?.size == allowed.size)
                     PluginFieldSpec(
                         name = field.requiredString("name"),
                         type = enumValue<PluginValueType>(field.requiredString("type")),
-                        required = field["required"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true,
-                        maxLength = field["maxLength"]?.jsonPrimitive?.content?.toIntOrNull() ?: 256,
-                        minimum = field["minimum"]?.jsonPrimitive?.content?.toLongOrNull(),
-                        maximum = field["maximum"]?.jsonPrimitive?.content?.toLongOrNull(),
+                        required = field.requiredBoolean("required"),
+                        maxLength = field.requiredInt("maxLength"),
+                        minimum = field.optionalLong("minimum"),
+                        maximum = field.optionalLong("maximum"),
                         allowedValues = allowed
-                    ).also { require(key == it.name) }
+                    ).also { spec ->
+                        require(key == spec.name)
+                        require(spec.maxLength in 1..2_000)
+                        require(spec.minimum == null || spec.maximum == null || spec.minimum <= spec.maximum)
+                        require(spec.allowedValues.all { value -> value.length <= spec.maxLength })
+                    }
                 }
                 PluginActionSpec(
                     id = action.requiredString("id"),
                     capability = enumValue(action.requiredString("capability")),
                     arguments = arguments,
-                    requiresConfirmation = action["requiresConfirmation"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+                    requiresConfirmation = action.requiredBoolean("requiresConfirmation")
                 )
             }
-            PluginManifest(
+            val rawCapabilities = item["capabilities"]?.jsonArray
+                ?: throw IllegalArgumentException("Plugin capabilities are missing.")
+            val capabilities = rawCapabilities.map {
+                enumValue<PluginCapability>(it.jsonPrimitive.also { primitive -> require(primitive.isString) }.content)
+            }.toSet()
+            require(capabilities.isNotEmpty() && capabilities.size == rawCapabilities.size)
+            val manifest = PluginManifest(
                 id = item.requiredString("id"),
                 version = item.requiredString("version"),
                 displayName = item.requiredString("displayName"),
                 description = item.requiredString("description"),
-                capabilities = item["capabilities"]?.jsonArray?.map {
-                    enumValue<PluginCapability>(it.jsonPrimitive.content)
-                }?.toSet() ?: throw IllegalArgumentException("Plugin capabilities are missing."),
+                capabilities = capabilities,
                 actions = parsedActions,
-                maxCallsPerMinute = item["maxCallsPerMinute"]?.jsonPrimitive?.content?.toIntOrNull() ?: 6,
-                maxExecutionMillis = item["maxExecutionMillis"]?.jsonPrimitive?.content?.toLongOrNull() ?: 1_500L
+                maxCallsPerMinute = item.requiredInt("maxCallsPerMinute"),
+                maxExecutionMillis = item.requiredLong("maxExecutionMillis")
             )
+            require(manifest.capabilities == manifest.actions.map { it.capability }.toSet())
+            require(manifest.maxCallsPerMinute in 1..12 && manifest.maxExecutionMillis in 1L..5_000L)
+            manifest
         }
         require(manifests.map { it.id }.distinct().size == manifests.size)
         return manifests
@@ -127,8 +146,36 @@ object PluginManifestArchive {
         })
     }
 
-    private fun JsonObject.requiredString(key: String): String =
-        this[key]?.jsonPrimitive?.content ?: throw IllegalArgumentException("Plugin field '$key' is missing.")
+    private fun JsonObject.requiredString(key: String): String {
+        val value = this[key]?.jsonPrimitive ?: throw IllegalArgumentException("Plugin field '$key' is missing.")
+        require(value.isString)
+        return value.content
+    }
+
+    private fun JsonObject.requiredBoolean(key: String): Boolean {
+        val value = this[key]?.jsonPrimitive ?: throw IllegalArgumentException("Plugin field '$key' is missing.")
+        require(!value.isString)
+        return value.content.toBooleanStrictOrNull()
+            ?: throw IllegalArgumentException("Plugin field '$key' is invalid.")
+    }
+
+    private fun JsonObject.requiredInt(key: String): Int {
+        val value = this[key]?.jsonPrimitive ?: throw IllegalArgumentException("Plugin field '$key' is missing.")
+        require(!value.isString)
+        return value.content.toIntOrNull() ?: throw IllegalArgumentException("Plugin field '$key' is invalid.")
+    }
+
+    private fun JsonObject.requiredLong(key: String): Long {
+        val value = this[key]?.jsonPrimitive ?: throw IllegalArgumentException("Plugin field '$key' is missing.")
+        require(!value.isString)
+        return value.content.toLongOrNull() ?: throw IllegalArgumentException("Plugin field '$key' is invalid.")
+    }
+
+    private fun JsonObject.optionalLong(key: String): Long? {
+        val value = this[key]?.jsonPrimitive ?: return null
+        require(!value.isString)
+        return value.content.toLongOrNull() ?: throw IllegalArgumentException("Plugin field '$key' is invalid.")
+    }
 
     private inline fun <reified T : Enum<T>> enumValue(value: String): T =
         try { enumValueOf<T>(value) } catch (error: IllegalArgumentException) {
