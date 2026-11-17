@@ -937,6 +937,28 @@ fun MissMinutesApp(
         }
     }
 
+    val saveMemory: (String, String) -> Unit = { key, value ->
+        val owner = currentOwnerId
+        if (owner != null && key.isNotBlank() && value.isNotBlank()) {
+            scope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    conversationStore.saveMemory(owner, key, value)
+                }
+                val existingIndex = savedMemories.indexOfFirst { it.id == saved.id }
+                if (existingIndex >= 0) savedMemories[existingIndex] = saved else savedMemories.add(0, saved)
+            }
+        }
+    }
+    val deleteMemory: (StoredMemory) -> Unit = { memory ->
+        val owner = currentOwnerId
+        if (owner != null) {
+            scope.launch {
+                withContext(Dispatchers.IO) { conversationStore.deleteMemory(owner, memory.id) }
+                savedMemories.removeAll { it.id == memory.id }
+            }
+        }
+    }
+
     val speakMessage: (ChatMessage) -> Unit = { message ->
         if (!message.isUser) {
             if (speakingMessageId == message.id) {
@@ -1045,11 +1067,14 @@ fun MissMinutesApp(
                                 copy = copy,
                                 actions = historyCopyFor(language),
                                 conversations = savedConversations,
+                                memories = savedMemories,
                                 onOpen = openConversation,
                                 onNew = startNewConversation,
                                 onDelete = deleteConversation,
                                 onExport = exportHistory,
-                                onDeleteAll = deleteAllHistory
+                                onDeleteAll = deleteAllHistory,
+                                onSaveMemory = saveMemory,
+                                onDeleteMemory = deleteMemory
                             )
                             AppScreen.Settings -> SettingsScreen(
                                 copy = copy,
@@ -1356,14 +1381,19 @@ private fun HistoryScreen(
     copy: UiCopy,
     actions: HistoryCopy,
     conversations: List<StoredConversation>,
+    memories: List<StoredMemory>,
     onOpen: (StoredConversation) -> Unit,
     onNew: () -> Unit,
     onDelete: (StoredConversation) -> Unit,
     onExport: () -> Unit,
-    onDeleteAll: () -> Unit
+    onDeleteAll: () -> Unit,
+    onSaveMemory: (String, String) -> Unit,
+    onDeleteMemory: (StoredMemory) -> Unit
 ) {
     var confirmDeleteAll by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<StoredConversation?>(null) }
+    var memoryKey by rememberSaveable { mutableStateOf("") }
+    var memoryValue by rememberSaveable { mutableStateOf("") }
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1402,6 +1432,47 @@ private fun HistoryScreen(
                 }
             }
             TextButton(onClick = { confirmDeleteAll = true }) { Text(actions.deleteAll) }
+        }
+        Text(actions.memoryTitle, style = MaterialTheme.typography.titleLarge)
+        OutlinedTextField(
+            value = memoryKey,
+            onValueChange = { memoryKey = it.take(80) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(actions.memoryKey) },
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = memoryValue,
+            onValueChange = { memoryValue = it.take(2_000) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(actions.memoryValue) },
+            maxLines = 3
+        )
+        Button(
+            onClick = {
+                onSaveMemory(memoryKey, memoryValue)
+                memoryKey = ""
+                memoryValue = ""
+            },
+            enabled = memoryKey.isNotBlank() && memoryValue.isNotBlank()
+        ) { Text(actions.saveMemory) }
+        if (memories.isEmpty()) {
+            Text(actions.noMemories, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            memories.forEach { memory ->
+                Card {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(memory.key, fontWeight = FontWeight.Medium)
+                            Text(memory.value, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { onDeleteMemory(memory) }) { Text(actions.delete) }
+                    }
+                }
+            }
         }
     }
     if (confirmDeleteAll) {
