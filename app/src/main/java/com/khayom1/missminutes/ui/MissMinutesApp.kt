@@ -647,7 +647,7 @@ fun MissMinutesApp(
                 } catch (error: Exception) {
                     backupError = error.message ?: "Backup could not be read."
                 } finally {
-                    passwordCopy.fill('\\u0000')
+                    passwordCopy.fill('\u0000')
                     backupBusy = false
                 }
             }
@@ -729,7 +729,7 @@ fun MissMinutesApp(
                     backupError = error.message ?: "Backup could not be created."
                     backupBusy = false
                 } finally {
-                    passwordCopy.fill('\\u0000')
+                    passwordCopy.fill('\u0000')
                 }
             }
         }
@@ -766,7 +766,7 @@ fun MissMinutesApp(
                     backupError = error.message ?: "Conversation backup could not be created."
                     backupBusy = false
                 } finally {
-                    passwordCopy.fill('\\u0000')
+                    passwordCopy.fill('\u0000')
                 }
             }
         }
