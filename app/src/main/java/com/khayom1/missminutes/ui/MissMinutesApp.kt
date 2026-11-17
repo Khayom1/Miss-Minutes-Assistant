@@ -77,10 +77,8 @@ import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
-import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.buildAiContextMessages
 import com.khayom1.missminutes.ai.TtsProvider
-import com.khayom1.missminutes.ai.SupabaseAuthException
 import com.khayom1.missminutes.device.AndroidDeviceToolHost
 import com.khayom1.missminutes.device.DeviceToolCapability
 import com.khayom1.missminutes.device.DeviceToolCommand
