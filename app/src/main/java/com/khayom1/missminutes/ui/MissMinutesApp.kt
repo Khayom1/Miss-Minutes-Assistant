@@ -1842,6 +1842,77 @@ private fun SettingsScreen(
                 }
             }
         }
+        val overlayContext = LocalContext.current
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Ёвари шинокунанда"
+                    AppLanguage.Russian -> "Плавающий помощник"
+                    AppLanguage.English -> "Floating assistant"
+                },
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Тугмачаи Miss Minutes дар болои барномаҳои дигар пайдо мешавад. Барои он иҷозати махсуси Android лозим аст. Он танҳо бо пахши шумо фаъол мешавад ва микрофонро истифода намекунад."
+                    AppLanguage.Russian -> "Плавающая кнопка Miss Minutes будет отображаться поверх других приложений. Требуется специальное разрешение Android. Она запускается только по вашему нажатию и не использует микрофон."
+                    AppLanguage.English -> "A Miss Minutes shortcut appears above other apps. Android requires a special permission. It starts only after your tap and does not use the microphone."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        if (android.provider.Settings.canDrawOverlays(overlayContext)) {
+                            androidx.core.content.ContextCompat.startForegroundService(
+                                overlayContext,
+                                android.content.Intent(
+                                    overlayContext,
+                                    com.khayom1.missminutes.overlay.MissMinutesOverlayService::class.java
+                                ).setAction(com.khayom1.missminutes.overlay.MissMinutesOverlayService.ACTION_START)
+                            )
+                        } else {
+                            overlayContext.startActivity(
+                                android.content.Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:${overlayContext.packageName}")
+                                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
+                    enabled = !isBusy,
+                    modifier = Modifier.testTag("overlay_start")
+                ) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Фаъол кардан"
+                            AppLanguage.Russian -> "Включить"
+                            AppLanguage.English -> "Show bubble"
+                        }
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        overlayContext.stopService(
+                            android.content.Intent(
+                                overlayContext,
+                                com.khayom1.missminutes.overlay.MissMinutesOverlayService::class.java
+                            )
+                        )
+                    },
+                    modifier = Modifier.testTag("overlay_stop")
+                ) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Пинҳон кардан"
+                            AppLanguage.Russian -> "Скрыть"
+                            AppLanguage.English -> "Hide"
+                        }
+                    )
+                }
+            }
+        }
         val wakeTitle = when (language) {
             AppLanguage.English -> "Offline wake phrase"
             AppLanguage.Russian -> "Офлайн-фраза активации"
