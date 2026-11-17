@@ -429,7 +429,7 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Dashboard").performClick()
+        composeRule.onNodeWithText("Settings").performClick()
         composeRule.onNodeWithText("new-user@example.test").assertIsDisplayed()
         assertEquals(
             0,
