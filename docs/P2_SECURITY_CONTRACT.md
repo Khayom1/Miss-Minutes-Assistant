@@ -16,6 +16,7 @@ The Android client calls only `https://api.deepseek.com/chat/completions` for De
 - The key is decrypted only when a request is about to be sent, on an IO dispatcher.
 - The key is transmitted only as `Authorization: Bearer ...` over HTTPS to the official DeepSeek API endpoint.
 - The key is never embedded in BuildConfig, resources, APK constants, source control, GitHub Actions secrets, Supabase secrets or Supabase database rows.
+- Android Keystore encryption protects the stored key at rest; the plaintext necessarily exists briefly in the app process when building the HTTPS Authorization header. A rooted/compromised device or runtime instrumentation may capture it. This is a user-owned BYOK trade-off, not a safe place for a shared developer key. Users must be able to revoke the key in their DeepSeek account.
 - A distributed APK cannot safely contain a shared developer API key. Each user must supply their own credential.
 
 ## Supabase account session
