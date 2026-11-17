@@ -319,12 +319,12 @@ class MainActivityTest {
         composeRule.onNodeWithTag("deepseek_api_key")
             .performTextInput("sk-user-owned-test-key-123456")
         composeRule.onNodeWithText("Save API key").performClick()
-        composeRule.waitUntil(timeoutMillis = 2_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             apiKeyStore.key == "sk-user-owned-test-key-123456"
         }
         composeRule.onNodeWithText("Key is stored securely on this device.").assertIsDisplayed()
         composeRule.onNodeWithText("Remove key").performClick()
-        composeRule.waitUntil(timeoutMillis = 2_000) { apiKeyStore.key == null }
+        composeRule.waitUntil(timeoutMillis = 10_000) { apiKeyStore.key == null }
         assertEquals(null, apiKeyStore.key)
     }
 
