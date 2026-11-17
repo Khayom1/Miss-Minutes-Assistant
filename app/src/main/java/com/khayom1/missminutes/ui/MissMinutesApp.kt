@@ -825,7 +825,7 @@ fun MissMinutesApp(
             }
             requestMessages.add(AiMessage(AiRole.USER, value))
             while (
-                requestMessages.size > if (hasMemoryContext) 2 else 1 &&
+                requestMessages.size > (if (hasMemoryContext) 2 else 1) &&
                 requestMessages.sumOf { it.content.length } > 16_000
             ) {
                 requestMessages.removeAt(if (hasMemoryContext) 1 else 0)
