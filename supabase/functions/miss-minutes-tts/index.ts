@@ -159,7 +159,9 @@ export function createHandler(deps: Dependencies): (request: Request) => Promise
       }
       const audio = await readAudio(upstream);
       if (!audio || audio.length === 0) return json(502, { error: "invalid_tts_response" });
-      return new Response(audio, {
+      const audioBuffer = new ArrayBuffer(audio.byteLength);
+      new Uint8Array(audioBuffer).set(audio);
+      return new Response(audioBuffer, {
         status: 200,
         headers: { ...CORS, "content-type": "audio/mpeg", "content-length": String(audio.length) },
       });
