@@ -411,44 +411,6 @@ fun MissMinutesApp(
             }
         }
     }
-    val speechLocale = when (language) {
-        AppLanguage.English -> Locale.US
-        AppLanguage.Russian -> Locale("ru", "RU")
-        AppLanguage.Tajik -> Locale("tg", "TJ")
-    }
-    val startSpeechInput: () -> Unit = {
-        speechError = null
-        speechListening = true
-        speechInputProvider.start(
-            locale = speechLocale,
-            onResult = { transcript ->
-                speechListening = false
-                val separator = if (draft.isBlank()) "" else " "
-                draft = (draft + separator + transcript).take(8_000)
-            },
-            onError = {
-                speechListening = false
-                speechError = copyFor(language).speechInputUnavailable
-            }
-        )
-    }
-    val speechPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) startSpeechInput() else {
-            speechListening = false
-            speechError = copyFor(language).microphonePermissionRequired
-        }
-    }
-    val requestSpeechInput: () -> Unit = {
-        if (speechListening) {
-            speechInputProvider.stop()
-            speechListening = false
-            speechError = null
-        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        ) startSpeechInput() else speechPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-    }
     val wakePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
@@ -513,6 +475,45 @@ fun MissMinutesApp(
     var nextMessageId by remember { mutableStateOf(0L) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val copy = copyFor(language)
+
+    val speechLocale = when (language) {
+        AppLanguage.English -> Locale.US
+        AppLanguage.Russian -> Locale("ru", "RU")
+        AppLanguage.Tajik -> Locale("tg", "TJ")
+    }
+    val startSpeechInput: () -> Unit = {
+        speechError = null
+        speechListening = true
+        speechInputProvider.start(
+            locale = speechLocale,
+            onResult = { transcript ->
+                speechListening = false
+                val separator = if (draft.isBlank()) "" else " "
+                draft = (draft + separator + transcript).take(8_000)
+            },
+            onError = {
+                speechListening = false
+                speechError = copyFor(language).speechInputUnavailable
+            }
+        )
+    }
+    val speechPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startSpeechInput() else {
+            speechListening = false
+            speechError = copyFor(language).microphonePermissionRequired
+        }
+    }
+    val requestSpeechInput: () -> Unit = {
+        if (speechListening) {
+            speechInputProvider.stop()
+            speechListening = false
+            speechError = null
+        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) startSpeechInput() else speechPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
 
     LaunchedEffect(apiKeyStore) {
         apiKeyConfigured = withContext(Dispatchers.IO) {
