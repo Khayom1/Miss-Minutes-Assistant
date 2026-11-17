@@ -97,7 +97,7 @@ class MissMinutesWakeWordService : Service() {
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             publishState(false, serviceCopy.android12Required)
-            postStatusNotification("On-device speech recognition requires Android 12 or later.")
+            postStatusNotification(serviceCopy.android12Required)
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -112,7 +112,7 @@ class MissMinutesWakeWordService : Service() {
 
         if (!hasRequiredPermissions()) {
             publishState(false, serviceCopy.permissionsRequired)
-            postStatusNotification("Microphone and notification permissions are required.")
+            postStatusNotification(serviceCopy.permissionsRequired)
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -322,7 +322,7 @@ class MissMinutesWakeWordService : Service() {
         active = false
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
-        publishState(false, "Offline wake phrase listening stopped.")
+        publishState(false, serviceCopy.stopped)
         super.onDestroy()
     }
 
