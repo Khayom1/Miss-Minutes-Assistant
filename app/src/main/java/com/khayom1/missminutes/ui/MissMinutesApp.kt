@@ -59,6 +59,8 @@ import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.SupabaseAuthException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 private enum class AppScreen(val symbol: String) {
@@ -310,6 +312,7 @@ fun MissMinutesApp(
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
     var apiKeyConfigured by remember { mutableStateOf(false) }
+    var apiKeySaving by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
     var apiKeyMessage by remember { mutableStateOf<String?>(null) }
     var nextMessageId by remember { mutableStateOf(0L) }
@@ -318,7 +321,9 @@ fun MissMinutesApp(
     val copy = copyFor(language)
 
     LaunchedEffect(apiKeyStore) {
-        apiKeyConfigured = runCatching { !apiKeyStore.load().isNullOrBlank() }.getOrDefault(false)
+        apiKeyConfigured = withContext(Dispatchers.IO) {
+            runCatching { !apiKeyStore.load().isNullOrBlank() }.getOrDefault(false)
+        }
     }
 
     LaunchedEffect(sessionManager) {
@@ -415,38 +420,65 @@ fun MissMinutesApp(
 
     val saveApiKey: () -> Unit = {
         val candidate = apiKeyInput.trim()
-        try {
-            apiKeyStore.save(candidate)
-            apiKeyConfigured = true
-            apiKeyInput = ""
-            apiKeyMessage = when (language) {
-                AppLanguage.English -> "API key saved securely on this device."
-                AppLanguage.Russian -> "API-ключ надёжно сохранён на этом устройстве."
-                AppLanguage.Tajik -> "Калиди API дар ҳамин телефон бехатар нигоҳ дошта шуд."
-            }
-        } catch (_: IllegalArgumentException) {
-            apiKeyMessage = when (language) {
-                AppLanguage.English -> "The key format looks invalid. Check your DeepSeek key."
-                AppLanguage.Russian -> "Неверный формат ключа. Проверьте ключ DeepSeek."
-                AppLanguage.Tajik -> "Формати калид нодуруст аст. Калиди DeepSeek-ро санҷед."
-            }
-        } catch (_: Exception) {
-            apiKeyMessage = when (language) {
-                AppLanguage.English -> "Could not save the key securely."
-                AppLanguage.Russian -> "Не удалось безопасно сохранить ключ."
-                AppLanguage.Tajik -> "Калидро бехатар нигоҳ доштан нашуд."
+        if (candidate.isNotEmpty() && !apiKeySaving) {
+            apiKeySaving = true
+            apiKeyMessage = null
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { apiKeyStore.save(candidate) }
+                }
+                apiKeySaving = false
+                result.onSuccess {
+                    apiKeyConfigured = true
+                    apiKeyInput = ""
+                    apiKeyMessage = when (language) {
+                        AppLanguage.English -> "API key saved securely on this device."
+                        AppLanguage.Russian -> "API-ключ надёжно сохранён на этом устройстве."
+                        AppLanguage.Tajik -> "Калиди API дар ҳамин телефон бехатар нигоҳ дошта шуд."
+                    }
+                }.onFailure { error ->
+                    apiKeyMessage = if (error is IllegalArgumentException) {
+                        when (language) {
+                            AppLanguage.English -> "The key format looks invalid. Check your DeepSeek key."
+                            AppLanguage.Russian -> "Неверный формат ключа. Проверьте ключ DeepSeek."
+                            AppLanguage.Tajik -> "Формати калид нодуруст аст. Калиди DeepSeek-ро санҷед."
+                        }
+                    } else {
+                        when (language) {
+                            AppLanguage.English -> "Could not save the key securely."
+                            AppLanguage.Russian -> "Не удалось безопасно сохранить ключ."
+                            AppLanguage.Tajik -> "Калидро бехатар нигоҳ доштан нашуд."
+                        }
+                    }
+                }
             }
         }
     }
 
     val clearApiKey: () -> Unit = {
-        runCatching { apiKeyStore.clear() }
-        apiKeyConfigured = false
-        apiKeyInput = ""
-        apiKeyMessage = when (language) {
-            AppLanguage.English -> "API key removed from this device."
-            AppLanguage.Russian -> "API-ключ удалён с этого устройства."
-            AppLanguage.Tajik -> "Калиди API аз телефон пок карда шуд."
+        if (!apiKeySaving) {
+            apiKeySaving = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { apiKeyStore.clear() }
+                }
+                apiKeySaving = false
+                result.onSuccess {
+                    apiKeyConfigured = false
+                    apiKeyInput = ""
+                    apiKeyMessage = when (language) {
+                        AppLanguage.English -> "API key removed from this device."
+                        AppLanguage.Russian -> "API-ключ удалён с этого устройства."
+                        AppLanguage.Tajik -> "Калиди API аз телефон пок карда шуд."
+                    }
+                }.onFailure {
+                    apiKeyMessage = when (language) {
+                        AppLanguage.English -> "Could not remove the stored API key."
+                        AppLanguage.Russian -> "Не удалось удалить сохранённый ключ."
+                        AppLanguage.Tajik -> "Калиди нигоҳдошташударо пок карда нашуд."
+                    }
+                }
+            }
         }
     }
 
@@ -632,7 +664,7 @@ fun MissMinutesApp(
                                 language = language,
                                 darkTheme = darkTheme,
                                 email = userEmail,
-                                isBusy = authBusy,
+                                isBusy = authBusy || apiKeySaving,
                                 apiKeyConfigured = apiKeyConfigured,
                                 apiKeyInput = apiKeyInput,
                                 apiKeyMessage = apiKeyMessage,
