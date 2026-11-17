@@ -157,6 +157,8 @@ class MainActivityTest {
             ).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
+        composeRule.onNodeWithTag("api_key_settings_action").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("deepseek_api_key").assertIsDisplayed()
         assertTrue(composeRule.onAllNodesWithText("Sign in to Miss Minutes").fetchSemanticsNodes().isEmpty())
     }
 
