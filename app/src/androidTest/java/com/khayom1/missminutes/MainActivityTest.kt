@@ -212,15 +212,15 @@ class MainActivityTest {
 
         composeRule.onNodeWithText("History").performClick()
         composeRule.onNodeWithText("My long-term study plan").assertIsDisplayed()
-        composeRule.onNodeWithTag("history_memory_key").performTextInput("Study goal")
-        composeRule.onNodeWithTag("history_memory_value").performTextInput("Finish dentistry degree")
-        composeRule.onNodeWithTag("history_save_memory").performClick()
+        composeRule.onNodeWithTag("history_memory_key").performScrollTo().performTextInput("Study goal")
+        composeRule.onNodeWithTag("history_memory_value").performScrollTo().performTextInput("Finish dentistry degree")
+        composeRule.onNodeWithTag("history_save_memory").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Finish dentistry degree").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("History").assertIsDisplayed()
-        composeRule.onNodeWithTag("retention_30").assertIsDisplayed()
-        composeRule.onNodeWithTag("retention_90").assertIsDisplayed()
+        composeRule.onNodeWithTag("retention_30").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("retention_90").performScrollTo().assertIsDisplayed()
     }
 
     @Test
