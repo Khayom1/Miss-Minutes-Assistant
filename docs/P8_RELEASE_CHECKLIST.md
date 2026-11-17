@@ -1,35 +1,35 @@
-# P8 — Release Hardening Checklist
+# P8 Release Checklist — Signed Offline-First APK
 
-Status: in progress. This is a gated handoff checklist, not a declaration that the application is production-ready.
+## Automated checks required on the exact release commit
 
-## Automated candidate pipeline
+- [ ] JVM unit tests pass.
+- [ ] Android lint passes.
+- [ ] Debug APK builds.
+- [ ] Release APK builds.
+- [ ] API 35 instrumentation tests pass.
+- [ ] Dependency vulnerability/security checks and secret scanning pass.
+- [ ] Installable APK and release evidence are uploaded.
+- [ ] Package name, versionCode, versionName, minSdk, targetSdk, and signing certificate are verified.
+- [ ] SHA-256 is calculated from the exact downloaded APK.
+- [ ] Release notes identify the commit and CI run.
 
-- [x] CI checks tracked source for secrets with Gitleaks.
-- [x] CI runs Supabase AI and TTS function tests.
-- [x] CI runs JVM tests, Android lint and API 35 instrumentation.
-- [x] CI builds both debug and unsigned release APKs on the exact P8 head.
-- [x] Align Kotlin Gradle plugins with the AGP 8.13.2 compatibility range (Kotlin 2.4.21); exact build verification passed.
-- [x] CI exports the resolved Android runtime dependency graph.
-- [x] CI generates SHA-256 checksums for both APKs.
-- [x] Uploaded artifact contains both APKs, dependency report and checksum file.
-- [x] Review every step summary and upload log from the exact final commit; full dependency-advisory and APK-byte inspection remain open.
+## Product acceptance
 
-## Manual / external release gates
+- [ ] Launches directly into the local guest workspace without registration or network.
+- [ ] Chat history and user memory persist encrypted.
+- [ ] DeepSeek BYOK works only after the user enters their own key.
+- [ ] Local inference reports unavailable unless a supported model runtime is installed.
+- [ ] Android TTS and on-device recognition report real installed-language capability.
+- [ ] Connected plugin tools are auto-discovered; runtime access checks and confirmation gates pass.
+- [ ] Fast, Standard, Max, Extra, and Auto profiles have distinct tested runtime behavior.
+- [ ] Backup/restore excludes API keys, plugin grants, and Android permission state.
 
-- [ ] Review dependency report against current OSV/GHSA advisories; record date, findings and disposition.
-- [x] Triage CVE-2026-129482: no CertificatePinner use or trailing-dot endpoint found in the app; monitor for a vendor-fixed OkHttp release before adopting pinning.
-- [ ] Configure owner-controlled production signing outside source control; verify signing certificate fingerprint and repeatable release procedure.
-- [ ] Install on Samsung Galaxy A35 5G / Android 17. Test microphone foreground-service lifecycle, lock screen, task removal, notification stop action, battery/thermal behavior and restart recovery.
-- [ ] Verify installed offline speech language packs and real Tajik/Russian/English speech behavior.
-- [ ] Perform a real DeepSeek request using a user-supplied BYOK key.
-- [ ] Verify hosted ElevenLabs TTS using a configured server-side secret; confirm offline fallback and temporary-audio cleanup.
-- [ ] Verify data export/delete and retention behavior on the target device.
-- [ ] Record P2–P5 deferred acceptance evidence before claiming the overall product is production-ready.
+## Owner/device-only gates
 
-## Artifact policy
+- [ ] Owner-controlled production keystore is configured outside source control.
+- [ ] Signing certificate fingerprint and repeatable signing procedure are verified.
+- [ ] Real Samsung Galaxy A35 / Android 17 installation and permission UX are tested.
+- [ ] Background/Force Stop limits, TTS language packs, microphone behavior, overlay, battery and thermal behavior are tested.
+- [ ] A real DeepSeek BYOK request is tested only with a user-supplied key.
 
-- Debug APK is for installation/testing only.
-- Unsigned release APK is a build candidate, not a distributable signed release.
-- SHA-256 establishes byte identity, not safety or authenticity by itself.
-- Never publish signing keys, provider credentials, user tokens, private conversation content or raw diagnostic data.
-- Root README and public release claims remain deferred until product and external acceptance gates are satisfied.
+No production-signed APK is claimed until the signing key is owner-controlled and all applicable gates pass. Emulator CI is not physical-device acceptance.

@@ -125,13 +125,13 @@ class MainActivityTest {
         }
     }
 
-    private fun signIn() {
+    private fun assertChatReady() {
         waitForChatScreen()
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
     }
 
     @Test
-    fun guestModeOpensAssistantWithoutSupabaseRegistration() {
+    fun guestWorkspaceOpensAssistantWithoutAccount() {
         waitForChatScreen()
 
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
@@ -162,7 +162,7 @@ class MainActivityTest {
 
     @Test
     fun topControlsExposeHistoryNewChatAndSettingsOnly() {
-        signIn()
+        assertChatReady()
 
         composeRule.onNodeWithText("History").assertIsDisplayed()
         composeRule.onNodeWithText("New").assertIsDisplayed()
@@ -182,9 +182,9 @@ class MainActivityTest {
 
     @Test
     fun chatComposerCallsInjectedProviderAndRendersItsResponse() {
-        signIn()
+        assertChatReady()
 
-        composeRule.onNodeWithTag("chat_input").performTextInput("Check the authenticated chat")
+        composeRule.onNodeWithTag("chat_input").performTextInput("Check the local guest chat")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Mock AI response")
@@ -194,13 +194,13 @@ class MainActivityTest {
         val ownerId = "guest-local"
         val savedConversation = conversationStore.listConversations(ownerId).single()
         val savedMessages = conversationStore.getMessages(ownerId, savedConversation.id)
-        assertTrue(savedMessages.any { it.role == LocalConversationStore.ROLE_USER && it.content == "Check the authenticated chat" })
+        assertTrue(savedMessages.any { it.role == LocalConversationStore.ROLE_USER && it.content == "Check the local guest chat" })
         assertTrue(savedMessages.any { it.role == LocalConversationStore.ROLE_ASSISTANT && it.content == "Mock AI response" })
         composeRule.onNodeWithText("Mock AI response").performScrollTo().assertIsDisplayed()
         assertEquals(
             AiMessage(
                 com.khayom1.missminutes.ai.AiRole.USER,
-                "Check the authenticated chat"
+                "Check the local guest chat"
             ),
             aiProvider.lastRequest?.messages?.last()
         )
@@ -208,7 +208,7 @@ class MainActivityTest {
 
     @Test
     fun historyPersistsConversationAndCanOpenIt() {
-        signIn()
+        assertChatReady()
         composeRule.onNodeWithTag("chat_input").performTextInput("Persistent conversation title")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -230,7 +230,7 @@ class MainActivityTest {
 
     @Test
     fun lateResponseFromPreviousConversationDoesNotAppearInNewConversation() {
-        signIn()
+        assertChatReady()
         val lateCompletion = CompletableDeferred<AiCompletion>()
         aiProvider.pendingCompletion = lateCompletion
 
@@ -257,7 +257,7 @@ class MainActivityTest {
 
     @Test
     fun savedMemoryIsSentOnlyAfterExplicitOptIn() {
-        signIn()
+        assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
         composeRule.onNodeWithTag("memory_input").performScrollTo()
         composeRule.onNodeWithTag("memory_input").performTextInput("Prefers concise Tajik explanations")
@@ -286,7 +286,7 @@ class MainActivityTest {
 
     @Test
     fun chatExposesUserInitiatedOfflineDictationControl() {
-        signIn()
+        assertChatReady()
         composeRule.onNodeWithTag("speech_input").assertIsDisplayed()
         composeRule.onNodeWithText("Dictate").performClick()
         composeRule.onNodeWithText(
@@ -295,8 +295,23 @@ class MainActivityTest {
     }
 
     @Test
+    fun rejectedDeepSeekKeyShowsClearSettingsHintWithoutAccountGate() {
+        assertChatReady()
+        aiProvider.nextError = AiProviderException.InvalidApiKey()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Test rejected API key")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(
+                "DeepSeek rejected this API key. Check it or replace it in Settings."
+            ).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithText("Sign in to Miss Minutes").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun settingsSavesAndRemovesUserOwnedDeepSeekKey() {
-        signIn()
+        assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
         composeRule.onNodeWithTag("deepseek_api_key")
             .performTextInput("sk-user-owned-test-key-123456")
@@ -312,7 +327,7 @@ class MainActivityTest {
 
     @Test
     fun settingsExposeExplicitFloatingAssistantControls() {
-        signIn()
+        assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
 
         composeRule.onNodeWithText("Floating assistant").performScrollTo().assertIsDisplayed()
@@ -322,7 +337,7 @@ class MainActivityTest {
 
     @Test
     fun settingsShowsMicrophoneDisclosureBeforeListeningIsEnabled() {
-        signIn()
+        assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
 
         composeRule.onNodeWithTag("wake_phrase_disclosure").performScrollTo().assertIsDisplayed()
@@ -334,7 +349,7 @@ class MainActivityTest {
 
     @Test
     fun settingsExposeEncryptedBackupAndRestoreControls() {
-        signIn()
+        assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
         composeRule.onNodeWithText("Backup and restore").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Backup password (at least 10 characters)")
@@ -346,7 +361,7 @@ class MainActivityTest {
 
     @Test
     fun settingsCanToggleDarkTheme() {
-        signIn()
+        assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
         val themeSwitch = composeRule.onNodeWithTag("dark_mode_switch")
         themeSwitch.assertIsOff()
@@ -356,7 +371,7 @@ class MainActivityTest {
 
     @Test
     fun settingsSwitchesBetweenSupportedLanguages() {
-        signIn()
+        assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
 
         composeRule.onNodeWithText("Русский").performClick()

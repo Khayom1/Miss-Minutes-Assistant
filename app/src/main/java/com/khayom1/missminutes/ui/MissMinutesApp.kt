@@ -159,24 +159,9 @@ private data class UiCopy(
     val darkModeBody: String,
     val about: String,
     val version: String,
-    val authTitle: String,
-    val authBody: String,
-    val continueAsGuest: String,
     val guestAccount: String,
     val apiKeyRequired: String,
-    val email: String,
-    val password: String,
-    val signIn: String,
-    val createAccount: String,
-    val switchToSignUp: String,
-    val switchToSignIn: String,
-    val wait: String,
-    val emailConfirmation: String,
-    val invalidCredentials: String,
-    val authRateLimited: String,
-    val authUnavailable: String,
-    val sessionExpired: String,
-    val signOut: String,
+    val apiKeyInvalid: String,
     val account: String,
     val sending: String,
     val sendFailed: String,
@@ -224,24 +209,9 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         darkModeBody = "Use a dark color scheme throughout the app.",
         about = "About",
         version = "Version",
-        authTitle = "Sign in to Miss Minutes",
-        authBody = "Sign in with an account, or continue without registration.",
-        continueAsGuest = "Continue as guest — no account needed",
         guestAccount = "Guest (local only)",
         apiKeyRequired = "Add your DeepSeek API key in Settings to use online AI. Conversations remain on this device.",
-        email = "Email",
-        password = "Password",
-        signIn = "Sign in",
-        createAccount = "Create account",
-        switchToSignUp = "New here? Create an account",
-        switchToSignIn = "Already have an account? Sign in",
-        wait = "Please wait…",
-        emailConfirmation = "Check your email to confirm your account, then sign in.",
-        invalidCredentials = "Email or password is incorrect.",
-        authRateLimited = "Too many sign-in attempts. Try again later.",
-        authUnavailable = "Authentication service is temporarily unavailable.",
-        sessionExpired = "Your session expired. Please sign in again.",
-        signOut = "Sign out",
+        apiKeyInvalid = "DeepSeek rejected this API key. Check it or replace it in Settings.",
         account = "Account",
         sending = "Thinking…",
         sendFailed = "No response received. Check your internet connection or API key.",
@@ -287,24 +257,9 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         darkModeBody = "Использовать тёмную цветовую схему приложения.",
         about = "О приложении",
         version = "Версия",
-        authTitle = "Вход в Miss Minutes",
-        authBody = "Войдите в аккаунт или продолжите без регистрации.",
-        continueAsGuest = "Продолжить без регистрации",
         guestAccount = "Гость (только локально)",
         apiKeyRequired = "Добавьте свой API-ключ DeepSeek в настройках для сетевого ИИ. Диалоги остаются на устройстве.",
-        email = "Электронная почта",
-        password = "Пароль",
-        signIn = "Войти",
-        createAccount = "Создать аккаунт",
-        switchToSignUp = "Нет аккаунта? Создать",
-        switchToSignIn = "Уже есть аккаунт? Войти",
-        wait = "Подождите…",
-        emailConfirmation = "Подтвердите аккаунт по ссылке в письме, затем войдите.",
-        invalidCredentials = "Неверная почта или пароль.",
-        authRateLimited = "Слишком много попыток входа. Попробуйте позже.",
-        authUnavailable = "Сервис авторизации временно недоступен.",
-        sessionExpired = "Сессия истекла. Войдите снова.",
-        signOut = "Выйти",
+        apiKeyInvalid = "DeepSeek отклонил этот API-ключ. Проверьте его или замените в настройках.",
         account = "Аккаунт",
         sending = "Думаю…",
         sendFailed = "Ответ не получен. Проверьте подключение к интернету или API-ключ.",
@@ -350,24 +305,9 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         darkModeBody = "Дар тамоми барнома мавзӯи торик истифода шавад.",
         about = "Дар бораи барнома",
         version = "Версия",
-        authTitle = "Вуруд ба Miss Minutes",
-        authBody = "Бо ҳисоб ворид шавед ё бе бақайдгирӣ истифода баред.",
-        continueAsGuest = "Бе бақайдгирӣ идома додан",
         guestAccount = "Меҳмон (танҳо маҳаллӣ)",
         apiKeyRequired = "Барои истифодаи AI-и онлайн калиди DeepSeek-ро дар Танзимот илова кунед. Гуфтугӯҳо дар телефон мемонанд.",
-        email = "Почтаи электронӣ",
-        password = "Рамз",
-        signIn = "Ворид шудан",
-        createAccount = "Сохтани ҳисоб",
-        switchToSignUp = "Ҳисоб надоред? Сохтан",
-        switchToSignIn = "Аллакай ҳисоб доред? Вуруд",
-        wait = "Лутфан интизор шавед…",
-        emailConfirmation = "Ҳисобро аз пайванди почтаи электронӣ тасдиқ кунед ва баъд ворид шавед.",
-        invalidCredentials = "Почта ё рамз нодуруст аст.",
-        authRateLimited = "Кӯшишҳои зиёд. Баъдтар дубора кӯшиш кунед.",
-        authUnavailable = "Хидмати тасдиқи ҳисоб муваққатан дастнорас аст.",
-        sessionExpired = "Сессия ба охир расид. Аз нав ворид шавед.",
-        signOut = "Баромадан",
+        apiKeyInvalid = "DeepSeek ин калиди API-ро рад кард. Онро санҷед ё дар Танзимот иваз кунед.",
         account = "Ҳисоб",
         sending = "Фикр карда истодаам…",
         sendFailed = "Ҷавоб гирифта нашуд. Интернет ё калиди API-ро санҷед. ",
@@ -531,17 +471,8 @@ fun MissMinutesApp(
         mutableStateOf(appSettingsStore.loadAppearance().darkMode)
     }
     var draft by rememberSaveable { mutableStateOf("") }
-    var authEmail by rememberSaveable { mutableStateOf("") }
-    var authPassword by remember { mutableStateOf("") }
-    var isSignUp by rememberSaveable { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(true) }
-    // Authentication is restored from the encrypted session store, never from saved UI state.
-    var isAuthenticated by remember { mutableStateOf(false) }
-    var authBusy by remember { mutableStateOf(false) }
-    var sessionGeneration by remember { mutableStateOf(0L) }
-    var authMessage by remember { mutableStateOf<String?>(null) }
-    var userEmail by remember { mutableStateOf("") }
-    var isGuestSession by remember { mutableStateOf(false) }
+    var conversationGeneration by remember { mutableStateOf(0L) }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
@@ -946,13 +877,10 @@ fun MissMinutesApp(
     LaunchedEffect(conversationStore) {
         try {
             loadConversation(GUEST_OWNER_ID)
-            isGuestSession = true
-            userEmail = copy.guestAccount
-            isAuthenticated = true
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
-            authMessage = copy.sendFailed
+            chatError = copy.sendFailed
         } finally {
             isRestoring = false
         }
@@ -1048,12 +976,12 @@ fun MissMinutesApp(
                 isSending = true
                 draft = ""
                 chatError = null
-                val requestGeneration = sessionGeneration
+                val requestGeneration = conversationGeneration
 
                 scope.launch {
                     var requestConversationId: String? = null
                     try {
-                        val ownerId = currentOwnerId ?: throw AiProviderException.AuthenticationRequired()
+                        val ownerId = currentOwnerId ?: throw AiProviderException.LocalWorkspaceUnavailable()
                         val conversationId = activeConversationId ?: withContext(Dispatchers.IO) {
                             conversationStore.createConversation(ownerId)
                         }
@@ -1067,7 +995,7 @@ fun MissMinutesApp(
                                 value
                             )
                         }
-                        if (requestGeneration != sessionGeneration) return@launch
+                        if (requestGeneration != conversationGeneration) return@launch
                         if (activeConversationId == conversationId) {
                             messages = messages + ChatMessage(userMessageId, value, true)
                         }
@@ -1076,7 +1004,7 @@ fun MissMinutesApp(
                         }
 
                         val completion: AiCompletion = aiProvider.complete(request)
-                        if (requestGeneration != sessionGeneration) return@launch
+                        if (requestGeneration != conversationGeneration) return@launch
                         val assistantMessageId = withContext(Dispatchers.IO) {
                             conversationStore.appendMessage(
                                 ownerId,
@@ -1085,7 +1013,7 @@ fun MissMinutesApp(
                                 completion.content
                             )
                         }
-                        if (requestGeneration != sessionGeneration) return@launch
+                        if (requestGeneration != conversationGeneration) return@launch
                         if (activeConversationId == conversationId) {
                             messages = messages + ChatMessage(assistantMessageId, completion.content, false)
                             aiHasResponded = true
@@ -1094,15 +1022,17 @@ fun MissMinutesApp(
                             conversationStore.listConversations(ownerId)
                         }
                     } catch (_: AiProviderException.MissingApiKey) {
-                        if (requestGeneration == sessionGeneration) {
+                        if (requestGeneration == conversationGeneration) {
                             chatError = copy.apiKeyRequired
                         }
-                    } catch (_: AiProviderException.AuthenticationRequired) {
-                        if (requestGeneration == sessionGeneration) {
-                            chatError = copy.apiKeyRequired
+                    } catch (_: AiProviderException.InvalidApiKey) {
+                        if (requestGeneration == conversationGeneration) chatError = copy.apiKeyInvalid
+                    } catch (_: AiProviderException.LocalWorkspaceUnavailable) {
+                        if (requestGeneration == conversationGeneration) {
+                            chatError = copy.sendFailed
                         }
                     } catch (_: ConversationLimitReachedException) {
-                        if (requestGeneration == sessionGeneration &&
+                        if (requestGeneration == conversationGeneration &&
                             activeConversationId == requestConversationId
                         ) {
                             chatError = when (language) {
@@ -1112,7 +1042,7 @@ fun MissMinutesApp(
                             }
                         }
                     } catch (_: AiProviderException.RateLimited) {
-                        if (requestGeneration == sessionGeneration &&
+                        if (requestGeneration == conversationGeneration &&
                             activeConversationId == requestConversationId
                         ) {
                             chatError = copy.aiRateLimited
@@ -1120,13 +1050,13 @@ fun MissMinutesApp(
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {
-                        if (requestGeneration == sessionGeneration &&
+                        if (requestGeneration == conversationGeneration &&
                             activeConversationId == requestConversationId
                         ) {
                             chatError = copy.sendFailed
                         }
                     } finally {
-                        if (requestGeneration == sessionGeneration) {
+                        if (requestGeneration == conversationGeneration) {
                             isSending = false
                         }
                     }
@@ -1329,7 +1259,7 @@ fun MissMinutesApp(
                             )
                             AppScreen.Dashboard -> DashboardScreen(
                                 copy = copy,
-                                email = userEmail,
+                                accountLabel = copy.guestAccount,
                                 aiStatus = if (aiHasResponded) {
                                     copy.providerResponding
                                 } else {
@@ -1361,8 +1291,7 @@ fun MissMinutesApp(
                                 copy = copy,
                                 language = language,
                                 darkTheme = darkTheme,
-                                email = userEmail,
-                                isBusy = authBusy || apiKeySaving,
+                                isBusy = apiKeySaving,
                                 apiKeyConfigured = apiKeyConfigured,
                                 apiKeyInput = apiKeyInput,
                                 apiKeyMessage = apiKeyMessage,
@@ -1482,101 +1411,6 @@ private fun LoadingScreen() {
         verticalArrangement = Arrangement.Center
     ) {
         CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun AuthScreen(
-    copy: UiCopy,
-    email: String,
-    password: String,
-    isSignUp: Boolean,
-    isBusy: Boolean,
-    message: String?,
-    onEmailChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
-    onModeChange: () -> Unit,
-    onSubmit: () -> Unit,
-    onContinueAsGuest: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = ProductIdentity.NAME,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = copy.authTitle,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 20.dp)
-        )
-        Text(
-            text = copy.authBody,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
-        )
-        TextButton(
-            onClick = onContinueAsGuest,
-            enabled = !isBusy,
-            modifier = Modifier.fillMaxWidth().testTag("auth_continue_guest")
-        ) {
-            Text(copy.continueAsGuest)
-        }
-        OutlinedTextField(
-            value = email,
-            onValueChange = onEmailChange,
-            modifier = Modifier.fillMaxWidth().testTag("auth_email"),
-            label = { Text(copy.email) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
-            )
-        )
-        OutlinedTextField(
-            value = password,
-            onValueChange = onPasswordChange,
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag("auth_password"),
-            label = { Text(copy.password) },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done
-            ),
-            keyboardActions = KeyboardActions(onDone = { onSubmit() })
-        )
-        if (message != null) {
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-            )
-        }
-        Button(
-            onClick = onSubmit,
-            enabled = !isBusy && email.isNotBlank() && (if (isSignUp) password.length >= 8 else password.isNotBlank()),
-            modifier = Modifier.fillMaxWidth().padding(top = 20.dp).testTag("auth_submit")
-        ) {
-            Text(
-                if (isBusy) copy.wait else if (isSignUp) copy.createAccount else copy.signIn
-            )
-        }
-        TextButton(
-            onClick = onModeChange,
-            enabled = !isBusy,
-            modifier = Modifier.testTag("auth_toggle_mode")
-        ) {
-            Text(if (isSignUp) copy.switchToSignIn else copy.switchToSignUp)
-        }
     }
 }
 
@@ -1722,7 +1556,7 @@ private fun MessageBubble(
 @Composable
 private fun DashboardScreen(
     copy: UiCopy,
-    email: String,
+    accountLabel: String,
     aiStatus: String,
     voiceStatus: String
 ) {
@@ -1734,7 +1568,7 @@ private fun DashboardScreen(
     ) {
         Text(copy.dashboardTitle, style = MaterialTheme.typography.headlineMedium)
         Text(copy.dashboardBody, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        StatusCard(copy.account, email)
+        StatusCard(copy.account, accountLabel)
         StatusCard(copy.aiProvider, aiStatus)
         StatusCard(copy.voice, voiceStatus)
         StatusCard(copy.memory, copy.notConnected)
@@ -1894,7 +1728,6 @@ private fun SettingsScreen(
     copy: UiCopy,
     language: AppLanguage,
     darkTheme: Boolean,
-    email: String,
     isBusy: Boolean,
     apiKeyConfigured: Boolean,
     apiKeyInput: String,
