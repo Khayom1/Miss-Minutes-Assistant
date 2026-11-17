@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -81,6 +82,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.khayom1.missminutes.ai.SpeechInputProvider
 import java.util.Locale
+
+private const val DEFAULT_RETENTION_MILLIS = 90L * 24 * 60 * 60 * 1_000
 
 private enum class AppScreen(val symbol: String) {
     Chat("✦"),
