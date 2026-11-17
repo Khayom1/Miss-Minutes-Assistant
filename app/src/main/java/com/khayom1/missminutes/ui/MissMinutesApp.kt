@@ -162,6 +162,35 @@ private data class UiCopy(
     val microphonePermissionRequired: String
 )
 
+private data class HistoryCopy(
+    val newConversation: String,
+    val export: String,
+    val deleteAll: String,
+    val delete: String,
+    val cancel: String,
+    val confirmDeleteAll: String,
+    val retention: String,
+    val empty: String
+)
+
+private fun historyCopyFor(language: AppLanguage) = when (language) {
+    AppLanguage.English -> HistoryCopy(
+        "New conversation", "Export JSON", "Delete all history", "Delete", "Cancel",
+        "Permanently delete all local conversations and messages?", "Automatic retention: 90 days.",
+        "No saved conversations yet."
+    )
+    AppLanguage.Russian -> HistoryCopy(
+        "Новый диалог", "Экспорт JSON", "Удалить всю историю", "Удалить", "Отмена",
+        "Безвозвратно удалить все локальные диалоги и сообщения?", "Автоматическое хранение: 90 дней.",
+        "Сохранённых диалогов пока нет."
+    )
+    AppLanguage.Tajik -> HistoryCopy(
+        "Гуфтугӯи нав", "Содироти JSON", "Пок кардани тамоми таърих", "Пок кардан", "Бекор кардан",
+        "Ҳамаи гуфтугӯҳо ва паёмҳои маҳаллӣ бебозгашт пок карда шаванд?", "Муҳлати нигоҳдорӣ: 90 рӯз.",
+        "Ҳоло гуфтугӯи сабтшуда нест."
+    )
+}
+
 private fun copyFor(language: AppLanguage): UiCopy = when (language) {
     AppLanguage.English -> UiCopy(
         chat = "Chat",
@@ -832,6 +861,69 @@ fun MissMinutesApp(
     }
 
 
+    val openConversation: (StoredConversation) -> Unit = { conversation ->
+        val owner = currentOwnerId
+        if (owner != null) {
+            scope.launch {
+                val stored = withContext(Dispatchers.IO) {
+                    conversationStore.loadMessages(owner, conversation.id)
+                }
+                activeConversationId = conversation.id
+                messages.clear()
+                stored.forEach { item ->
+                    nextMessageId += 1
+                    messages.add(ChatMessage(nextMessageId, item.content, item.role == ConversationRole.USER))
+                }
+                selectedScreenName = AppScreen.Chat.name
+            }
+        }
+    }
+    val startNewConversation: () -> Unit = {
+        activeConversationId = null
+        messages.clear()
+        selectedScreenName = AppScreen.Chat.name
+    }
+    val deleteConversation: (StoredConversation) -> Unit = { conversation ->
+        val owner = currentOwnerId
+        if (owner != null) {
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    conversationStore.deleteConversation(owner, conversation.id)
+                }
+                savedConversations.removeAll { it.id == conversation.id }
+                if (activeConversationId == conversation.id) {
+                    activeConversationId = null
+                    messages.clear()
+                }
+            }
+        }
+    }
+    val exportHistory: () -> Unit = {
+        val owner = currentOwnerId
+        if (owner != null) {
+            scope.launch {
+                val exported = withContext(Dispatchers.IO) { conversationStore.exportJson(owner) }
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_SUBJECT, "Miss Minutes conversation export")
+                    putExtra(Intent.EXTRA_TEXT, exported)
+                }
+                context.startActivity(Intent.createChooser(intent, historyCopyFor(language).export))
+            }
+        }
+    }
+    val deleteAllHistory: () -> Unit = {
+        val owner = currentOwnerId
+        if (owner != null) {
+            scope.launch {
+                withContext(Dispatchers.IO) { conversationStore.deleteAll(owner) }
+                savedConversations.clear()
+                activeConversationId = null
+                messages.clear()
+            }
+        }
+    }
+
     val speakMessage: (ChatMessage) -> Unit = { message ->
         if (!message.isUser) {
             if (speakingMessageId == message.id) {
@@ -936,7 +1028,16 @@ fun MissMinutesApp(
                                 },
                                 voiceStatus = copy.voiceNeedsSetup
                             )
-                            AppScreen.History -> HistoryScreen(copy)
+                            AppScreen.History -> HistoryScreen(
+                                copy = copy,
+                                actions = historyCopyFor(language),
+                                conversations = savedConversations,
+                                onOpen = openConversation,
+                                onNew = startNewConversation,
+                                onDelete = deleteConversation,
+                                onExport = exportHistory,
+                                onDeleteAll = deleteAllHistory
+                            )
                             AppScreen.Settings -> SettingsScreen(
                                 copy = copy,
                                 language = language,
@@ -1238,15 +1339,83 @@ private fun StatusCard(title: String, status: String) {
 }
 
 @Composable
-private fun HistoryScreen(copy: UiCopy) {
+private fun HistoryScreen(
+    copy: UiCopy,
+    actions: HistoryCopy,
+    conversations: List<StoredConversation>,
+    onOpen: (StoredConversation) -> Unit,
+    onNew: () -> Unit,
+    onDelete: (StoredConversation) -> Unit,
+    onExport: () -> Unit,
+    onDeleteAll: () -> Unit
+) {
+    var confirmDeleteAll by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<StoredConversation?>(null) }
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(copy.historyTitle, style = MaterialTheme.typography.headlineMedium)
-        Text(copy.historyEmpty, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(actions.retention, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onNew) { Text(actions.newConversation) }
+            TextButton(onClick = onExport, enabled = conversations.isNotEmpty()) { Text(actions.export) }
+        }
+        if (conversations.isEmpty()) {
+            Text(actions.empty, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(conversations, key = { it.id }) { conversation ->
+                    Card {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(conversation.title, fontWeight = FontWeight.Medium)
+                                Text(
+                                    java.text.DateFormat.getDateTimeInstance().format(
+                                        java.util.Date(conversation.updatedAtEpochMillis)
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                TextButton(onClick = { onOpen(conversation) }) { Text(copy.chat) }
+                            }
+                            TextButton(onClick = { pendingDelete = conversation }) { Text(actions.delete) }
+                        }
+                    }
+                }
+            }
+            TextButton(onClick = { confirmDeleteAll = true }) { Text(actions.deleteAll) }
+        }
+    }
+    if (confirmDeleteAll) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteAll = false },
+            title = { Text(actions.deleteAll) },
+            text = { Text(actions.confirmDeleteAll) },
+            confirmButton = {
+                TextButton(onClick = { confirmDeleteAll = false; onDeleteAll() }) { Text(actions.deleteAll) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteAll = false }) { Text(actions.cancel) }
+            }
+        )
+    }
+    pendingDelete?.let { conversation ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(actions.delete) },
+            text = { Text(conversation.title) },
+            confirmButton = {
+                TextButton(onClick = { pendingDelete = null; onDelete(conversation) }) { Text(actions.delete) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text(actions.cancel) }
+            }
+        )
     }
 }
 
