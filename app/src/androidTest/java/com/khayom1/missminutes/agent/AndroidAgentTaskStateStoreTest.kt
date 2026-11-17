@@ -29,7 +29,8 @@ class AndroidAgentTaskStateStoreTest {
                         request = PluginExecutionRequest(
                             pluginId = "device_status",
                             actionId = "device_info",
-                            arguments = mapOf("locale" to PluginValue.Text("tg"))
+                            arguments = mapOf("locale" to PluginValue.Text("tg")),
+                            userConfirmed = true
                         ),
                         approvalRequired = true
                     )
@@ -43,19 +44,22 @@ class AndroidAgentTaskStateStoreTest {
             nodes = mapOf(
                 "read_device" to AgentNodeState(
                     nodeId = "read_device",
-                    status = AgentNodeStatus.WAITING_APPROVAL,
-                    idempotencyKey = "persisted_task:read_device"
+                    status = AgentNodeStatus.PENDING,
+                    idempotencyKey = "persisted_task:read_device",
+                    approved = true,
+                    approvedAtMillis = 123_456L
                 )
             ),
-            status = AgentTaskStatus.WAITING_APPROVAL,
+            status = AgentTaskStatus.READY,
             updatedAtMillis = System.currentTimeMillis()
         )
 
         assertEquals(true, store.create(state))
         val restored = store.load("persisted_task")
         assertNotNull(restored)
-        assertEquals(state, restored)
-        assertEquals(listOf(state), store.all())
+        assertFalse(restored!!.plan.nodes.single().action.request.userConfirmed)
+        assertEquals(123_456L, restored.nodes.getValue("read_device").approvedAtMillis)
+        assertEquals(listOf(restored), store.all())
         val ciphertext = context.getSharedPreferences("miss_minutes_agent_tasks", Context.MODE_PRIVATE)
             .getString("encrypted_task_graphs_v1", null)
         assertNotNull(ciphertext)
