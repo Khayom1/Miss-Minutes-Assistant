@@ -2,6 +2,7 @@ package com.khayom1.missminutes.plugins
 
 import android.content.Context
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Persists declarative plugin manifests only. Consent remains in the separate
