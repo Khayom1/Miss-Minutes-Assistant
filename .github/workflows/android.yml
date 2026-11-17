@@ -63,6 +63,7 @@ jobs:
       - name: Run JVM tests, debug and release builds, and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
 
+
       - name: Record resolved Android runtime dependencies
         run: |
           mkdir -p app/build/release-evidence
