@@ -104,6 +104,8 @@ import kotlinx.coroutines.withContext
 import com.khayom1.missminutes.ai.SpeechInputProvider
 import java.util.Locale
 
+private const val GUEST_OWNER_ID = "guest-local"
+
 private enum class AppScreen(val symbol: String) {
     Chat("✦"),
     Dashboard("▦"),
@@ -154,6 +156,9 @@ private data class UiCopy(
     val version: String,
     val authTitle: String,
     val authBody: String,
+    val continueAsGuest: String,
+    val guestAccount: String,
+    val apiKeyRequired: String,
     val email: String,
     val password: String,
     val signIn: String,
@@ -215,7 +220,10 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         about = "About",
         version = "Version",
         authTitle = "Sign in to Miss Minutes",
-        authBody = "Use your Supabase account to access your assistant.",
+        authBody = "Sign in with an account, or continue without registration.",
+        continueAsGuest = "Continue as guest — no account needed",
+        guestAccount = "Guest (local only)",
+        apiKeyRequired = "Add your DeepSeek API key in Settings to use AI replies. Guest conversations remain on this device.",
         email = "Email",
         password = "Password",
         signIn = "Sign in",
@@ -275,7 +283,10 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         about = "О приложении",
         version = "Версия",
         authTitle = "Вход в Miss Minutes",
-        authBody = "Войдите через аккаунт Supabase, чтобы пользоваться помощником.",
+        authBody = "Войдите в аккаунт или продолжите без регистрации.",
+        continueAsGuest = "Продолжить без регистрации",
+        guestAccount = "Гость (только локально)",
+        apiKeyRequired = "Добавьте свой API-ключ DeepSeek в настройках. Гостевые диалоги остаются на устройстве.",
         email = "Электронная почта",
         password = "Пароль",
         signIn = "Войти",
@@ -335,7 +346,10 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         about = "Дар бораи барнома",
         version = "Версия",
         authTitle = "Вуруд ба Miss Minutes",
-        authBody = "Барои истифодаи ёвар бо ҳисоби Supabase ворид шавед.",
+        authBody = "Бо ҳисоб ворид шавед ё бе бақайдгирӣ истифода баред.",
+        continueAsGuest = "Бе бақайдгирӣ идома додан",
+        guestAccount = "Меҳмон (танҳо маҳаллӣ)",
+        apiKeyRequired = "Барои ҷавоби AI калиди шахсии DeepSeek-ро дар Танзимот илова кунед. Гуфтугӯҳои меҳмонӣ танҳо дар телефон мемонанд.",
         email = "Почтаи электронӣ",
         password = "Рамз",
         signIn = "Ворид шудан",
@@ -509,6 +523,7 @@ fun MissMinutesApp(
     var sessionGeneration by remember { mutableStateOf(0L) }
     var authMessage by remember { mutableStateOf<String?>(null) }
     var userEmail by remember { mutableStateOf("") }
+    var isGuestSession by remember { mutableStateOf(false) }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
@@ -614,6 +629,7 @@ fun MissMinutesApp(
         // Saved Compose state can outlive a revoked/expired session. Start fail-closed
         // and derive authenticated UI exclusively from the Keystore-backed session.
         isAuthenticated = false
+        isGuestSession = false
         userEmail = ""
         try {
             val session = sessionManager.restoreSession()
@@ -635,6 +651,30 @@ fun MissMinutesApp(
         }
     }
 
+    val continueAsGuest: () -> Unit = {
+        if (!authBusy && !isRestoring) {
+            authBusy = true
+            sessionGeneration += 1
+            authMessage = null
+            authPassword = ""
+            scope.launch {
+                try {
+                    loadConversation(GUEST_OWNER_ID)
+                    isGuestSession = true
+                    userEmail = copy.guestAccount
+                    selectedScreenName = AppScreen.Chat.name
+                    isAuthenticated = true
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    authMessage = copy.sendFailed
+                } finally {
+                    authBusy = false
+                }
+            }
+        }
+    }
+
     val submitAuth: () -> Unit = {
         if (!authBusy) {
             authBusy = true
@@ -646,6 +686,7 @@ fun MissMinutesApp(
                         val session = result.session
                         if (session != null) {
                             sessionGeneration += 1
+                            isGuestSession = false
                             isAuthenticated = true
                             userEmail = session.email ?: authEmail.trim()
                             authEmail = userEmail
@@ -659,6 +700,7 @@ fun MissMinutesApp(
                     } else {
                         val session = sessionManager.signIn(authEmail.trim(), authPassword)
                         sessionGeneration += 1
+                        isGuestSession = false
                         isAuthenticated = true
                         userEmail = session.email ?: authEmail.trim()
                         authEmail = userEmail
@@ -686,6 +728,7 @@ fun MissMinutesApp(
             disableWakeListening()
             sessionGeneration += 1
             isAuthenticated = false
+            isGuestSession = false
             userEmail = ""
             authEmail = ""
             authPassword = ""
@@ -858,39 +901,48 @@ fun MissMinutesApp(
                         conversationSummaries = withContext(Dispatchers.IO) {
                             conversationStore.listConversations(ownerId)
                         }
+                    } catch (_: AiProviderException.MissingApiKey) {
+                        if (requestGeneration == sessionGeneration) {
+                            chatError = copy.apiKeyRequired
+                        }
                     } catch (_: AiProviderException.AuthenticationRequired) {
                         if (requestGeneration != sessionGeneration) return@launch
-                        sessionGeneration += 1
-                        authBusy = true
-                        disableWakeListening()
-                        isAuthenticated = false
-                        userEmail = ""
-                        authEmail = ""
-                        authPassword = ""
-                        messages = emptyList()
-                        currentOwnerId = null
-                        activeConversationId = null
-                        conversationSummaries = emptyList()
-                        memoryItems = emptyList()
-                        memoryContextEnabled = false
-                        exportPayload = null
-                        exportError = null
-                        pendingDeleteConversationId = null
-                        memoryMessage = null
-                        draft = ""
-                        aiHasResponded = false
-                        chatError = null
-                        isSending = false
-                        selectedScreenName = AppScreen.Chat.name
-                        authMessage = copy.sessionExpired
-                        try {
-                            sessionManager.signOut()
-                        } catch (error: CancellationException) {
-                            throw error
-                        } catch (_: Exception) {
-                            // SessionManager always clears local tokens in its finally block.
-                        } finally {
-                            authBusy = false
+                        if (isGuestSession) {
+                            // Provider credentials are independent from local guest access.
+                            chatError = copy.apiKeyRequired
+                        } else {
+                            sessionGeneration += 1
+                            authBusy = true
+                            disableWakeListening()
+                            isAuthenticated = false
+                            userEmail = ""
+                            authEmail = ""
+                            authPassword = ""
+                            messages = emptyList()
+                            currentOwnerId = null
+                            activeConversationId = null
+                            conversationSummaries = emptyList()
+                            memoryItems = emptyList()
+                            memoryContextEnabled = false
+                            exportPayload = null
+                            exportError = null
+                            pendingDeleteConversationId = null
+                            memoryMessage = null
+                            draft = ""
+                            aiHasResponded = false
+                            chatError = null
+                            isSending = false
+                            selectedScreenName = AppScreen.Chat.name
+                            authMessage = copy.sessionExpired
+                            try {
+                                sessionManager.signOut()
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                // SessionManager always clears local tokens in its finally block.
+                            } finally {
+                                authBusy = false
+                            }
                         }
                     } catch (_: ConversationLimitReachedException) {
                         if (requestGeneration == sessionGeneration &&
@@ -1079,7 +1131,8 @@ fun MissMinutesApp(
                     authMessage = null
                     authPassword = ""
                 },
-                onSubmit = submitAuth
+                onSubmit = submitAuth,
+                onContinueAsGuest = continueAsGuest
             )
             else -> {
                 val screen = AppScreen.valueOf(selectedScreenName)
@@ -1260,7 +1313,8 @@ private fun AuthScreen(
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onModeChange: () -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    onContinueAsGuest: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1284,8 +1338,15 @@ private fun AuthScreen(
         Text(
             text = copy.authBody,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp, bottom = 20.dp)
+            modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
         )
+        TextButton(
+            onClick = onContinueAsGuest,
+            enabled = !isBusy,
+            modifier = Modifier.fillMaxWidth().testTag("auth_continue_guest")
+        ) {
+            Text(copy.continueAsGuest)
+        }
         OutlinedTextField(
             value = email,
             onValueChange = onEmailChange,

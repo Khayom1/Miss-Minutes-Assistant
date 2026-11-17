@@ -178,6 +178,43 @@ class MainActivityTest {
     }
 
     @Test
+    fun guestModeOpensAssistantWithoutSupabaseRegistration() {
+        composeRule.onNodeWithTag("auth_continue_guest").assertIsDisplayed()
+        composeRule.onNodeWithTag("auth_continue_guest").performClick()
+        waitForChatScreen()
+
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Hello without an account")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Mock AI response").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        assertTrue(conversationStore.listConversations("guest-local").isNotEmpty())
+        assertTrue(conversationStore.listConversations("test-user-" + "user@example.test".hashCode()).isEmpty())
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("Guest (local only)").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun guestProviderCredentialFailureDoesNotForceAccountRegistration() {
+        composeRule.onNodeWithTag("auth_continue_guest").assertIsDisplayed()
+        composeRule.onNodeWithTag("auth_continue_guest").performClick()
+        waitForChatScreen()
+
+        aiProvider.nextError = AiProviderException.MissingApiKey()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Check guest credentials")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(
+                "Add your DeepSeek API key in Settings to use AI replies. Guest conversations remain on this device."
+            ).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithText("Sign in to Miss Minutes").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun authenticationScreenAcceptsSignInBeforeOpeningAssistant() {
         composeRule.onNodeWithText("Sign in to Miss Minutes").assertIsDisplayed()
         composeRule.onNodeWithTag("auth_submit").assertIsDisplayed()
