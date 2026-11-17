@@ -314,6 +314,21 @@ class MainActivityTest {
     }
 
     @Test
+    fun rateLimitedProviderErrorDoesNotOfferCredentialSettingsAction() {
+        assertChatReady()
+        aiProvider.nextError = AiProviderException.RateLimited()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Check rate limit handling")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("The AI request limit was reached. Try again shortly.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(
+            composeRule.onAllNodesWithTag("api_key_settings_action").fetchSemanticsNodes().isEmpty()
+        )
+    }
+
+    @Test
     fun settingsSavesAndRemovesUserOwnedDeepSeekKey() {
         assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
