@@ -13,15 +13,15 @@ class AndroidDeviceToolHost(context: Context) : DeviceToolHost {
 
     override fun execute(command: DeviceToolCommand): String = when (command) {
         DeviceToolCommand.ReadDeviceInfo ->
-            "Device: ${Build.MANUFACTURER} ${Build.MODEL}; Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})."
+            "${Build.MANUFACTURER} ${Build.MODEL}; Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
         DeviceToolCommand.ReadBatteryStatus -> {
             val batteryManager = appContext.getSystemService(BatteryManager::class.java)
             val percent = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
-            if (percent in 0..100) "Battery: $percent%." else "Battery level is unavailable."
+            if (percent in 0..100) "$percent%" else "unavailable"
         }
         DeviceToolCommand.OpenWifiSettings -> {
             launch(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS))
-            "Wi-Fi settings opened."
+            "opened"
         }
         DeviceToolCommand.OpenAppSettings -> {
             val intent = Intent(
@@ -29,7 +29,7 @@ class AndroidDeviceToolHost(context: Context) : DeviceToolHost {
                 Uri.parse("package:${appContext.packageName}")
             )
             launch(intent)
-            "Miss Minutes app settings opened."
+            "opened"
         }
         is DeviceToolCommand.ShareText -> {
             val intent = Intent(Intent.ACTION_SEND).apply {
@@ -37,7 +37,7 @@ class AndroidDeviceToolHost(context: Context) : DeviceToolHost {
                 putExtra(Intent.EXTRA_TEXT, command.text)
             }
             launch(Intent.createChooser(intent, "Share with"))
-            "Android share sheet opened."
+            "opened"
         }
     }
 
