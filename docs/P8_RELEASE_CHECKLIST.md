@@ -7,12 +7,12 @@ Status: in progress. This is a gated handoff checklist, not a declaration that t
 - [x] CI checks tracked source for secrets with Gitleaks.
 - [x] CI runs Supabase AI and TTS function tests.
 - [x] CI runs JVM tests, Android lint and API 35 instrumentation.
-- [ ] CI builds both debug and unsigned release APKs on the exact P8 head.
-- [x] Align Kotlin Gradle plugins with the AGP 8.13.2 compatibility range (Kotlin 2.4.21); exact build verification is pending CI.
-- [ ] CI exports the resolved Android runtime dependency graph.
-- [ ] CI generates SHA-256 checksums for both APKs.
-- [ ] Uploaded artifact contains both APKs, dependency report and checksum file.
-- [ ] Review every step and artifact from the exact final commit; pending/skipped steps are not passes.
+- [x] CI builds both debug and unsigned release APKs on the exact P8 head.
+- [x] Align Kotlin Gradle plugins with the AGP 8.13.2 compatibility range (Kotlin 2.4.21); exact build verification passed.
+- [x] CI exports the resolved Android runtime dependency graph.
+- [x] CI generates SHA-256 checksums for both APKs.
+- [x] Uploaded artifact contains both APKs, dependency report and checksum file.
+- [x] Review every step summary and upload log from the exact final commit; full dependency-advisory and APK-byte inspection remain open.
 
 ## Manual / external release gates
 
