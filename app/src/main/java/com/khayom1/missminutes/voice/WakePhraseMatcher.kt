@@ -14,4 +14,8 @@ object WakePhraseMatcher {
         .replace(whitespace, " ")
 
     fun matches(transcript: String): Boolean = normalize(transcript) == "miss minutes"
+
+    /** Use only the recognizer's best hypothesis; alternatives must not override a rejected phrase. */
+    fun matchesRecognitionCandidates(candidates: List<String>): Boolean =
+        candidates.firstOrNull()?.let(::matches) == true
 }
