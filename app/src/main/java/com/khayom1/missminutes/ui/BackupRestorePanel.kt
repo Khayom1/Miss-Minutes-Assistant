@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.khayom1.missminutes.backup.BackupArchive
 import com.khayom1.missminutes.memory.RestoreConflictPolicy
+import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.plugins.PluginManifest
 
 @Composable
@@ -58,6 +59,27 @@ internal fun BackupRestorePanel(
     val isRussian = language == AppLanguage.Russian
     var uninstallCandidate by remember { mutableStateOf<PluginManifest?>(null) }
     val title = if (isTajik) "Нусхаи эҳтиётӣ" else if (isRussian) "Резервная копия" else "Backup and restore"
+    fun capabilityLabel(capability: PluginCapability): String {
+        val label = when (capability) {
+            PluginCapability.DEVICE_INFORMATION -> if (isTajik) "Маълумоти дастгоҳ" else if (isRussian) "Информация об устройстве" else "Device information"
+            PluginCapability.BATTERY_STATUS -> if (isTajik) "Ҳолати батарея" else if (isRussian) "Состояние батареи" else "Battery status"
+            PluginCapability.CALENDAR_READ -> if (isTajik) "Хондани тақвим" else if (isRussian) "Чтение календаря" else "Read calendar"
+            PluginCapability.CALENDAR_WRITE -> if (isTajik) "Тағйири тақвим" else if (isRussian) "Изменение календаря" else "Modify calendar"
+            PluginCapability.CONTACTS_READ -> if (isTajik) "Хондани тамосҳо" else if (isRussian) "Чтение контактов" else "Read contacts"
+            PluginCapability.LOCATION_APPROXIMATE -> if (isTajik) "Ҷойгиршавии тахминӣ" else if (isRussian) "Приблизительное местоположение" else "Approximate location"
+            PluginCapability.LOCATION_PRECISE -> if (isTajik) "Ҷойгиршавии дақиқ" else if (isRussian) "Точное местоположение" else "Precise location"
+            PluginCapability.NOTIFICATION_READ -> if (isTajik) "Хондани огоҳиномаҳо" else if (isRussian) "Чтение уведомлений" else "Read notifications"
+            PluginCapability.GITHUB_REPOSITORY_READ -> if (isTajik) "Хондани GitHub" else if (isRussian) "Чтение репозитория GitHub" else "Read GitHub repository"
+            PluginCapability.GITHUB_REPOSITORY_WRITE -> if (isTajik) "Тағйири GitHub" else if (isRussian) "Изменение репозитория GitHub" else "Modify GitHub repository"
+        }
+        val requiresConfirmation = capability == PluginCapability.CALENDAR_WRITE ||
+            capability == PluginCapability.GITHUB_REPOSITORY_WRITE
+        return if (!requiresConfirmation) label else label + when {
+            isTajik -> " (тасдиқ ҳатмист)"
+            isRussian -> " (требуется подтверждение)"
+            else -> " (confirmation required)"
+        }
+    }
     val categoryLabels = mapOf(
         BackupArchive.Category.CHAT_HISTORY to if (isTajik) "Гуфтугӯҳо ва хотира" else if (isRussian) "Чаты и память" else "Chats and memory",
         BackupArchive.Category.APP_SETTINGS to if (isTajik) "Танзимоти барнома" else if (isRussian) "Настройки приложения" else "App settings",
@@ -237,6 +259,11 @@ internal fun BackupRestorePanel(
                             if (isTajik) "Амалҳо: ${manifest.actions.size}"
                             else if (isRussian) "Действий: ${manifest.actions.size}"
                             else "Actions: ${manifest.actions.size}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            (if (isTajik) "Имкониятҳо: " else if (isRussian) "Возможности: " else "Capabilities: ") +
+                                manifest.capabilities.sortedBy { it.name }.joinToString { capabilityLabel(it) },
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
