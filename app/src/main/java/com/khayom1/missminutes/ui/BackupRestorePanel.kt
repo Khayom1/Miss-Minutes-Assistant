@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.khayom1.missminutes.backup.BackupArchive
 import com.khayom1.missminutes.memory.RestoreConflictPolicy
+import com.khayom1.missminutes.plugins.PluginManifest
 
 @Composable
 internal fun BackupRestorePanel(
@@ -35,7 +36,9 @@ internal fun BackupRestorePanel(
     onCreateBackup: () -> Unit,
     onChooseBackup: () -> Unit,
     onConfirmRestore: () -> Unit,
-    onDismissPreview: () -> Unit
+    onDismissPreview: () -> Unit,
+    pluginManifests: List<PluginManifest>,
+    onExportPlugin: (String) -> Unit
 ) {
     val isTajik = language == AppLanguage.Tajik
     val isRussian = language == AppLanguage.Russian
@@ -73,6 +76,25 @@ internal fun BackupRestorePanel(
             visualTransformation = PasswordVisualTransformation(),
             singleLine = true
         )
+        if (pluginManifests.isNotEmpty()) {
+            Text(
+                if (isTajik) "Содироти алоҳидаи плагин"
+                else if (isRussian) "Отдельный экспорт плагина"
+                else "Export one plugin separately",
+                style = MaterialTheme.typography.labelLarge
+            )
+            pluginManifests.forEach { manifest ->
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Text(manifest.displayName, modifier = Modifier.weight(1f))
+                    TextButton(
+                        enabled = !busy && password.length >= 10,
+                        onClick = { onExportPlugin(manifest.id) }
+                    ) {
+                        Text(if (isTajik) "Содирот" else if (isRussian) "Экспорт" else "Export")
+                    }
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onCreateBackup, enabled = !busy && categories.isNotEmpty() && password.length >= 10) {
                 Text(if (isTajik) "Содирот" else if (isRussian) "Экспорт" else "Export")
