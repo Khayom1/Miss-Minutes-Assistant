@@ -8,13 +8,13 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 |---|---|---|
 | P0 | Complete | Clean Android foundation, architecture/security baseline, CI and repository stabilization |
 | P1 | Complete | ChatGPT-like Compose UI foundation |
-| P2 | In progress | Direct DeepSeek connection using a user-owned, locally encrypted API key; CI and API 35 instrumentation passed, live provider request still required |
-| P3 | In progress | On-device TTS, permission-gated offline wake phrase, speech input and hosted ElevenLabs adapter |
+| P2 | Implemented; external acceptance pending | Direct DeepSeek BYOK and Supabase account/session integration; live provider request still required |
+| P3 | Implemented; device/provider acceptance pending | Hybrid voice, permission-gated wake phrase, speech input and hosted ElevenLabs adapter |
 | P4 | In progress | Persistent encrypted local conversation history and user-controlled memory; optional authenticated sync remains deferred |
-| P5 | Not started | Explicitly permissioned Android-native capabilities |
-| P6 | Not started | Typed plugin/skill manifest, capability allowlist and execution boundary |
-| P7 | Not started | Bounded multi-step agent/task orchestration |
-| P8 | Not started | Security, reliability, performance, accessibility and release hardening |
+| P5 | Partial; final acceptance pending | Explicitly permissioned Android-native device capabilities; notification/calendar intelligence not implemented |
+| P6 | Complete | Typed, consent-gated plugin registry and read-only Android capability adapter; PR #18 merged to main |
+| P7 | Complete | Encrypted task state, approvals, bounded orchestration and WorkManager read-only diagnostics; PR #19 merged to main |
+| P8 | In progress | Threat model, dependency inventory, release candidate builds, checksums and external release gates |
 
 ## P0 — Foundation (accepted)
 
@@ -51,7 +51,7 @@ P2 acceptance:
 - Missing or rejected DeepSeek keys produce clear, typed UI errors without exposing credentials or signing the user out of Supabase.
 - Provider error bodies and credentials are not returned to or logged by the app.
 - Live provider test is recorded only when the user supplies a valid DeepSeek API key in the app and a real request succeeds.
-- P3 remains a separate Draft PR until the deferred P2 live-provider and P3 physical-device acceptance checks are completed at P8. Later implementation phases may be stacked on its exact CI-tested head without merging it to main.
+- P2 implementation is merged; live provider acceptance remains deferred until a real user-supplied key succeeds. This is not inferred from CI.
 
 ## P3 — Hybrid voice (automated gates passed; final device acceptance deferred)
 
@@ -82,7 +82,7 @@ P2 acceptance:
 - Continuous background work must respect Android foreground-service, notification-listener, battery and process lifecycle restrictions; no guarantee of uninterrupted operation after force-stop or OS restrictions.
 - No root requirement, silent background control, unrestricted AccessibilityService automation, raw SMS access by default, or notification scraping outside the documented NotificationListenerService API.
 
-## P6 — Plugin and skill system (not started)
+## P6 — Plugin and skill system (accepted; PR #18 merged)
 
 - Versioned declarative manifests with typed input/output JSON schemas.
 - Capability allowlists and least-privilege execution.
@@ -90,7 +90,7 @@ P2 acceptance:
 - Plugin signatures/provenance review and compatibility tests.
 - Plugins cannot read provider secrets or arbitrary application storage.
 
-## P7 — Bounded agent orchestration (not started)
+## P7 — Bounded agent orchestration (accepted; PR #19 merged)
 
 - Plans represented as typed, inspectable task graphs.
 - Explicit approval for external, destructive, financial or privacy-sensitive actions.
@@ -98,14 +98,16 @@ P2 acceptance:
 - Strict tool permissions, step budgets, deadlines and audit trail.
 - No claim of unattended multi-hour execution unless the worker actually runs and reports durable state.
 
-## P8 — Production hardening and release (not started)
+## P8 — Production hardening and release (in progress)
 
-- Threat model and dependency/supply-chain audit.
+- Threat model and dependency/supply-chain audit recorded in docs/P8_THREAT_MODEL.md; resolved dependency report and independent advisory review remain required.
 - Resilience, retry/backoff, rate-limit, abuse and privacy tests.
 - Performance and memory profiling on supported Android versions.
 - Accessibility, localization and UI regression coverage.
-- Release signing/build reproducibility, artifact checksums and release notes.
+- Debug and unsigned release builds, resolved dependency report, artifact checksums and release notes; production signing requires an owner-controlled key.
 - Physical-device testing on Samsung Galaxy A35 5G / Android 17 only when an actual device test is performed and recorded. Emulator tests must never be reported as device tests.
+
+P8 evidence and handoff checklist: docs/P8_THREAT_MODEL.md and docs/P8_RELEASE_CHECKLIST.md. P8 is not accepted until all automated checks and external/manual blockers are either completed with evidence or explicitly excluded from a non-production handoff.
 
 ## Global release gates
 
