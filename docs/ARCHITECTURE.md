@@ -65,3 +65,8 @@ Security and user control take precedence over breadth. All network operations a
 - On detection, stop wake-word capture before handing audio to the conversation capture state machine; do not claim full duplex until echo cancellation, audio focus and capture/playback arbitration are tested.
 - The wake phrase requires a dedicated "Miss Minutes" model (or a verified custom model). A bundled "Hey Jarvis" classifier is not an acceptable substitute.
 - Background wake-word acceptance must include physical-device false-positive/false-negative, battery, thermal, lock-screen and task-removal testing on the target Samsung device. Emulator-only evidence is insufficient.
+
+
+## P3 implementation status — acceptance not yet granted
+
+The current branch adds a user-started microphone foreground service and an exact transcript gate using Android's on-device SpeechRecognizer. This is not the dedicated acoustic Miss Minutes wake-word model specified above. The service fails closed if the on-device recognizer is unavailable and does not fall back to a network recognizer. Physical-device accuracy, false-positive/negative, task-removal, lock-screen, battery and thermal evidence is still required. The implementation must not be treated as accepted until those checks pass or the dedicated-model requirement is explicitly revised.
