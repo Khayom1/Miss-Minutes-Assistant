@@ -61,13 +61,25 @@ class DeviceToolEngine(
 ) {
     private val callTimes = ArrayDeque<Long>()
 
+    init {
+        require(maxCallsPerMinute > 0) { "maxCallsPerMinute must be positive" }
+        require(executionBudgetMillis > 0L) { "executionBudgetMillis must be positive" }
+    }
+
+    private fun record(entry: DeviceToolAuditEntry): Boolean = try {
+        auditLog.append(entry)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
     @Synchronized
     fun execute(request: DeviceToolRequest): DeviceToolResult {
         val capability = request.command.capability()
         val now = clockMillis()
 
         fun reject(reason: String): DeviceToolResult {
-            auditLog.append(DeviceToolAuditEntry(now, capability, "denied"))
+            record(DeviceToolAuditEntry(now, capability, "denied"))
             return DeviceToolResult(false, reason, capability)
         }
 
@@ -90,23 +102,26 @@ class DeviceToolEngine(
             return reject("Android tool rate limit reached. Try again in a minute.")
         }
         callTimes.addLast(now)
+        if (!record(DeviceToolAuditEntry(now, capability, "requested"))) {
+            return DeviceToolResult(false, "Audit logging is unavailable; the Android action was blocked.", capability)
+        }
 
         val started = System.nanoTime()
         return try {
             val message = host.execute(request.command)
             val elapsedMillis = (System.nanoTime() - started) / 1_000_000L
             if (elapsedMillis > executionBudgetMillis) {
-                auditLog.append(DeviceToolAuditEntry(now, capability, "timeout"))
+                record(DeviceToolAuditEntry(now, capability, "timeout"))
                 DeviceToolResult(false, "Android action exceeded its execution budget.", capability)
             } else {
-                auditLog.append(DeviceToolAuditEntry(now, capability, "success"))
+                record(DeviceToolAuditEntry(now, capability, "success"))
                 DeviceToolResult(true, message, capability)
             }
         } catch (_: SecurityException) {
-            auditLog.append(DeviceToolAuditEntry(now, capability, "permission_denied"))
+            record(DeviceToolAuditEntry(now, capability, "permission_denied"))
             DeviceToolResult(false, "Android denied this operation. Check the related system permission.", capability)
         } catch (_: Exception) {
-            auditLog.append(DeviceToolAuditEntry(now, capability, "failed"))
+            record(DeviceToolAuditEntry(now, capability, "failed"))
             DeviceToolResult(false, "Android could not complete this operation.", capability)
         }
     }
