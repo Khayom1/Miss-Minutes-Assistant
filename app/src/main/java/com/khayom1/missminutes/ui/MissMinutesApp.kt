@@ -1412,26 +1412,25 @@ fun MissMinutesApp(
                                     text = ProductIdentity.NAME,
                                     fontWeight = FontWeight.SemiBold
                                 )
+                            },
+                            actions = {
+                                TextButton(onClick = { selectedScreenName = AppScreen.History.name }) {
+                                    Text(copy.history)
+                                }
+                                TextButton(onClick = startNewConversation) {
+                                    Text(
+                                        when (language) {
+                                            AppLanguage.English -> "New"
+                                            AppLanguage.Russian -> "Новый"
+                                            AppLanguage.Tajik -> "Нав"
+                                        }
+                                    )
+                                }
+                                TextButton(onClick = { selectedScreenName = AppScreen.Settings.name }) {
+                                    Text(copy.settings)
+                                }
                             }
                         )
-                    },
-                    bottomBar = {
-                        NavigationBar {
-                            AppScreen.entries.forEach { item ->
-                                val label = when (item) {
-                                    AppScreen.Chat -> copy.chat
-                                    AppScreen.Dashboard -> copy.dashboard
-                                    AppScreen.History -> copy.history
-                                    AppScreen.Settings -> copy.settings
-                                }
-                                NavigationBarItem(
-                                    selected = screen == item,
-                                    onClick = { selectedScreenName = item.name },
-                                    icon = { Text(item.symbol, fontSize = 18.sp) },
-                                    label = { Text(label) }
-                                )
-                            }
-                        }
                     }
                 ) { innerPadding ->
                     Column(
