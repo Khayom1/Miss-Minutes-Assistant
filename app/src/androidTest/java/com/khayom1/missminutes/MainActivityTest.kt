@@ -360,6 +360,19 @@ class MainActivityTest {
     }
 
     @Test
+    fun settingsExposeLocalPluginPackageImportWithoutBackupPassword() {
+        assertChatReady()
+        composeRule.onNodeWithText("Settings").performClick()
+
+        composeRule.onNodeWithTag("plugin_package_import")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Plugin packages contain metadata only. No code, credentials, Android permissions or consent are imported."
+        ).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun settingsCanToggleDarkTheme() {
         assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
