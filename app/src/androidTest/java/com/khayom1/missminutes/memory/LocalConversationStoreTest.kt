@@ -140,6 +140,28 @@ class LocalConversationStoreTest {
     }
 
     @Test
+    fun reachingMessageLimitNeverSilentlyDeletesEarlierHistory() {
+        val (name, store) = newStore()
+        try {
+            val id = store.createConversation("owner")
+            repeat(LocalConversationStore.MAX_MESSAGES_PER_CONVERSATION) { index ->
+                store.appendMessage("owner", id, "user", "message-$index")
+            }
+            val error = runCatching {
+                store.appendMessage("owner", id, "user", "message-over-limit")
+            }.exceptionOrNull()
+
+            assertTrue(error is ConversationLimitReachedException)
+            val messages = store.getMessages("owner", id)
+            assertEquals(LocalConversationStore.MAX_MESSAGES_PER_CONVERSATION, messages.size)
+            assertEquals("message-0", messages.first().content)
+            assertEquals("message-${LocalConversationStore.MAX_MESSAGES_PER_CONVERSATION - 1}", messages.last().content)
+        } finally {
+            clean(name, store)
+        }
+    }
+
+    @Test
     fun savedMemoryIsNotSentToAiUntilExplicitlyEnabledAndPreferencePersists() {
         val (name, store) = newStore()
         try {
