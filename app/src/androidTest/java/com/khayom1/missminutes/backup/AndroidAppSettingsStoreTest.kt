@@ -14,17 +14,17 @@ class AndroidAppSettingsStoreTest {
     @Test
     fun appearancePersistsAcrossStoreInstances() {
         val first = AndroidAppSettingsStore(context)
-        first.saveAppearance("Tajik", true)
+        first.saveAppearance("tg", true)
         val restored = AndroidAppSettingsStore(context).loadAppearance()
-        assertEquals(AndroidAppSettingsStore.Appearance("Tajik", true), restored)
-        first.saveAppearance("English", false)
+        assertEquals(AndroidAppSettingsStore.Appearance("tg", true), restored)
+        first.saveAppearance("en", false)
     }
 
     @Test
     fun backupAppliesOnlyAllowlistedAppearancePreferences() {
         val store = AndroidAppSettingsStore(context)
-        store.applyBackup(SettingsBackupAdapter.Settings("Russian", true, 90, false))
-        assertEquals(AndroidAppSettingsStore.Appearance("Russian", true), store.loadAppearance())
+        store.applyBackup(SettingsBackupAdapter.Settings("ru", true, 90, false))
+        assertEquals(AndroidAppSettingsStore.Appearance("ru", true), store.loadAppearance())
         store.saveAppearance("English", false)
     }
 }
