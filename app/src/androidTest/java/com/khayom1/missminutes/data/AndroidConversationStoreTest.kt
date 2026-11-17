@@ -167,11 +167,14 @@ class AndroidConversationStoreTest {
                 assertTrue(it.moveToFirst())
                 assertEquals(0, it.getInt(0))
             }
+            migrated.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'", null).use {
+                assertTrue(it.moveToFirst())
+            }
         } finally {
             migrated.close()
         }
     }
 
     private fun String.encodeToHex(): String =
-        toByteArray(Charsets.UTF_8).joinToString("") { "%02X".format(it) }
+        toByteArray(Charsets.UTF_8).joinToString("") { "%02X".format(it.toInt() and 0xff) }
 }
