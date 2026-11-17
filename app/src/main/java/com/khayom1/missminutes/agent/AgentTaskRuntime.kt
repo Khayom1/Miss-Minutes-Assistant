@@ -9,6 +9,7 @@ import com.khayom1.missminutes.memory.AndroidKeystoreConversationCipher
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
 import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
+import com.khayom1.missminutes.plugins.AndroidPluginAccessChecker
 import com.khayom1.missminutes.plugins.FilePluginAuditLog
 import com.khayom1.missminutes.plugins.PluginRegistry
 
@@ -41,7 +42,8 @@ internal object AgentTaskRuntime {
         return PluginRegistry(
             handlers = AndroidDeviceStatusPlugin.handlers(deviceEngine),
             consentStore = consentStore,
-            auditLog = FilePluginAuditLog(appContext)
+            auditLog = FilePluginAuditLog(appContext),
+            accessChecker = AndroidPluginAccessChecker(appContext)
         ).apply {
             install(AndroidDeviceStatusPlugin.manifest())
             // Imported manifests remain declarative and can only bind to compiled
