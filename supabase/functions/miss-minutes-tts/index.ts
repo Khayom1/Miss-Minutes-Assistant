@@ -5,7 +5,7 @@ type Dependencies = { env: EnvironmentReader; fetcher: Fetcher };
 const VOICE_ID = "onwK4e9ZLuTAKqWW03F9"; // Daniel, natural male voice
 const MODEL_ID = "eleven_multilingual_v2";
 const MAX_TEXT_CHARS = 3000;
-const MAX_BODY_BYTES = 12000;
+const MAX_BODY_BYTES = 16000;
 const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 const CORS = {
   "access-control-allow-origin": "*",

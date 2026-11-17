@@ -91,5 +91,6 @@ class ElevenLabsTtsProviderTest {
         assertThrows(TtsProviderException::class.java) {
             runBlocking { provider(200, "application/json").synthesize("Hello") }
         }
+        Unit
     }
 }

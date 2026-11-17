@@ -133,7 +133,8 @@ private data class UiCopy(
     val speak: String,
     val stopSpeaking: String,
     val voicePreparing: String,
-    val voiceFailed: String
+    val voiceFailed: String,
+    val voiceNeedsSetup: String
 )
 
 private fun copyFor(language: AppLanguage): UiCopy = when (language) {
@@ -189,7 +190,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         speak = "Speak",
         stopSpeaking = "Stop voice",
         voicePreparing = "Preparing voice…",
-        voiceFailed = "Voice playback failed. Check TTS configuration."
+        voiceFailed = "Voice playback failed. Check TTS configuration.",
+        voiceNeedsSetup = "TTS setup required"
     )
     AppLanguage.Russian -> UiCopy(
         chat = "Чат",
@@ -243,7 +245,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         speak = "Озвучить",
         stopSpeaking = "Остановить",
         voicePreparing = "Подготовка голоса…",
-        voiceFailed = "Не удалось воспроизвести голос. Проверьте настройки TTS."
+        voiceFailed = "Не удалось воспроизвести голос. Проверьте настройки TTS.",
+        voiceNeedsSetup = "Нужно настроить TTS"
     )
     AppLanguage.Tajik -> UiCopy(
         chat = "Чат",
@@ -297,7 +300,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         speak = "Хондан",
         stopSpeaking = "Истодан",
         voicePreparing = "Овоз омода мешавад…",
-        voiceFailed = "Пахши овоз ноком шуд. Танзимоти TTS-ро санҷед."
+        voiceFailed = "Пахши овоз ноком шуд. Танзимоти TTS-ро санҷед.",
+        voiceNeedsSetup = "Танзими TTS лозим аст"
     )
 }
 
@@ -625,7 +629,8 @@ fun MissMinutesApp(
                                     copy.providerResponding
                                 } else {
                                     copy.providerNotVerified
-                                }
+                                },
+                                voiceStatus = copy.voiceNeedsSetup
                             )
                             AppScreen.History -> HistoryScreen(copy)
                             AppScreen.Settings -> SettingsScreen(
@@ -867,7 +872,8 @@ private fun MessageBubble(
 private fun DashboardScreen(
     copy: UiCopy,
     email: String,
-    aiStatus: String
+    aiStatus: String,
+    voiceStatus: String
 ) {
     Column(
         modifier = Modifier
@@ -879,7 +885,7 @@ private fun DashboardScreen(
         Text(copy.dashboardBody, color = MaterialTheme.colorScheme.onSurfaceVariant)
         StatusCard(copy.account, email)
         StatusCard(copy.aiProvider, aiStatus)
-        StatusCard(copy.voice, copy.notConnected)
+        StatusCard(copy.voice, voiceStatus)
         StatusCard(copy.memory, copy.notConnected)
         StatusCard(copy.deviceTools, copy.notConnected)
     }

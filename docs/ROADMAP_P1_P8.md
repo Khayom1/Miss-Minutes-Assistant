@@ -53,7 +53,7 @@ P2 acceptance:
 - Provider error bodies and credentials are not returned to or logged by the app.
 - Live provider test is recorded only when a valid Supabase Auth session and server-side DeepSeek secret are configured.
 - The exact deployed function version is inspected with `verify_jwt=true`; the service-role header semantics are verified by Deno tests.
-- No P3 work starts until P2 is accepted.
+- P3 code may be prepared on a dependent draft branch at the owner's direction, but it must not merge or be accepted until P2 is accepted. Live P3 testing remains gated on the server-side ElevenLabs secret.
 
 ## P3 — TTS-first voice (in progress)
 
