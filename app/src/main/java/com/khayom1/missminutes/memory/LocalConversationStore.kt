@@ -51,7 +51,7 @@ class LocalConversationStore(
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)
-        db.execSQL("PRAGMA secure_delete = ON")
+        db.rawQuery("PRAGMA secure_delete = ON", null).use { cursor -> cursor.moveToFirst() }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
