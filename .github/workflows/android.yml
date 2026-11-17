@@ -147,7 +147,7 @@ jobs:
           for attempt in $(seq 1 60); do
             PACKAGE_LIST="$(adb shell cmd package list packages 2>/dev/null || true)"
             CURRENT_USER="$(adb shell cmd activity get-current-user 2>/dev/null | tr -d '\r' || true)"
-            if printf '%s\n' "$PACKAGE_LIST" | grep -q '^package:' && [ "$CURRENT_USER" = "0" ]; then
+            if printf '%s\n' "$PACKAGE_LIST" | grep '^package:' >/dev/null && [ "$CURRENT_USER" = "0" ]; then
               SERVICES_READY=1
               break
             fi
@@ -161,7 +161,7 @@ jobs:
             tail -200 "$EMULATOR_LOG" || true
             exit 1
           fi
-          printf '%s\n' "$PACKAGE_LIST" | head -5
+          printf '%s\n' "$PACKAGE_LIST" | sed -n '1,5p'
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
