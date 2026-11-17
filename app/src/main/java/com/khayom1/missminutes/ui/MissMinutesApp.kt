@@ -1,5 +1,9 @@
 package com.khayom1.missminutes.ui
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -48,6 +53,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.ProductIdentity
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
@@ -58,6 +66,8 @@ import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.SupabaseAuthException
+import com.khayom1.missminutes.voice.MissMinutesWakeWordService
+import com.khayom1.missminutes.voice.WakeWordServiceState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -312,6 +322,82 @@ fun MissMinutesApp(
     ttsProvider: TtsProvider
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
+    var wakeMessage by remember { mutableStateOf<String?>(null) }
+    val wakePermissions = remember {
+        buildList {
+            add(Manifest.permission.RECORD_AUDIO)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }.toTypedArray()
+    }
+    val startWakeListening = {
+        try {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, MissMinutesWakeWordService::class.java)
+                    .setAction(MissMinutesWakeWordService.ACTION_START)
+            )
+            wakeEnabled = true
+            wakeMessage = when (language) {
+                AppLanguage.English -> "Offline listening requested. Check the persistent notification for the actual service state."
+                AppLanguage.Russian -> "Запрос на офлайн-прослушивание отправлен. Фактический статус указан в постоянном уведомлении."
+                AppLanguage.Tajik -> "Дархости гӯшкунии офлайн фиристода шуд. Ҳолати воқеӣ дар огоҳиномаи доимӣ нишон дода мешавад."
+            }
+        } catch (_: IllegalStateException) {
+            wakeEnabled = false
+            wakeMessage = when (language) {
+                AppLanguage.English -> "Android did not allow the microphone service to start. Open the app and try again."
+                AppLanguage.Russian -> "Android не разрешил запустить микрофонную службу. Откройте приложение и повторите попытку."
+                AppLanguage.Tajik -> "Android иҷозаи оғоз кардани хидмати микрофонро надод. Барномаро кушода, боз кӯшиш кунед."
+            }
+        } catch (_: SecurityException) {
+            wakeEnabled = false
+            wakeMessage = when (language) {
+                AppLanguage.English -> "Required microphone or notification permission is missing."
+                AppLanguage.Russian -> "Нет необходимого разрешения на микрофон или уведомления."
+                AppLanguage.Tajik -> "Иҷозати зарурии микрофон ё огоҳинома мавҷуд нест."
+            }
+        }
+    }
+    val wakePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val allGranted = wakePermissions.all { permission ->
+            grants[permission] == true ||
+                ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+        if (allGranted) {
+            startWakeListening()
+        } else {
+            wakeEnabled = false
+            wakeMessage = when (language) {
+                AppLanguage.English -> "Listening was not started. Both microphone and notification permissions are required."
+                AppLanguage.Russian -> "Прослушивание не запущено. Нужны разрешения на микрофон и уведомления."
+                AppLanguage.Tajik -> "Гӯшкунӣ оғоз нашуд. Иҷозати микрофон ва огоҳинома зарур аст."
+            }
+        }
+    }
+    val enableWakeListening = {
+        val allGranted = wakePermissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+        if (allGranted) startWakeListening() else wakePermissionLauncher.launch(wakePermissions)
+    }
+    val disableWakeListening = {
+        context.startService(
+            Intent(context, MissMinutesWakeWordService::class.java)
+                .setAction(MissMinutesWakeWordService.ACTION_STOP)
+        )
+        wakeEnabled = false
+        wakeMessage = when (language) {
+            AppLanguage.English -> "Offline wake phrase listening is off."
+            AppLanguage.Russian -> "Офлайн-распознавание фразы выключено."
+            AppLanguage.Tajik -> "Гӯшкунии офлайн хомӯш аст."
+        }
+    }
     var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
     var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
     var darkTheme by rememberSaveable { mutableStateOf(false) }
