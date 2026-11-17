@@ -271,6 +271,7 @@ class MainActivityTest {
         }
         composeRule.onNodeWithText("Key is stored securely on this device.").assertIsDisplayed()
         composeRule.onNodeWithText("Remove key").performClick()
+        composeRule.waitUntil(timeoutMillis = 2_000) { apiKeyStore.key == null }
         assertEquals(null, apiKeyStore.key)
     }
 
