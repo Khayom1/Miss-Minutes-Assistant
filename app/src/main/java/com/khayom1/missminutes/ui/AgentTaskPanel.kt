@@ -182,7 +182,7 @@ internal fun AgentTaskPanel(
                     onClick = {
                         perform {
                             val resumed = orchestrator.resume(current.plan.id)
-                            AgentTaskWorker.enqueue(context, current.plan.id)
+                            AgentTaskWorker.enqueue(context, current.plan.id, replaceExisting = true)
                             resumed
                         }
                     }
