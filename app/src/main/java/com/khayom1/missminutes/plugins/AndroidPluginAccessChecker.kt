@@ -1,7 +1,6 @@
 package com.khayom1.missminutes.plugins
 
 import android.Manifest
-import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Settings
@@ -45,7 +44,13 @@ class AndroidPluginAccessChecker(
                     )
                 }
             }
-            else -> Unit
+            PluginCapability.DEVICE_INFORMATION,
+            PluginCapability.BATTERY_STATUS,
+            PluginCapability.CALENDAR_READ,
+            PluginCapability.CALENDAR_WRITE,
+            PluginCapability.CONTACTS_READ,
+            PluginCapability.LOCATION_APPROXIMATE,
+            PluginCapability.LOCATION_PRECISE -> Unit
         }
 
         val missingPermission = requiredPermissions(action.capability).firstOrNull { permission ->
@@ -81,7 +86,11 @@ class AndroidPluginAccessChecker(
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION
         )
-        else -> emptyList()
+        PluginCapability.DEVICE_INFORMATION,
+        PluginCapability.BATTERY_STATUS,
+        PluginCapability.NOTIFICATION_READ,
+        PluginCapability.GITHUB_REPOSITORY_READ,
+        PluginCapability.GITHUB_REPOSITORY_WRITE -> emptyList()
     }
 
     private fun permissionLabel(permission: String): String = when (permission) {
