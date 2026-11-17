@@ -8,6 +8,7 @@ import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
 import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Test
@@ -53,6 +54,27 @@ class AgentTaskRuntimeTest {
         } finally {
             manifests.replace(emptyList())
             consent.setGranted(imported.id, false)
+        }
+    }
+
+    @Test
+    fun pluginConnectionGrantPersistsAcrossRuntimeRecreationAndRevocation() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val consentStore = AndroidPluginConsentStore(context)
+        val pluginId = AndroidDeviceStatusPlugin.manifest().id
+        consentStore.setGranted(pluginId, false)
+        try {
+            val first = AgentTaskRuntime.createPluginRegistry(context)
+            assertTrue(first.connect(pluginId))
+
+            val second = AgentTaskRuntime.createPluginRegistry(context)
+            assertTrue(second.connectedTools().any { it.pluginId == pluginId })
+            assertTrue(second.revokeConsent(pluginId))
+
+            val third = AgentTaskRuntime.createPluginRegistry(context)
+            assertFalse(third.connectedTools().any { it.pluginId == pluginId })
+        } finally {
+            consentStore.setGranted(pluginId, false)
         }
     }
 }
