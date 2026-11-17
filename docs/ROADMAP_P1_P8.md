@@ -9,7 +9,7 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 | P0 | Complete | Clean Android foundation, architecture/security baseline, CI and repository stabilization |
 | P1 | Complete | ChatGPT-like Compose UI foundation |
 | P2 | CI passed; live provider acceptance pending | Authenticated AI provider gateway, DeepSeek proxy and optional local inference contract |
-| P3 | In progress | TTS-only first slice: Android on-device TextToSpeech; cloud voice providers deferred |
+| P3 | In progress | On-device TTS plus user-enabled background voice runtime and exact wake phrase “Miss Minutes” (no “Hey”) |
 | P4 | Not started | Persistent local conversation history and memory, optional authenticated sync |
 | P5 | Not started | Explicitly permissioned Android-native capabilities |
 | P6 | Not started | Typed plugin/skill manifest, capability allowlist and execution boundary |
@@ -67,13 +67,18 @@ First delivery is deliberately limited to text-to-speech; STT, microphone permis
 - Stops speech on user cancellation/sign-out and shuts down the engine with the Activity lifecycle.
 - Device-specific voice quality and Tajik language availability must be verified on physical hardware.
 
-## P3 — Remaining voice scope (not started)
+## P3 — Background voice activation (planned; not yet implemented)
 
-- Speech-to-text input behind a provider-neutral interface (deferred).
-- Additional voice providers (deferred).
-- Offline voice fallback with truthful capability status (deferred).
-- Runtime permission, microphone indicator, cancellation and timeout handling.
-- No raw audio retained by default; user-controlled opt-in for any persistence.
+- Exact offline wake phrase: “Miss Minutes”; never “Hey Miss Minutes”.
+- User-controlled always-listening toggle and explicit microphone permission/disclosure.
+- Microphone foreground service started only while the app is visible and user initiates it; persistent notification and service lifecycle independent from the Activity.
+- On-device wake-word detector with a dedicated Miss Minutes model; do not substitute a Hey-Jarvis model.
+- On wake, transition to explicit speech-capture state; STT and conversation turn handling remain separate deliverables.
+- No raw audio upload or retention for wake-word detection.
+- Stop/release microphone on user disable, permission revocation, service shutdown and error.
+- Android 14+ microphone foreground-service restrictions, lock-screen, task removal, battery/thermal and reboot behavior must be tested on physical hardware.
+- Force stop and OS-enforced restrictions cannot be bypassed; report these states honestly.
+- Evaluate false positives/negatives and battery/thermal cost on the target Samsung device before acceptance.
 
 ## P4 — Persistent memory and history (not started)
 
