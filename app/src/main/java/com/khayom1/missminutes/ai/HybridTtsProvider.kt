@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -40,6 +41,7 @@ class HybridTtsProvider(
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var requestJob: Job? = null
+    @Volatile private var activeCall: Call? = null
     private var player: MediaPlayer? = null
     private var audioFile: File? = null
     private var generation = 0L
@@ -111,39 +113,45 @@ class HybridTtsProvider(
             .header("Accept", "audio/mpeg")
             .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
             .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("Hosted TTS request failed.")
-            val body = response.body ?: throw IOException("Hosted TTS returned no audio.")
-            val contentType = body.contentType()?.toString().orEmpty()
-            if (!contentType.lowercase().startsWith("audio/")) {
-                throw IOException("Hosted TTS returned an invalid content type.")
-            }
-            if (body.contentLength() > MAX_AUDIO_BYTES) {
-                throw IOException("Hosted TTS response exceeded the audio limit.")
-            }
-            val destination = File.createTempFile("miss-minutes-voice-", ".mp3", appContext.cacheDir)
-            try {
-                body.byteStream().use { input ->
-                    destination.outputStream().use { output ->
-                        val buffer = ByteArray(8 * 1024)
-                        var total = 0
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            total += count
-                            if (total > MAX_AUDIO_BYTES) {
-                                throw IOException("Hosted TTS response exceeded the audio limit.")
+        val call = client.newCall(request)
+        activeCall = call
+        try {
+            call.execute().use { response ->
+                if (!response.isSuccessful) throw IOException("Hosted TTS request failed.")
+                val body = response.body ?: throw IOException("Hosted TTS returned no audio.")
+                val contentType = body.contentType()?.toString().orEmpty()
+                if (!contentType.lowercase().startsWith("audio/")) {
+                    throw IOException("Hosted TTS returned an invalid content type.")
+                }
+                if (body.contentLength() > MAX_AUDIO_BYTES) {
+                    throw IOException("Hosted TTS response exceeded the audio limit.")
+                }
+                val destination = File.createTempFile("miss-minutes-voice-", ".mp3", appContext.cacheDir)
+                try {
+                    body.byteStream().use { input ->
+                        destination.outputStream().use { output ->
+                            val buffer = ByteArray(8 * 1024)
+                            var total = 0
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                if (total > MAX_AUDIO_BYTES) {
+                                    throw IOException("Hosted TTS response exceeded the audio limit.")
+                                }
+                                output.write(buffer, 0, count)
                             }
-                            output.write(buffer, 0, count)
                         }
                     }
+                    if (destination.length() == 0L) throw IOException("Hosted TTS returned empty audio.")
+                    destination
+                } catch (error: Exception) {
+                    destination.delete()
+                    throw error
                 }
-                if (destination.length() == 0L) throw IOException("Hosted TTS returned empty audio.")
-                destination
-            } catch (error: Exception) {
-                destination.delete()
-                throw error
             }
+        } finally {
+            if (activeCall === call) activeCall = null
         }
     }
 
@@ -180,6 +188,8 @@ class HybridTtsProvider(
         generation += 1
         requestJob?.cancel()
         requestJob = null
+        activeCall?.cancel()
+        activeCall = null
         releasePlayer()
         offlineFallback.stop()
     }
