@@ -25,7 +25,7 @@ class WakeWordManifestTest {
         )
 
         assertFalse(info.exported)
-        assertFalse(info.stopWithTask)
+        assertFalse((info.flags and ServiceInfo.FLAG_STOP_WITH_TASK) != 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE, info.foregroundServiceType)
         }
