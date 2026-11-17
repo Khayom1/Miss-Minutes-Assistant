@@ -13,7 +13,9 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.TextView
 import android.content.pm.ServiceInfo
@@ -54,6 +56,9 @@ class MissMinutesOverlayService : Service() {
             stopSelf()
             START_NOT_STICKY
         } catch (_: WindowManager.BadTokenException) {
+            stopSelf()
+            START_NOT_STICKY
+        } catch (_: IllegalStateException) {
             stopSelf()
             START_NOT_STICKY
         }
@@ -97,6 +102,43 @@ class MissMinutesOverlayService : Service() {
             gravity = Gravity.TOP or Gravity.END
             x = dp(16)
             y = dp(180)
+        }
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        var downRawX = 0f
+        var downRawY = 0f
+        var startX = 0
+        var startY = 0
+        var dragged = false
+        view.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    startX = layout.x
+                    startY = layout.y
+                    dragged = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val deltaX = event.rawX - downRawX
+                    val deltaY = event.rawY - downRawY
+                    if (!dragged && (kotlin.math.abs(deltaX) > touchSlop ||
+                            kotlin.math.abs(deltaY) > touchSlop)
+                    ) dragged = true
+                    if (dragged) {
+                        layout.x = (startX - deltaX.toInt()).coerceAtLeast(0)
+                        layout.y = (startY + deltaY.toInt()).coerceAtLeast(0)
+                        runCatching { manager.updateViewLayout(view, layout) }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!dragged) view.performClick()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> false
+            }
         }
         manager.addView(view, layout)
         windowManager = manager
