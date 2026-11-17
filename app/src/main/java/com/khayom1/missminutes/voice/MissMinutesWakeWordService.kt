@@ -260,7 +260,7 @@ class MissMinutesWakeWordService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("Miss Minutes")
             .setContentText(message)
             .setContentIntent(openApp)
