@@ -81,6 +81,8 @@ class DirectDeepSeekProvider(
     private val json: Json = Json { ignoreUnknownKeys = true; explicitNulls = false },
     private val model: String = "deepseek-chat"
 ) : AiProvider {
+    override val capabilities = AiProviderCapabilities(supportsStructuredTools = true, isLocal = false)
+
     override suspend fun complete(request: AiRequest): AiCompletion {
         val key = withContext(Dispatchers.IO) { keySource.currentApiKey() }
             ?.takeIf { it.isNotBlank() }

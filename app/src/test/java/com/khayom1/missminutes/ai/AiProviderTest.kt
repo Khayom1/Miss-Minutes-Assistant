@@ -41,6 +41,16 @@ class AiProviderTest {
     }
 
     @Test
+    fun localProviderDeclaresItsCurrentToolAndExecutionCapabilities() {
+        val provider = OptionalLocalAiProvider(object : LocalInferenceRuntime {
+            override fun isAvailable(): Boolean = false
+            override suspend fun generate(messages: List<AiMessage>, maxOutputTokens: Int): String = error("Unavailable")
+        })
+        assertFalse(provider.capabilities.supportsStructuredTools)
+        assertTrue(provider.capabilities.isLocal)
+    }
+
+    @Test
     fun localProviderFailsClosedWhenRuntimeIsUnavailable() = runBlocking {
         val runtime = object : LocalInferenceRuntime {
             override fun isAvailable(): Boolean = false

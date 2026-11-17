@@ -23,6 +23,8 @@ import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import kotlinx.coroutines.CompletableDeferred
 import com.khayom1.missminutes.ai.AiRequest
+import com.khayom1.missminutes.ai.AiRuntimeProfile
+import com.khayom1.missminutes.backup.AndroidAppSettingsStore
 import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.SpeechInputProvider
 import com.khayom1.missminutes.voice.WakeWordServiceState
@@ -60,6 +62,7 @@ class MainActivityTest {
     }
 
     private class FakeAiProvider : AiProvider {
+        override val capabilities = com.khayom1.missminutes.ai.AiProviderCapabilities(supportsStructuredTools = true)
         var lastRequest: AiRequest? = null
         var nextError: AiProviderException? = null
         var pendingCompletion: CompletableDeferred<AiCompletion>? = null
@@ -357,6 +360,24 @@ class MainActivityTest {
         composeRule.onNodeWithText(
             "The backup is password-encrypted. API keys, Android permissions and plugin consent are never included."
         ).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun runtimeProfileChangesTheActualRequestBudgetAndPersistsLocally() {
+        assertChatReady()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("runtime_profile_max").performScrollTo().performClick()
+        assertEquals(
+            AiRuntimeProfile.MAX,
+            AndroidAppSettingsStore(InstrumentationRegistry.getInstrumentation().targetContext).loadAiRuntimeProfile()
+        )
+
+        composeRule.onNodeWithText("New").performClick()
+        waitForChatScreen()
+        composeRule.onNodeWithTag("chat_input").performTextInput("Explain this carefully")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) { aiProvider.lastRequest != null }
+        assertEquals(640, aiProvider.lastRequest?.maxOutputTokens)
     }
 
     @Test
