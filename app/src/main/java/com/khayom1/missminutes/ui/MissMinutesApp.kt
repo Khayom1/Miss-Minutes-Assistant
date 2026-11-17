@@ -2404,6 +2404,7 @@ private fun SettingsScreen(
             language = language,
             categories = backupCategories,
             onToggleCategory = onToggleBackupCategory,
+            password = backupPassword,
             onPasswordChange = onBackupPasswordChange,
             conflictPolicy = backupConflictPolicy,
             onConflictPolicyChange = onBackupConflictPolicyChange,
