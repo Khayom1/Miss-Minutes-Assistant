@@ -162,6 +162,8 @@ fun interface PluginAuditLog {
 interface PluginActionHandler {
     val actionId: String
     val capability: PluginCapability
+    /** Compiled argument schema is authoritative; imported manifests cannot widen it. */
+    val argumentSchema: Map<String, PluginFieldSpec> get() = emptyMap()
     /** Compiled safety floor: a manifest may require more confirmation, never less. */
     val requiresConfirmation: Boolean get() = false
     fun execute(arguments: Map<String, PluginValue>): PluginActionOutput
