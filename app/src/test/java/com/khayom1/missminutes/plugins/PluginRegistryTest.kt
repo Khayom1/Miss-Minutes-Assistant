@@ -259,7 +259,7 @@ class PluginRegistryTest {
         val consent = object : MutablePluginConsentStore {
             override fun isGranted(pluginId: String) = currentGrant
             override fun setGranted(pluginId: String, grantedValue: Boolean) {
-                granted = grantedValue
+                currentGrant = grantedValue
             }
         }
         val registry = PluginRegistry(
