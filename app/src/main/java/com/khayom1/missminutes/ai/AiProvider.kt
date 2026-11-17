@@ -51,6 +51,7 @@ sealed class AiProviderException(message: String, cause: Throwable? = null) :
     Exception(message, cause) {
     class AuthenticationRequired : AiProviderException("A valid signed-in session is required.")
     class MissingApiKey : AiProviderException("A DeepSeek API key must be added in Settings.")
+    class InvalidApiKey : AiProviderException("The DeepSeek API key was rejected.")
     class RateLimited : AiProviderException("The AI service rate limit was reached.")
     class Unavailable(cause: Throwable? = null) :
         AiProviderException("The AI service is currently unavailable.", cause)
