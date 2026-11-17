@@ -1,6 +1,6 @@
 # P7 — Bounded Agent Orchestration
 
-Status: core engine and encrypted task-state adapter implemented; integration and CI acceptance pending.
+Status: core engine, encrypted task-state adapter, P6 registry adapter and a visible two-step diagnostic task panel implemented; lifecycle-worker integration and CI acceptance pending.
 
 ## Delivered in this phase branch
 
@@ -12,7 +12,7 @@ Status: core engine and encrypted task-state adapter implemented; integration an
 - Bounded graph size (24 nodes), step budget, 24-hour deadline, result length, task count and encrypted storage size.
 - State is persisted before dispatch and after the result. A task found in RUNNING after process restart is changed to RECOVERY_REQUIRED and is never automatically replayed, avoiding blind duplicate side effects.
 - Android SharedPreferences adapter encrypts the complete bounded task snapshot using the existing Android Keystore AES-GCM ConversationCipher. The in-memory store is for deterministic tests only.
-- JVM tests cover dependency order, approval, pause/cancel, graph validation, deadlines, failed actions and interrupted-execution recovery.
+- JVM tests cover dependency order, approval, pause/cancel, graph validation, deadlines, step budgets, failed actions and interrupted-execution recovery.\n- Settings exposes a localized Tajik/Russian/English diagnostic task panel with start, next-step, pause, resume and cancel controls.
 
 ## Explicit limits
 
