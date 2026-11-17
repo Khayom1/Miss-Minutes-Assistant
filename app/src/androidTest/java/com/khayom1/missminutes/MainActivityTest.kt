@@ -3,13 +3,17 @@ package com.khayom1.missminutes
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
+import android.Manifest
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.rule.GrantPermissionRule
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
@@ -19,19 +23,26 @@ import kotlinx.coroutines.CompletableDeferred
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AuthFlowResult
 import com.khayom1.missminutes.ai.SessionManager
+import com.khayom1.missminutes.ai.TtsProvider
+import com.khayom1.missminutes.ai.SpeechInputProvider
 import com.khayom1.missminutes.ai.SessionStore
 import com.khayom1.missminutes.ai.SupabaseAuthRepository
 import com.khayom1.missminutes.ai.SupabaseAuthSession
+import com.khayom1.missminutes.voice.WakeWordServiceState
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
+import org.junit.rules.RuleChain
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityTest {
+    private val microphonePermissionRule = GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO)
+    private val composeRule = createComposeRule()
+
     @get:Rule
-    val composeRule = createComposeRule()
+    val testRule = RuleChain.outerRule(microphonePermissionRule).around(composeRule)
 
     private lateinit var sessionManager: SessionManager
     private lateinit var aiProvider: FakeAiProvider
@@ -106,7 +117,21 @@ class MainActivityTest {
             com.khayom1.missminutes.ui.MissMinutesApp(
                 sessionManager = sessionManager,
                 aiProvider = aiProvider,
-                apiKeyStore = apiKeyStore
+                apiKeyStore = apiKeyStore,
+                ttsProvider = object : TtsProvider {
+                    override fun speak(text: String, onDone: () -> Unit, onError: () -> Unit) = onDone()
+                    override fun stop() = Unit
+                    override fun close() = Unit
+                },
+                speechInputProvider = object : SpeechInputProvider {
+                    override fun start(
+                        locale: java.util.Locale,
+                        onResult: (String) -> Unit,
+                        onError: () -> Unit
+                    ) = onError()
+                    override fun stop() = Unit
+                    override fun close() = Unit
+                }
             )
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -175,6 +200,16 @@ class MainActivityTest {
     }
 
     @Test
+    fun chatExposesUserInitiatedOfflineDictationControl() {
+        signIn()
+        composeRule.onNodeWithTag("speech_input").assertIsDisplayed()
+        composeRule.onNodeWithText("Dictate").performClick()
+        composeRule.onNodeWithText(
+            "On-device speech recognition is unavailable or could not understand the speech."
+        ).assertIsDisplayed()
+    }
+
+    @Test
     fun expiredSessionClearsPreviousAccountConversationBeforeReauthentication() {
         signIn()
         aiProvider.nextError = AiProviderException.AuthenticationRequired()
@@ -225,11 +260,14 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        WakeWordServiceState.setEnabled(context, true)
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("Sign out").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Sign in to Miss Minutes")
-                .fetchSemanticsNodes().isNotEmpty()
+        composeRule.onNodeWithText("Sign out").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            !WakeWordServiceState.isEnabled(context) &&
+                composeRule.onAllNodesWithText("Sign in to Miss Minutes")
+                    .fetchSemanticsNodes().isNotEmpty()
         }
 
         lateCompletion.complete(
@@ -273,6 +311,17 @@ class MainActivityTest {
         composeRule.onNodeWithText("Remove key").performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) { apiKeyStore.key == null }
         assertEquals(null, apiKeyStore.key)
+    }
+
+    @Test
+    fun settingsShowsMicrophoneDisclosureBeforeListeningIsEnabled() {
+        signIn()
+        composeRule.onNodeWithText("Settings").performClick()
+
+        composeRule.onNodeWithTag("wake_phrase_disclosure").assertIsDisplayed()
+        composeRule.onNodeWithText("Offline wake phrase").assertIsDisplayed()
+        composeRule.onNodeWithTag("wake_phrase_toggle").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Enable microphone listening").performScrollTo().assertIsDisplayed()
     }
 
     @Test

@@ -1,5 +1,11 @@
 package com.khayom1.missminutes.ui
 
+import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -41,6 +48,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -48,6 +56,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.ProductIdentity
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
@@ -57,11 +68,16 @@ import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.SessionManager
+import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.SupabaseAuthException
+import com.khayom1.missminutes.voice.MissMinutesWakeWordService
+import com.khayom1.missminutes.voice.WakeWordServiceState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.khayom1.missminutes.ai.SpeechInputProvider
+import java.util.Locale
 
 private enum class AppScreen(val symbol: String) {
     Chat("✦"),
@@ -130,7 +146,17 @@ private data class UiCopy(
     val sending: String,
     val sendFailed: String,
     val conversationTooLong: String,
-    val aiRateLimited: String
+    val aiRateLimited: String,
+    val speak: String,
+    val stopSpeaking: String,
+    val voicePreparing: String,
+    val voiceFailed: String,
+    val voiceNeedsSetup: String,
+    val dictate: String,
+    val stopListening: String,
+    val speechListening: String,
+    val speechInputUnavailable: String,
+    val microphonePermissionRequired: String
 )
 
 private fun copyFor(language: AppLanguage): UiCopy = when (language) {
@@ -143,7 +169,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Your personal assistant, ready when you are.",
         composerHint = "Message Miss Minutes",
         send = "Send",
-        gatewayNotice = "DeepSeek requests go directly from this device using your personal API key stored securely on this phone.",
+        gatewayNotice = "AI replies use your personal DeepSeek API key, encrypted on this device and sent directly to DeepSeek over HTTPS. Supabase is used only for sign-in.",
         you = "You",
         dashboardTitle = "Your workspace",
         dashboardBody = "A clear view of assistant capabilities and their connection status.",
@@ -180,9 +206,19 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         signOut = "Sign out",
         account = "Account",
         sending = "Thinking…",
-        sendFailed = "No response received. Check your internet connection and DeepSeek API key.",
+        sendFailed = "No response received. Check your connection and server configuration.",
         conversationTooLong = "This conversation is too long to send. Start a new conversation.",
-        aiRateLimited = "The AI request limit was reached. Try again shortly."
+        aiRateLimited = "The AI request limit was reached. Try again shortly.",
+        speak = "Speak",
+        stopSpeaking = "Stop voice",
+        voicePreparing = "Speaking with the device voice…",
+        voiceFailed = "Voice playback failed. Check TTS configuration.",
+        voiceNeedsSetup = "On-device voice",
+        dictate = "Dictate",
+        stopListening = "Stop",
+        speechListening = "Listening…",
+        speechInputUnavailable = "On-device speech recognition is unavailable or could not understand the speech.",
+        microphonePermissionRequired = "Microphone permission is required for voice input."
     )
     AppLanguage.Russian -> UiCopy(
         chat = "Чат",
@@ -193,7 +229,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ваш персональный помощник всегда под рукой.",
         composerHint = "Сообщение Miss Minutes",
         send = "Отправить",
-        gatewayNotice = "Запросы DeepSeek отправляются напрямую с этого устройства с вашим личным API-ключом, хранящимся здесь в зашифрованном виде.",
+        gatewayNotice = "Ответы ИИ используют ваш личный API-ключ DeepSeek: он хранится на устройстве в зашифрованном виде и отправляется напрямую в DeepSeek по HTTPS. Supabase используется только для входа.",
         you = "Вы",
         dashboardTitle = "Ваше пространство",
         dashboardBody = "Состояние возможностей помощника и подключённых сервисов.",
@@ -230,9 +266,19 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         signOut = "Выйти",
         account = "Аккаунт",
         sending = "Думаю…",
-        sendFailed = "Ответ не получен. Проверьте подключение к интернету и ключ DeepSeek.",
+        sendFailed = "Ответ не получен. Проверьте интернет и настройки сервера.",
         conversationTooLong = "Диалог слишком длинный. Начните новый диалог.",
-        aiRateLimited = "Достигнут лимит запросов ИИ. Попробуйте немного позже."
+        aiRateLimited = "Достигнут лимит запросов ИИ. Попробуйте немного позже.",
+        speak = "Озвучить",
+        stopSpeaking = "Остановить",
+        voicePreparing = "Озвучивание системным голосом…",
+        voiceFailed = "Не удалось воспроизвести голос. Проверьте настройки TTS.",
+        voiceNeedsSetup = "Системный голос устройства",
+        dictate = "Диктовать",
+        stopListening = "Остановить",
+        speechListening = "Слушаю…",
+        speechInputUnavailable = "Офлайн-распознавание речи недоступно или не смогло распознать речь.",
+        microphonePermissionRequired = "Для голосового ввода нужен доступ к микрофону."
     )
     AppLanguage.Tajik -> UiCopy(
         chat = "Чат",
@@ -243,7 +289,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ёвари шахсии шумо ҳамеша омода аст.",
         composerHint = "Ба Miss Minutes паём нависед",
         send = "Фиристодан",
-        gatewayNotice = "Дархостҳои DeepSeek мустақиман аз ҳамин телефон бо калиди шахсии шумо, ки рамзгузорӣ нигоҳ дошта мешавад, фиристода мешаванд.",
+        gatewayNotice = "Ҷавобҳои AI бо калиди шахсии DeepSeek-и шумо кор мекунанд: калид дар телефон рамзгузорӣ шуда, мустақиман тавассути HTTPS ба DeepSeek фиристода мешавад. Supabase танҳо барои ворид шудан истифода мешавад.",
         you = "Шумо",
         dashboardTitle = "Муҳити кории шумо",
         dashboardBody = "Ҳолати имкониятҳо ва пайвасти хидматҳои ёвар.",
@@ -280,9 +326,19 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         signOut = "Баромадан",
         account = "Ҳисоб",
         sending = "Фикр карда истодаам…",
-        sendFailed = "Ҷавоб гирифта нашуд. Пайвасти интернет ва калиди DeepSeek-ро санҷед.",
+        sendFailed = "Ҷавоб гирифта нашуд. Интернет ва танзимоти серверро санҷед.",
         conversationTooLong = "Гуфтугӯ хеле дароз аст. Гуфтугӯи нав оғоз кунед.",
-        aiRateLimited = "Маҳдудияти дархостҳои AI расид. Каме баъд кӯшиш кунед."
+        aiRateLimited = "Маҳдудияти дархостҳои AI расид. Каме баъд кӯшиш кунед.",
+        speak = "Хондан",
+        stopSpeaking = "Истодан",
+        voicePreparing = "Бо овози худи телефон хонда мешавад…",
+        voiceFailed = "Пахши овоз ноком шуд. Танзимоти TTS-ро санҷед.",
+        voiceNeedsSetup = "Овози дохилии телефон",
+        dictate = "Бо овоз навиштан",
+        stopListening = "Қатъ кардан",
+        speechListening = "Гӯш карда истодаам…",
+        speechInputUnavailable = "Шинохти офлайнии нутқ дастрас нест ё суханро нафаҳмид.",
+        microphonePermissionRequired = "Барои воридкунии овоз иҷозати микрофон лозим аст."
     )
 }
 
@@ -291,11 +347,107 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
 fun MissMinutesApp(
     sessionManager: SessionManager,
     aiProvider: AiProvider,
-    apiKeyStore: DeepSeekApiKeyStore
+    ttsProvider: TtsProvider,
+    apiKeyStore: DeepSeekApiKeyStore,
+    speechInputProvider: SpeechInputProvider
 ) {
     val scope = rememberCoroutineScope()
-    var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
     var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
+    val language = AppLanguage.valueOf(selectedLanguageName)
+    val context = LocalContext.current
+    var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
+    var wakeMessage by remember { mutableStateOf<String?>(null) }
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: android.content.Context?, intent: Intent?) {
+                if (intent?.action == MissMinutesWakeWordService.ACTION_STATE_CHANGED) {
+                    wakeEnabled = intent.getBooleanExtra(MissMinutesWakeWordService.EXTRA_ENABLED, false)
+                    wakeMessage = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_MESSAGE)
+                }
+            }
+        }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(MissMinutesWakeWordService.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+    val wakePermissions = remember {
+        buildList {
+            add(Manifest.permission.RECORD_AUDIO)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }.toTypedArray()
+    }
+    val startWakeListening = {
+        try {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, MissMinutesWakeWordService::class.java)
+                    .setAction(MissMinutesWakeWordService.ACTION_START)
+            )
+            wakeEnabled = true
+            wakeMessage = when (language) {
+                AppLanguage.English -> "Offline listening requested. Check the persistent notification for the actual service state."
+                AppLanguage.Russian -> "Запрос на офлайн-прослушивание отправлен. Фактический статус указан в постоянном уведомлении."
+                AppLanguage.Tajik -> "Дархости гӯшкунии офлайн фиристода шуд. Ҳолати воқеӣ дар огоҳиномаи доимӣ нишон дода мешавад."
+            }
+        } catch (_: IllegalStateException) {
+            wakeEnabled = false
+            wakeMessage = when (language) {
+                AppLanguage.English -> "Android did not allow the microphone service to start. Open the app and try again."
+                AppLanguage.Russian -> "Android не разрешил запустить микрофонную службу. Откройте приложение и повторите попытку."
+                AppLanguage.Tajik -> "Android иҷозаи оғоз кардани хидмати микрофонро надод. Барномаро кушода, боз кӯшиш кунед."
+            }
+        } catch (_: SecurityException) {
+            wakeEnabled = false
+            wakeMessage = when (language) {
+                AppLanguage.English -> "Required microphone or notification permission is missing."
+                AppLanguage.Russian -> "Нет необходимого разрешения на микрофон или уведомления."
+                AppLanguage.Tajik -> "Иҷозати зарурии микрофон ё огоҳинома мавҷуд нест."
+            }
+        }
+    }
+    val wakePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val allGranted = wakePermissions.all { permission ->
+            grants[permission] == true ||
+                ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+        if (allGranted) {
+            startWakeListening()
+        } else {
+            wakeEnabled = false
+            wakeMessage = when (language) {
+                AppLanguage.English -> "Listening was not started. Both microphone and notification permissions are required."
+                AppLanguage.Russian -> "Прослушивание не запущено. Нужны разрешения на микрофон и уведомления."
+                AppLanguage.Tajik -> "Гӯшкунӣ оғоз нашуд. Иҷозати микрофон ва огоҳинома зарур аст."
+            }
+        }
+    }
+    val enableWakeListening = {
+        val allGranted = wakePermissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+        if (allGranted) startWakeListening() else wakePermissionLauncher.launch(wakePermissions)
+    }
+    val disableWakeListening = {
+        // Stop an existing listener without starting a new background service.
+        // The service's onDestroy() owns recognizer cleanup and state publication.
+        context.stopService(Intent(context, MissMinutesWakeWordService::class.java))
+        WakeWordServiceState.setEnabled(context, false)
+        wakeEnabled = false
+        wakeMessage = when (language) {
+            AppLanguage.English -> "Offline wake phrase listening is off."
+            AppLanguage.Russian -> "Офлайн-распознавание фразы выключено."
+            AppLanguage.Tajik -> "Гӯшкунии офлайн хомӯш аст."
+        }
+    }
+    var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
     var darkTheme by rememberSaveable { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     var authEmail by rememberSaveable { mutableStateOf("") }
@@ -311,14 +463,56 @@ fun MissMinutesApp(
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
+    var speakingMessageId by remember { mutableStateOf<Long?>(null) }
+    var voiceError by remember { mutableStateOf<String?>(null) }
+    var speechError by remember { mutableStateOf<String?>(null) }
+    var speechListening by remember { mutableStateOf(false) }
     var apiKeyConfigured by remember { mutableStateOf(false) }
     var apiKeySaving by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
     var apiKeyMessage by remember { mutableStateOf<String?>(null) }
     var nextMessageId by remember { mutableStateOf(0L) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
-    val language = AppLanguage.valueOf(selectedLanguageName)
     val copy = copyFor(language)
+
+    val speechLocale = when (language) {
+        AppLanguage.English -> Locale.US
+        AppLanguage.Russian -> Locale("ru", "RU")
+        AppLanguage.Tajik -> Locale("tg", "TJ")
+    }
+    val startSpeechInput: () -> Unit = {
+        speechError = null
+        speechListening = true
+        speechInputProvider.start(
+            locale = speechLocale,
+            onResult = { transcript ->
+                speechListening = false
+                val separator = if (draft.isBlank()) "" else " "
+                draft = (draft + separator + transcript).take(8_000)
+            },
+            onError = {
+                speechListening = false
+                speechError = copyFor(language).speechInputUnavailable
+            }
+        )
+    }
+    val speechPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startSpeechInput() else {
+            speechListening = false
+            speechError = copyFor(language).microphonePermissionRequired
+        }
+    }
+    val requestSpeechInput: () -> Unit = {
+        if (speechListening) {
+            speechInputProvider.stop()
+            speechListening = false
+            speechError = null
+        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) startSpeechInput() else speechPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
 
     LaunchedEffect(apiKeyStore) {
         apiKeyConfigured = withContext(Dispatchers.IO) {
@@ -337,10 +531,13 @@ fun MissMinutesApp(
                 isAuthenticated = true
                 userEmail = session.email.orEmpty()
                 authEmail = session.email.orEmpty()
+            } else {
+                disableWakeListening()
             }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
+            disableWakeListening()
             authMessage = copy.authUnavailable
         } finally {
             isRestoring = false
@@ -393,12 +590,16 @@ fun MissMinutesApp(
     val signOut: () -> Unit = {
         if (!authBusy) {
             authBusy = true
+            disableWakeListening()
             sessionGeneration += 1
             isAuthenticated = false
             userEmail = ""
             authEmail = ""
             authPassword = ""
             messages.clear()
+            ttsProvider.stop()
+            speakingMessageId = null
+            voiceError = null
             draft = ""
             aiHasResponded = false
             chatError = null
@@ -523,26 +724,11 @@ fun MissMinutesApp(
                         messages.add(ChatMessage(nextMessageId, completion.content, false))
                         if (messages.size > 100) messages.removeAt(0)
                         aiHasResponded = true
-                    } catch (_: AiProviderException.MissingApiKey) {
-                        if (requestGeneration == sessionGeneration) {
-                            chatError = when (language) {
-                                AppLanguage.English -> "Add your DeepSeek API key in Settings to start chatting."
-                                AppLanguage.Russian -> "Добавьте ключ DeepSeek в настройках, чтобы начать чат."
-                                AppLanguage.Tajik -> "Барои оғоз кардани чат калиди DeepSeek-ро дар Танзимот ворид кунед."
-                            }
-                        }
-                    } catch (_: AiProviderException.InvalidApiKey) {
-                        if (requestGeneration == sessionGeneration) {
-                            chatError = when (language) {
-                                AppLanguage.English -> "DeepSeek rejected this API key. Update it in Settings."
-                                AppLanguage.Russian -> "DeepSeek отклонил этот ключ. Обновите его в настройках."
-                                AppLanguage.Tajik -> "DeepSeek ин калидро рад кард. Дар Танзимот калиди нав гузоред."
-                            }
-                        }
                     } catch (_: AiProviderException.AuthenticationRequired) {
                         if (requestGeneration != sessionGeneration) return@launch
                         sessionGeneration += 1
                         authBusy = true
+                        disableWakeListening()
                         isAuthenticated = false
                         userEmail = ""
                         authEmail = ""
@@ -579,6 +765,28 @@ fun MissMinutesApp(
                         }
                     }
                 }
+            }
+        }
+    }
+
+
+    val speakMessage: (ChatMessage) -> Unit = { message ->
+        if (!message.isUser) {
+            if (speakingMessageId == message.id) {
+                ttsProvider.stop()
+                speakingMessageId = null
+            } else {
+                ttsProvider.stop()
+                speakingMessageId = message.id
+                voiceError = null
+                ttsProvider.speak(
+                    text = message.text,
+                    onDone = { speakingMessageId = null },
+                    onError = {
+                        speakingMessageId = null
+                        voiceError = copy.voiceFailed
+                    }
+                )
             }
         }
     }
@@ -647,7 +855,14 @@ fun MissMinutesApp(
                                 isSending = isSending,
                                 error = chatError,
                                 onDraftChange = { draft = it },
-                                onSend = submitMessage
+                                onSend = submitMessage,
+                                speakingMessageId = speakingMessageId,
+                                voiceError = voiceError,
+                                voicePreparing = copy.voicePreparing,
+                                onSpeak = speakMessage,
+                                speechListening = speechListening,
+                                speechError = speechError,
+                                onSpeechInput = requestSpeechInput
                             )
                             AppScreen.Dashboard -> DashboardScreen(
                                 copy = copy,
@@ -656,7 +871,8 @@ fun MissMinutesApp(
                                     copy.providerResponding
                                 } else {
                                     copy.providerNotVerified
-                                }
+                                },
+                                voiceStatus = copy.voiceNeedsSetup
                             )
                             AppScreen.History -> HistoryScreen(copy)
                             AppScreen.Settings -> SettingsScreen(
@@ -671,6 +887,10 @@ fun MissMinutesApp(
                                 onApiKeyInputChange = { apiKeyInput = it.take(512) },
                                 onSaveApiKey = saveApiKey,
                                 onClearApiKey = clearApiKey,
+                                wakeEnabled = wakeEnabled,
+                                wakeMessage = wakeMessage,
+                                onEnableWakeListening = enableWakeListening,
+                                onDisableWakeListening = disableWakeListening,
                                 onLanguageChange = { selectedLanguageName = it.name },
                                 onDarkThemeChange = { darkTheme = it },
                                 onSignOut = signOut
@@ -789,7 +1009,14 @@ private fun ChatScreen(
     isSending: Boolean,
     error: String?,
     onDraftChange: (String) -> Unit,
-    onSend: () -> Unit
+    onSend: () -> Unit,
+    speakingMessageId: Long?,
+    voiceError: String?,
+    voicePreparing: String,
+    onSpeak: (ChatMessage) -> Unit,
+    speechListening: Boolean,
+    speechError: String?,
+    onSpeechInput: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -813,8 +1040,20 @@ private fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(messages, key = { it.id }) { message ->
-                MessageBubble(message = message, youLabel = copy.you)
+                MessageBubble(
+                    message = message,
+                    youLabel = copy.you,
+                    speakLabel = if (speakingMessageId == message.id) copy.stopSpeaking else copy.speak,
+                    onSpeak = { onSpeak(message) }
+                )
             }
+        }
+        if (voiceError != null || speechError != null) {
+            Text(voiceError ?: speechError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        } else if (speechListening) {
+            Text(copy.speechListening, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        } else if (speakingMessageId != null) {
+            Text(voicePreparing, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Text(
             text = copy.gatewayNotice,
@@ -842,6 +1081,13 @@ private fun ChatScreen(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { onSend() })
             )
+            TextButton(
+                onClick = onSpeechInput,
+                enabled = !isSending,
+                modifier = Modifier.testTag("speech_input")
+            ) {
+                Text(if (speechListening) copy.stopListening else copy.dictate)
+            }
             Button(
                 onClick = onSend,
                 enabled = draft.isNotBlank() && !isSending,
@@ -854,7 +1100,12 @@ private fun ChatScreen(
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage, youLabel: String) {
+private fun MessageBubble(
+    message: ChatMessage,
+    youLabel: String,
+    speakLabel: String,
+    onSpeak: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -872,6 +1123,11 @@ private fun MessageBubble(message: ChatMessage, youLabel: String) {
                 fontWeight = FontWeight.SemiBold
             )
             Text(text = message.text)
+            if (!message.isUser) {
+                TextButton(onClick = onSpeak, modifier = Modifier.testTag("tts_message")) {
+                    Text(speakLabel)
+                }
+            }
         }
     }
 }
@@ -880,7 +1136,8 @@ private fun MessageBubble(message: ChatMessage, youLabel: String) {
 private fun DashboardScreen(
     copy: UiCopy,
     email: String,
-    aiStatus: String
+    aiStatus: String,
+    voiceStatus: String
 ) {
     Column(
         modifier = Modifier
@@ -892,7 +1149,7 @@ private fun DashboardScreen(
         Text(copy.dashboardBody, color = MaterialTheme.colorScheme.onSurfaceVariant)
         StatusCard(copy.account, email)
         StatusCard(copy.aiProvider, aiStatus)
-        StatusCard(copy.voice, copy.notConnected)
+        StatusCard(copy.voice, voiceStatus)
         StatusCard(copy.memory, copy.notConnected)
         StatusCard(copy.deviceTools, copy.notConnected)
     }
@@ -944,6 +1201,10 @@ private fun SettingsScreen(
     onApiKeyInputChange: (String) -> Unit,
     onSaveApiKey: () -> Unit,
     onClearApiKey: () -> Unit,
+    wakeEnabled: Boolean,
+    wakeMessage: String?,
+    onEnableWakeListening: () -> Unit,
+    onDisableWakeListening: () -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
     onDarkThemeChange: (Boolean) -> Unit,
     onSignOut: () -> Unit
@@ -1044,6 +1305,52 @@ private fun SettingsScreen(
                 if (apiKeyConfigured) {
                     TextButton(onClick = onClearApiKey, enabled = !isBusy) { Text(removeLabel) }
                 }
+            }
+        }
+        val wakeTitle = when (language) {
+            AppLanguage.English -> "Offline wake phrase"
+            AppLanguage.Russian -> "Офлайн-фраза активации"
+            AppLanguage.Tajik -> "Ибораи бедоркунии офлайн"
+        }
+        val wakeDisclosure = when (language) {
+            AppLanguage.English -> "When enabled, Miss Minutes keeps the microphone active through an Android foreground service while this feature is on. Audio is processed only by Android's on-device speech recognizer (Android 13+ with an installed offline English model); there is no cloud fallback or audio upload. If local recognition is unavailable, listening stops. A persistent notification is shown. Android may stop the service because of Force stop, permission changes or system restrictions."
+            AppLanguage.Russian -> "При включении Miss Minutes использует микрофон через фоновую службу Android, пока функция активна. Звук обрабатывается только встроенным офлайн-распознавателем Android (Android 13+ с установленной офлайн-моделью английского языка); облачного резервного режима и отправки аудио нет. Если локальное распознавание недоступно, прослушивание остановится. Постоянное уведомление обязательно. Android может остановить службу при принудительной остановке, отзыве разрешений или системных ограничениях."
+            AppLanguage.Tajik -> "Ҳангоми фаъол будан Miss Minutes микрофонро тавассути хидмати пешзаминаи Android истифода мебарад. Овоз танҳо дар дастгоҳ коркард мешавад (Android 13+ ва модели офлайнии забони англисӣ лозим аст); ба абр фиристода намешавад ва роҳи эҳтиётии онлайн вуҷуд надорад. Агар шинохти маҳаллӣ дастнорас бошад, гӯшкунӣ қатъ мешавад. Огоҳиномаи доимӣ нишон дода мешавад. Android метавонад хидматро ҳангоми Force stop, бекор шудани иҷозат ё маҳдудияти система қатъ кунад."
+        }
+        val wakeStart = when (language) {
+            AppLanguage.English -> "Enable microphone listening"
+            AppLanguage.Russian -> "Включить прослушивание"
+            AppLanguage.Tajik -> "Фаъол кардани гӯшкунии микрофон"
+        }
+        val wakeStop = when (language) {
+            AppLanguage.English -> "Stop listening"
+            AppLanguage.Russian -> "Остановить прослушивание"
+            AppLanguage.Tajik -> "Қатъ кардани гӯшкунӣ"
+        }
+        val wakeState = when (language) {
+            AppLanguage.English -> if (wakeEnabled) "Listening requested" else "Not listening"
+            AppLanguage.Russian -> if (wakeEnabled) "Прослушивание запрошено" else "Не прослушивает"
+            AppLanguage.Tajik -> if (wakeEnabled) "Гӯшкунӣ дархост шудааст" else "Гӯш намекунад"
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(wakeTitle, fontWeight = FontWeight.SemiBold)
+            Text("Miss Minutes", fontWeight = FontWeight.Medium)
+            Text(
+                wakeDisclosure,
+                modifier = Modifier.testTag("wake_phrase_disclosure"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(wakeState, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            if (wakeMessage != null) {
+                Text(wakeMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            Button(
+                onClick = if (wakeEnabled) onDisableWakeListening else onEnableWakeListening,
+                enabled = !isBusy,
+                modifier = Modifier.testTag("wake_phrase_toggle")
+            ) {
+                Text(if (wakeEnabled) wakeStop else wakeStart)
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
