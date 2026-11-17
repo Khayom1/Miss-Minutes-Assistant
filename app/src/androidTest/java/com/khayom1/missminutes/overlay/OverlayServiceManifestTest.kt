@@ -1,5 +1,6 @@
 package com.khayom1.missminutes.overlay
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -34,6 +35,18 @@ class OverlayServiceManifestTest {
                 "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
                 context.packageName
             )
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun overlayPermissionIsDeclaredForSettingsGrantFlow() {
+        val packageInfo = context.packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.GET_PERMISSIONS
+        )
+        assertTrue(
+            packageInfo.requestedPermissions?.contains(Manifest.permission.SYSTEM_ALERT_WINDOW) == true
         )
     }
 
