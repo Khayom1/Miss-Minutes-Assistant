@@ -93,7 +93,7 @@ class AndroidAgentTaskStateStore(
                     .put("pluginId", node.action.request.pluginId)
                     .put("actionId", node.action.request.actionId)
                     .put("arguments", args)
-                    .put("userConfirmed", node.action.request.userConfirmed)
+                    .put("userConfirmed", false)
                     .put("approvalRequired", node.action.approvalRequired)
             )
         }
@@ -106,6 +106,7 @@ class AndroidAgentTaskStateStore(
                     .put("message", node.message ?: JSONObject.NULL)
                     .put("idempotencyKey", node.idempotencyKey)
                     .put("approved", node.approved)
+                    .put("approvedAtMillis", node.approvedAtMillis ?: JSONObject.NULL)
             )
         }
         return JSONObject()
@@ -155,7 +156,7 @@ class AndroidAgentTaskStateStore(
                         pluginId = item.getString("pluginId"),
                         actionId = item.getString("actionId"),
                         arguments = arguments,
-                        userConfirmed = item.getBoolean("userConfirmed")
+                        userConfirmed = false
                     ),
                     approvalRequired = item.getBoolean("approvalRequired")
                 )
@@ -176,7 +177,10 @@ class AndroidAgentTaskStateStore(
                         status = AgentNodeStatus.valueOf(item.getString("status")),
                         message = message,
                         idempotencyKey = item.getString("idempotencyKey"),
-                        approved = item.optBoolean("approved", false)
+                        approved = item.optBoolean("approved", false),
+                        approvedAtMillis = if (item.has("approvedAtMillis") && !item.isNull("approvedAtMillis")) {
+                            item.getLong("approvedAtMillis")
+                        } else null
                     )
                 )
             }
