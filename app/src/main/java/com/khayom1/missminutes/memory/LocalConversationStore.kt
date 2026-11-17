@@ -32,6 +32,10 @@ data class MemoryItem(
     val updatedAt: Long
 )
 
+class ConversationLimitReachedException : IllegalStateException(
+    "This conversation reached its message limit. Start a new conversation to continue."
+)
+
 /**
  * Offline-first local store. Message and memory content is encrypted with
  * Android Keystore AES-256-GCM before insertion; only ciphertext is stored in
@@ -168,6 +172,9 @@ class LocalConversationStore(
                 cipher.decrypt(ownerId, cursor.getString(0)) to cursor.getInt(1)
             }
 
+            if (titleAndCount.second >= MAX_MESSAGES_PER_CONVERSATION) {
+                throw ConversationLimitReachedException()
+            }
             val values = ContentValues().apply {
                 put("conversation_id", conversationId)
                 put("owner_id", ownerId)
@@ -197,16 +204,6 @@ class LocalConversationStore(
                 )
             }
 
-            val excess = (db.rawQuery(
-                "SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND owner_id = ?",
-                arrayOf(conversationId, ownerId)
-            ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }) - MAX_MESSAGES_PER_CONVERSATION
-            if (excess > 0) {
-                db.execSQL(
-                    "DELETE FROM messages WHERE id IN (SELECT id FROM messages WHERE conversation_id = ? AND owner_id = ? ORDER BY id ASC LIMIT ?)",
-                    arrayOf(conversationId, ownerId, excess)
-                )
-            }
             db.setTransactionSuccessful()
             return id
         } finally {
