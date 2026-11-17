@@ -20,7 +20,13 @@
 - No raw audio is uploaded or retained.
 
 ## Known implementation limitation
-The current detector is exact transcript matching over Android's general on-device speech recognizer, not a dedicated acoustic “Miss Minutes” wake-word model. Its accuracy, false activations, false rejections, continuous-listening stability and battery/thermal cost are not accepted until measured on the target physical device. The app must report on-device recognition unavailable rather than using a cloud fallback.
+The current detector uses Android's general on-device speech recognizer and accepts only the primary (best-ranked) final transcript when it normalizes to exactly “Miss Minutes”; it is not a dedicated acoustic wake-word model. Its accuracy, false activations, false rejections, continuous-listening stability and battery/thermal cost are not accepted until measured on the target physical device. The app must report on-device recognition unavailable rather than using a cloud fallback.
+
+## Remaining roadmap work
+
+The current P3 branch contains on-device TTS and the permission-gated wake phrase service. The following P3 roadmap deliverables are not yet implemented in this branch and keep P3 in progress:
+- Speech-to-text input wired into the chat composer behind a provider-neutral interface.
+- Hosted ElevenLabs speech output adapter with its credential held server-side, plus an offline Android fallback policy.
 
 ## Acceptance
 - Unit tests verify exact phrase matching, including rejection of “Hey Miss Minutes”, extra words and near matches.
