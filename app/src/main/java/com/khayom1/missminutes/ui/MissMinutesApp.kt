@@ -425,6 +425,11 @@ fun MissMinutesApp(
             pluginManifestStore.load().forEach(::install)
         }
     }
+    var pluginConsentSnapshot by remember(pluginRegistry) {
+        mutableStateOf(
+            pluginRegistry.installedPlugins().associate { it.id to pluginConsentStore.isGranted(it.id) }
+        )
+    }
     val agentOrchestrator = remember(context) { AgentTaskRuntime.get(context) }
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
@@ -858,6 +863,9 @@ fun MissMinutesApp(
                     if (AndroidDeviceStatusPlugin.PLUGIN_ID in incomingPluginIds) {
                         androidPluginConsent = false
                     }
+                    pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
+                        it.id to pluginConsentStore.isGranted(it.id)
+                    }
                     loadConversation(owner)
                     backupStatus = when {
                         incoming.singleConversation && backupConflictPolicy == RestoreConflictPolicy.REPLACE ->
@@ -881,6 +889,9 @@ fun MissMinutesApp(
                         if (oldChat != null) {
                             conversationStore.restoreAll(owner, oldChat, RestoreConflictPolicy.REPLACE, restoreSettings = false)
                         }
+                    }
+                    pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
+                        it.id to pluginConsentStore.isGranted(it.id)
                     }
                     backupError = error.message ?: "Backup restore failed and changes were rolled back."
                 } finally {
@@ -1617,11 +1628,10 @@ fun MissMinutesApp(
                                 pluginManifests = pluginRegistry.installedPlugins().filter {
                                     it.id != AndroidDeviceStatusPlugin.PLUGIN_ID
                                 },
-                                pluginConsentStates = pluginRegistry.installedPlugins().associate {
-                                    it.id to pluginConsentStore.isGranted(it.id)
-                                },
+                                pluginConsentStates = pluginConsentSnapshot,
                                 onPluginConsentChange = { pluginId, granted ->
                                     pluginConsentStore.setGranted(pluginId, granted)
+                                    pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to granted)
                                 },
                                 onExportPlugin = exportSelectedPlugin,
                                 onCreateBackup = createEncryptedBackup,
