@@ -1,42 +1,28 @@
-# P2 Acceptance Evidence
+# P2 Acceptance — Direct BYOK Inference
 
-## Result
+P2 is the direct, user-owned AI provider path. Account authentication, backend proxying, and server-side inference functions are not part of the product.
 
-P2 implementation and automated CI gates passed and the code was merged to `main` through PR #10. **P2 acceptance remains in progress** because the required live DeepSeek request with a real user-owned key has not been performed.
+## Product contract
 
-- PR: https://github.com/Khayom1/Miss-Minutes-Assistant/pull/10
-- Tested head: `80619230db5259ab159c6ca66c61de14523482ce`
-- Merge commit: `42a36b13abd572ddab1df8b31f224aa76efdf0af`
-- CI run: https://github.com/Khayom1/Miss-Minutes-Assistant/actions/runs/44016203449
-- CI result: success
+- The user explicitly configures a personal DeepSeek API key in Settings.
+- The key is encrypted at rest with Android Keystore-backed storage.
+- The app sends inference requests directly to the official DeepSeek HTTPS endpoint.
+- The key is not embedded in the APK, source control, CI, app logs, backups, or any shared server secret.
+- No request is routed through a Miss Minutes backend or account service.
+- If no key is configured, remote inference reports a clear missing-key state.
+- An optional local provider is usable only when a supported runtime and model are actually installed.
 
-## Verified CI steps
+## Automated acceptance
 
-- Gitleaks tracked-tree scan
-- Supabase Edge Function regression tests
-- JVM unit tests
-- Debug APK assembly
-- Android lint
-- API 35 instrumentation tests
-- Debug APK artifact upload
+- Request validation bounds message count, text length, output tokens, and response size.
+- Direct provider tests cover authorization headers, status mapping, response parsing, and malformed responses.
+- Local provider tests prove that an unavailable runtime does not fabricate a response.
+- No account/session state is required to open the local workspace.
 
-## Artifact
+## Not yet accepted
 
-- Name: `miss-minutes-foundation-debug`
-- SHA-256: `82a86bc02cd9d3bbbea79e722006f3075a4154f26c60f1d5d11887d9f6e927ef`
-- Artifact retention ended: 2026-12-01
-
-## Legacy authenticated-gateway experiment
-
-The earlier server-side authenticated gateway work in PRs #6 and #7 was not merged and is superseded by the approved direct BYOK architecture. Its CI covered Deno unit tests and an unauthenticated request rejected with HTTP 401; there is no evidence of an authenticated live DeepSeek invocation. The current P2 path does not use that gateway.
-
-## Scope and limitations
-
-- DeepSeek inference uses the user's own API key, encrypted locally with AES-256-GCM and Android Keystore.
-- The API key is sent directly to the official DeepSeek HTTPS endpoint; it is not bundled in the APK or sent to Supabase.
-- Supabase authentication remains separate from DeepSeek inference.
-- Automated tests verify the direct provider contract and encrypted storage.
-- A live DeepSeek request with a real user-supplied key has **not** been performed or claimed.
-- Physical Samsung Galaxy A35 5G / Android 17 testing has **not** been performed or claimed.
-
-The automated P2 implementation gate is accepted. Final provider acceptance remains pending until a real DeepSeek response is recorded from the app with a valid user-supplied key at the P8 handoff. Physical Samsung testing is not claimed.
+- A live DeepSeek request with a real user-supplied key has not been performed or claimed.
+- No local inference backend/model is bundled or target-device verified.
+- Fast, Standard, Max, Extra, and Auto profiles still need distinct runtime implementations and tests.
+- Model tool-schema injection and end-to-end plugin dispatch remain a separate release gate.
+- Production Release signing and physical-device acceptance remain open.

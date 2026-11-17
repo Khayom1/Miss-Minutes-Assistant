@@ -1,15 +1,16 @@
-# P0 Risk Register
+# Risk Register — Offline-First Release
 
-| ID | Risk | Severity | Mitigation / gate |
+| ID | Risk | Severity | Mitigation / evidence required |
 |---|---|---:|---|
-| R-01 | Android does not allow unrestricted third-party UI automation | Critical | Native APIs, AppFunctions, official APIs; explicit user-directed narrow automation |
-| R-02 | Google Play limits AccessibilityService automation for general assistants | Critical | Do not use it as autonomous agent control; policy review before any use |
-| R-03 | Provider keys extracted from APK | Critical | Server-side provider proxy and secret storage only |
-| R-04 | Model prompt injection invokes unsafe tools | Critical | External policy engine, schemas, allowlists, confirmation |
-| R-05 | Local LLM exceeds A35 memory/thermal budget | High | Small quantized model, runtime budget, optional fallback |
-| R-06 | Hosted voice incurs cost or network latency | Medium | Hybrid voice, quotas, offline fallback |
-| R-07 | Background work restricted by Android lifecycle/battery policy | High | WorkManager/foreground service only for eligible work, visible status |
-| R-08 | Cloud memory privacy/sync conflicts | High | Encryption, user controls, conflict strategy, audit |
-| R-09 | Plugin supply-chain compromise | Critical | Signed/verified manifests, sandbox, least privilege, revocation |
-| R-10 | CI emulator environment differs from Samsung device | High | Keep emulator and physical-device gates distinct |
-| R-11 | API/provider behavior changes | Medium | Versioned adapters, contract tests, provider fallback |
+| R-01 | User BYOK key is exposed on a compromised device | High | Android Keystore-backed encryption, no logs/backups, direct HTTPS only, user revocation |
+| R-02 | Android Doze, process death, or Force Stop interrupts background work | High | WorkManager/foreground service within platform limits; visible notification; no always-on promise |
+| R-03 | AI provider is unavailable or key is invalid | Medium | Typed errors, cancellable requests, honest offline/local availability |
+| R-04 | Plugin or device action exceeds user consent | High | Default deny, compiled allowlist, runtime access checks, explicit write confirmation, audit log |
+| R-05 | Local conversation or memory data is lost | Medium | Encrypted persistence, export/restore, retention controls, restore conflict tests |
+| R-06 | Installed Android speech language is missing or network-only | Medium | Inspect installed voice properties; reject network-required voices; report unsupported languages |
+| R-07 | Model prompt injection attempts tool misuse | High | Connected catalog only, strict JSON schema, typed dispatcher, bounded tool rounds/calls |
+| R-08 | Release artifact is unsigned or signed with an uncontrolled key | High | Owner-controlled keystore, certificate fingerprint verification, repeatable signing procedure |
+| R-09 | Local model runtime is absent on the target phone | Medium | Do not claim local inference; report unavailable until an installed supported runtime is tested |
+| R-10 | CI emulator infrastructure is unstable | Medium | Pin emulator packages, preserve logs, rerun only infrastructure failures; never mark a failed check green |
+| R-11 | Language behavior differs on a physical Samsung device | Medium | Physical-device Tajik/Russian/English acceptance; emulator results are not sufficient |
+| R-12 | Plugin metadata is malicious or malformed | High | Schema validation, size limits, no executable payloads, no dynamic code loading |

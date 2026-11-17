@@ -1,55 +1,34 @@
-# Miss Minutes — Target Architecture
+# Architecture
 
-Status: approved product direction; implementation staged by P0–P8.
+Miss Minutes is a standalone, offline-first Android assistant with a lightweight Compose interface and a user-controlled floating launcher. It is not a 3D character and does not require an account, backend, cloud sync, or hosted voice provider.
 
-## Product definition
+## Product constraints
 
-Miss Minutes is an Android-first personal AI application with a ChatGPT-like conversation surface and a separate control dashboard. It is not a 3D character or avatar. Its core capabilities are intended to include hybrid AI, natural voice, persistent hybrid memory, permissioned Android control, extensible plugins/skills, and multi-step agents.
+- The app opens directly into a local guest workspace.
+- Optional network inference is direct DeepSeek BYOK over HTTPS. No shared provider key or application proxy is used.
+- Local inference is available only when a supported runtime and model are actually installed. The current adapter seam reports unavailable when they are absent.
+- Speech output uses Android TextToSpeech with installed offline voices. Speech recognition uses an on-device recognizer when supported; no cloud fallback is permitted.
+- Conversations and user-authored memory are encrypted and stored locally. No remote memory synchronization exists.
+- Plugins are local declarative manifests paired with compiled allowlisted handlers. No executable plugin payloads are loaded.
 
-## Approved decisions
+## Runtime components
 
-- AI: hybrid — remote DeepSeek provider plus an optional small local model.
-- Voice: hybrid — hosted neural speech plus offline speech recognition/synthesis.
-- Android control: maximum lawful and platform-permitted capabilities, using narrow native APIs and explicit permissions.
-- Memory: hybrid — local database plus user-controlled cloud persistence and retrieval.
-- Interface: both a conversational chat and a control/dashboard workspace.
-- Product languages: Tajik, Russian, and English.
-- Android baseline: minSdk 26, compileSdk 36, targetSdk 36, Java 17, Kotlin 2.2.21, AGP 8.13.2.
+1. **Compose UI:** chat, history, settings, memory controls, language selection, voice controls, backup/restore, and overlay controls.
+2. **AI provider layer:** direct user-owned DeepSeek BYOK and an optional local-inference adapter seam.
+3. **Local persistence:** encrypted conversations and memory, local preferences, app-private plugin metadata, and bounded audit records.
+4. **Android adapters:** typed, allowlisted device actions with runtime permission checks and user-visible controls.
+5. **Plugin registry:** local manifest/consent/revocation lifecycle with compiled handler validation. Provider tool-schema injection and end-to-end model dispatch remain a separate implementation gate.
+6. **Agent runtime:** bounded task state and WorkManager scheduling within Android lifecycle limits.
+7. **Floating launcher:** a user-started overlay shortcut that opens the Activity; it does not listen or execute actions by itself.
 
-## Runtime boundaries
+## Security boundaries
 
-1. Android client: presentation, local encrypted preferences, local database, audio capture/playback, permission UX, and native platform integrations.
-2. Backend: authenticated API gateway, provider proxy, memory synchronization, plugin metadata, agent job orchestration, audit events, and usage controls.
-3. AI providers: interchangeable adapters behind a provider-neutral interface. For the selected direct DeepSeek mode, each user supplies their own API key; it is encrypted at rest with Android Keystore and sent only to DeepSeek over HTTPS. No shared developer key is distributed. A server-proxy mode, if added later, must keep its credential server-side.
-4. Local inference: optional on-device model adapter with strict memory/thermal/battery budgets and a deterministic fallback when unavailable.
-5. Plugin runtime: capability-based tools with explicit manifests, schemas, user-granted permissions, execution limits, and audit logs. Arbitrary third-party code is not loaded into the Android app process.
-6. Memory: local SQLite for offline continuity; cloud PostgreSQL for synchronization; vector retrieval is an enhancement, not the only source of truth.
+- The user-owned API key is encrypted with Android Keystore-backed storage and is never logged or included in backups.
+- Android app backup is disabled. Explicit encrypted exports also exclude API keys, plugin grants, OS permissions, and credentials.
+- Unknown plugin actions, arguments, permissions, or handlers fail closed.
+- Consequential writes remain blocked unless a separate explicit confirmation path is implemented.
+- No arbitrary Kotlin, DEX, JavaScript, shell, reflection, or unrestricted intent execution is allowed.
 
-## Request lifecycle
+## Current release gaps
 
-User input → intent classification → policy and permission check → planner → selected model → tool registry → user confirmation when required → execution adapter → result validation → memory policy → response stream → audit event.
-
-Model output is untrusted input. It never directly executes arbitrary shell, SQL, Android intents, plugin code, or financial actions.
-
-## Android control strategy
-
-Prefer, in order:
-- documented Android APIs and system intents;
-- Android AppFunctions where available and compatible;
-- official app/provider APIs and OAuth integrations;
-- user-triggered, deterministic accessibility interactions only where permitted by platform and store policy.
-
-A general-purpose AI agent must not rely on AccessibilityService as an unrestricted autonomous UI-control channel. Google Play policy restricts autonomous planning and execution through AccessibilityService for general assistants. The implementation must use explicit disclosure/consent and narrower APIs wherever possible.
-
-AppFunctions are an emerging Android integration surface and must be treated as experimental/device-dependent until verified on the target device and public API release.
-
-## Non-goals for the clean foundation
-
-- 3D avatar, GLB/GLTF assets, SceneView, skeletal animation, lip sync.
-- Root access or bypassing Android security boundaries.
-- Embedding a shared provider API key in APK resources, BuildConfig, source control, or a distributed APK. User-owned keys may be stored locally only as Android Keystore-encrypted ciphertext; this protects data at rest, not against a compromised device or a process inspecting plaintext at runtime.
-- Claiming unlimited context, unlimited memory, unrestricted Android control, or autonomous background execution without tested platform support.
-
-## Quality attributes
-
-Security and user control take precedence over breadth. All network operations are bounded and cancellable. Background work is durable only where Android scheduling permits it. Every external action is typed, permission checked, observable, and testable. The UI must remain useful if cloud AI, local inference, voice, or plugin services are unavailable.
+Distinct Fast/Standard/Max/Extra/Auto runtime profiles, a bundled local inference runtime, end-to-end model tool schemas/dispatch, plugin import and missing-permission UX, real-device acceptance, owner-controlled signing, and a signed Release APK remain open.
