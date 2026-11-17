@@ -7,6 +7,22 @@ import android.speech.tts.Voice
 import java.util.Locale
 import java.util.UUID
 
+internal data class TtsVoiceCandidate(
+    val name: String,
+    val languageTag: String,
+    val quality: Int,
+    val requiresNetwork: Boolean
+)
+
+internal fun selectBestOfflineTtsVoice(
+    candidates: List<TtsVoiceCandidate>,
+    preferredLocale: Locale
+): TtsVoiceCandidate? = candidates
+    .asSequence()
+    .filter { !it.requiresNetwork }
+    .filter { Locale.forLanguageTag(it.languageTag).language == preferredLocale.language }
+    .maxByOrNull { it.quality }
+
 /** On-device speech synthesis. No network, API key, account session or audio upload. */
 interface TtsProvider {
     fun speak(text: String, onDone: () -> Unit, onError: () -> Unit)
@@ -32,19 +48,33 @@ class AndroidTtsProvider(
                 ready = false
                 return@TextToSpeech
             }
-            val requested = tts.isLanguageAvailable(locale)
-            val fallback = if (requested >= TextToSpeech.LANG_AVAILABLE) locale else Locale.getDefault()
-            val result = tts.setLanguage(fallback)
-            if (result >= TextToSpeech.LANG_AVAILABLE) {
-                // Prefer an installed offline voice and the highest available quality.
-                val voice = tts.voices
-                    ?.filter { it.locale.language == fallback.language && !it.isNetworkConnectionRequired }
-                    ?.maxByOrNull { it.quality }
-                if (voice != null) tts.voice = voice
+            val installedVoices = tts.voices.orEmpty()
+            val candidates = installedVoices.map { voice ->
+                TtsVoiceCandidate(
+                    name = voice.name,
+                    languageTag = voice.locale.toLanguageTag(),
+                    quality = voice.quality,
+                    requiresNetwork = voice.isNetworkConnectionRequired
+                )
+            }
+            val selectedCandidate = selectBestOfflineTtsVoice(candidates, locale)
+                ?: if (locale != Locale.getDefault()) {
+                    selectBestOfflineTtsVoice(candidates, Locale.getDefault())
+                } else {
+                    null
+                }
+            val selectedVoice = selectedCandidate?.let { candidate ->
+                installedVoices.firstOrNull { it.name == candidate.name }
+            }
+            if (selectedVoice != null &&
+                tts.setLanguage(selectedVoice.locale) >= TextToSpeech.LANG_AVAILABLE
+            ) {
+                tts.voice = selectedVoice
                 tts.setSpeechRate(0.96f)
                 tts.setPitch(0.98f)
                 ready = true
             } else {
+                // Never silently fall back to a network-required system voice.
                 ready = false
             }
         }.also { created ->
