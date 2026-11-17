@@ -1,33 +1,26 @@
-# P0 Test Strategy
+# Test Strategy — Offline-First Android
 
-## Continuous integration
+## Automated CI gates
 
-Every push and pull request to main must run:
-- JDK 17 setup.
-- Android SDK platform/build tools installation.
-- Gradle 8.13 configuration.
-- Kotlin/Android compilation.
-- Unit tests.
-- Debug APK assembly.
-- Android Lint with errors treated as failures.
+- JVM unit tests for provider request/response validation, BYOK storage, local inference availability, memory encryption, plugin lifecycle, tool schemas, argument parsing, confirmation gates, audit behavior, and bounded agent execution.
+- Android instrumentation tests for manifest contracts, local persistence, Keystore-backed stores, Android permission checks, TTS lifecycle, overlay permission gates, and process/lifecycle behavior where the emulator supports it.
+- Android lint, debug build, release build, dependency resolution/reporting, secret scanning, and artifact checksum generation.
+- No Deno or Supabase Edge Function tests: the product has no backend functions.
 
-## Test layers
+## Plugin security tests
 
-- Unit: identity/configuration, provider routing, memory policy, permission policy, plugin manifest validation, planner and tool schemas.
-- Integration: backend authentication, provider proxy, memory synchronization, retries, idempotency, and plugin execution boundaries.
-- Android instrumentation: lifecycle, permission state, audio routing, background constraints, AppFunctions availability, and target-device compatibility.
-- Security: secret scanning, prompt-injection tool-boundary tests, unauthorized tool rejection, plugin capability escalation, and sensitive-log redaction.
-- Device: Samsung Galaxy A35 5G, Android 17, real network transitions, battery/thermal behavior, microphone, audio interruption, and accessibility-policy behavior.
+- Unconnected tools are not supplied to the model.
+- Only tool names from the current connected catalog can execute.
+- Unknown fields, non-primitive values, wrong types, oversized JSON, and malformed JSON are rejected.
+- Runtime permission and credential checks occur immediately before execution.
+- Consequential actions fail closed without explicit confirmation.
+- Audit entries contain action metadata only, never raw arguments or credentials.
+- No arbitrary code, reflection, shell, or unapproved Android intent path exists.
 
-## P0 baseline checks
+## Release acceptance
 
-- `gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug`
-- Verify no legacy model assets or SceneView dependency.
-- Verify manifest requests only permissions needed by the foundation.
-- Verify cleartext traffic and Android backup are disabled.
-- Verify no provider secrets or production credentials are present.
-- Upload the debug APK as a CI artifact.
-
-## Evidence
-
-A passing unit-test/build/lint job is not equivalent to a passing emulator or physical-device test. Record each result separately. A missing or cancelled test is not a pass.
+- Run JVM tests, lint, debug/release builds, dependency/security checks, and API 35 instrumentation on the exact PR head.
+- Verify package name, version, APK existence, signing certificate, and SHA-256.
+- A successful emulator run is not a physical-device test.
+- Physical Samsung Galaxy A35 / Android 17 tests must verify installation, offline launch, guest chat, encrypted history, TTS language availability, microphone behavior, overlay permission UX, background limits, battery/thermal behavior, and BYOK only after the user supplies a valid key.
+- Production signing requires an owner-controlled keystore. Never generate or publish a substitute signing identity and describe it as the owner's production signature.
