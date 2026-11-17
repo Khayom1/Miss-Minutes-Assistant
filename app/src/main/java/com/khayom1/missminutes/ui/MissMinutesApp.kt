@@ -1820,11 +1820,30 @@ private fun SettingsScreen(
         var deviceToolMessage by remember { mutableStateOf<String?>(null) }
         var shareTextDraft by rememberSaveable { mutableStateOf("") }
         fun pluginResultText(result: PluginExecutionResult): String {
-            val capability = when (result.capability) {
-                PluginCapability.DEVICE_INFORMATION -> DeviceToolCapability.DEVICE_INFO
-                PluginCapability.BATTERY_STATUS -> DeviceToolCapability.BATTERY_STATUS
+            if (!result.success) {
+                return when (language) {
+                    AppLanguage.Tajik -> "Плагин иҷозат нагирифт ё амалро иҷро накард."
+                    AppLanguage.Russian -> "Плагин не получил разрешение или не выполнил действие."
+                    AppLanguage.English -> "Plugin permission was denied or the action failed."
+                }
             }
-            return deviceResultText(DeviceToolResult(result.success, result.message, capability))
+            return when (result.capability) {
+                PluginCapability.DEVICE_INFORMATION -> when (language) {
+                    AppLanguage.Tajik -> "Дастгоҳ: ${result.message}"
+                    AppLanguage.Russian -> "Устройство: ${result.message}"
+                    AppLanguage.English -> "Device: ${result.message}"
+                }
+                PluginCapability.BATTERY_STATUS -> when {
+                    result.message == "unavailable" -> when (language) {
+                        AppLanguage.Tajik -> "Сатҳи батарея дастрас нест."
+                        AppLanguage.Russian -> "Уровень батареи недоступен."
+                        AppLanguage.English -> "Battery level is unavailable."
+                    }
+                    language == AppLanguage.Tajik -> "Батарея: ${result.message}"
+                    language == AppLanguage.Russian -> "Батарея: ${result.message}"
+                    else -> "Battery: ${result.message}"
+                }
+            }
         }
         fun deviceResultText(result: DeviceToolResult): String {
             if (!result.success) {
