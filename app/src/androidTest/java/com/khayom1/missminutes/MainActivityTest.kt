@@ -210,7 +210,7 @@ class MainActivityTest {
         }
 
         composeRule.onNodeWithText("Check the authenticated chat").assertIsDisplayed()
-        composeRule.onNodeWithText("Mock AI response").assertIsDisplayed()
+        composeRule.onNodeWithText("Mock AI response").performScrollTo().assertIsDisplayed()
         assertEquals(
             AiMessage(
                 com.khayom1.missminutes.ai.AiRole.USER,
