@@ -42,8 +42,37 @@ class PluginRegistry(
         return true
     }
 
+    /**
+     * Revocation is a security-reducing operation and remains available even if
+     * the plugin is currently absent from the in-memory registry.
+     */
     @Synchronized
-    fun uninstall(pluginId: String): Boolean = manifests.remove(pluginId) != null
+    fun revokeConsent(pluginId: String): Boolean {
+        if (!PLUGIN_ID.matches(pluginId)) return false
+        val mutableStore = consentStore as? MutablePluginConsentStore ?: return false
+        return try {
+            mutableStore.setGranted(pluginId, false)
+            record(PluginAuditEntry(clockMillis(), pluginId, "consent", "consent_revoked"))
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Removes the manifest only after the persisted grant has been revoked. */
+    @Synchronized
+    fun uninstall(pluginId: String): Boolean {
+        if (!manifests.containsKey(pluginId)) return false
+        val mutableStore = consentStore as? MutablePluginConsentStore ?: return false
+        return try {
+            mutableStore.setGranted(pluginId, false)
+            manifests.remove(pluginId)
+            record(PluginAuditEntry(clockMillis(), pluginId, "uninstall", "uninstalled"))
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     @Synchronized
     fun installedPlugins(): List<PluginManifest> = manifests.values.toList()

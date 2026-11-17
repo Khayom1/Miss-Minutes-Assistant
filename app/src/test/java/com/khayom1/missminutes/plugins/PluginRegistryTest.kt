@@ -222,6 +222,74 @@ class PluginRegistryTest {
         assertFalse(slow.execute(PluginExecutionRequest("test_plugin", "read_info", mapOf("locale" to PluginValue.Text("en")))).success)
     }
 
+    @Test
+    fun revokingConsentImmediatelyBlocksFurtherExecutionAndWritesAudit() {
+        var currentGrant = true
+        val events = mutableListOf<PluginAuditEntry>()
+        val consent = object : MutablePluginConsentStore {
+            override fun isGranted(pluginId: String) = currentGrant
+            override fun setGranted(pluginId: String, granted: Boolean) {
+                currentGrant = granted
+            }
+        }
+        var calls = 0
+        val registry = PluginRegistry(
+            handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
+            consentStore = consent,
+            auditLog = PluginAuditLog { events += it }
+        )
+        registry.install(manifest)
+        assertTrue(registry.execute(
+            PluginExecutionRequest("test_plugin", "read_info", mapOf("locale" to PluginValue.Text("en")))
+        ).success)
+
+        assertTrue(registry.revokeConsent("test_plugin"))
+        assertFalse(consent.isGranted("test_plugin"))
+        assertFalse(registry.execute(
+            PluginExecutionRequest("test_plugin", "read_info", mapOf("locale" to PluginValue.Text("en")))
+        ).success)
+        assertTrue(events.any { it.actionId == "consent" && it.outcome == "consent_revoked" })
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun uninstallRevokesPersistedConsentBeforeRemovingManifestAndAuditsLifecycle() {
+        var currentGrant = true
+        val events = mutableListOf<PluginAuditEntry>()
+        val consent = object : MutablePluginConsentStore {
+            override fun isGranted(pluginId: String) = currentGrant
+            override fun setGranted(pluginId: String, grantedValue: Boolean) {
+                granted = grantedValue
+            }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(handler { PluginActionOutput(true, "ok") }),
+            consentStore = consent,
+            auditLog = PluginAuditLog { events += it }
+        )
+        registry.install(manifest)
+        assertTrue(registry.uninstall("test_plugin"))
+        assertFalse(consent.isGranted("test_plugin"))
+        assertTrue(registry.installedPlugins().isEmpty())
+        assertFalse(registry.execute(
+            PluginExecutionRequest("test_plugin", "read_info", mapOf("locale" to PluginValue.Text("en")))
+        ).success)
+        assertEquals("uninstalled", events.last().outcome)
+        assertFalse(registry.uninstall("test_plugin"))
+    }
+
+    @Test
+    fun uninstallFailsClosedWhenConsentStoreCannotDurablyRevoke() {
+        val registry = PluginRegistry(
+            handlers = listOf(handler { PluginActionOutput(true, "ok") }),
+            consentStore = PluginConsentStore { true },
+            auditLog = PluginAuditLog {}
+        )
+        registry.install(manifest)
+        assertFalse(registry.uninstall("test_plugin"))
+        assertEquals(listOf(manifest), registry.installedPlugins())
+    }
+
     private fun registry(consented: Boolean, action: () -> PluginActionOutput) = PluginRegistry(
         handlers = listOf(handler(action)),
         consentStore = PluginConsentStore { consented },

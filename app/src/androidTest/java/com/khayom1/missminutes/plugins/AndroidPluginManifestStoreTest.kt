@@ -46,6 +46,15 @@ class AndroidPluginManifestStoreTest {
     }
 
     @Test
+    fun removeDeletesOnlyTheSelectedPersistedManifest() {
+        val store = AndroidPluginManifestStore(context)
+        store.replace(listOf(AndroidDeviceStatusPlugin.manifest()))
+        assertEquals(true, store.remove(AndroidDeviceStatusPlugin.PLUGIN_ID))
+        assertEquals(emptyList<PluginManifest>(), store.load())
+        assertEquals(false, store.remove(AndroidDeviceStatusPlugin.PLUGIN_ID))
+    }
+
+    @Test
     fun corruptStoredManifestArchiveFailsClosedToEmptyRegistryInput() {
         context.getSharedPreferences("plugin_manifest_store", Context.MODE_PRIVATE)
             .edit().putString("declarative_manifests_v1", """{"schemaVersion":999,"plugins":[]}""").commit()

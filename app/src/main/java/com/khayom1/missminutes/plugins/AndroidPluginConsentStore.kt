@@ -3,7 +3,7 @@ package com.khayom1.missminutes.plugins
 import android.content.Context
 
 /** Plugin grants are per-plugin, disabled by default, and stored locally only. */
-class AndroidPluginConsentStore(context: Context) : PluginConsentStore {
+class AndroidPluginConsentStore(context: Context) : MutablePluginConsentStore {
     private val preferences = context.applicationContext.getSharedPreferences(
         "plugin_user_consent",
         Context.MODE_PRIVATE
@@ -12,13 +12,17 @@ class AndroidPluginConsentStore(context: Context) : PluginConsentStore {
     override fun isGranted(pluginId: String): Boolean =
         isValidPluginId(pluginId) && preferences.getBoolean(pluginId, false)
 
-    fun setGranted(pluginId: String, granted: Boolean) {
+    override fun setGranted(pluginId: String, granted: Boolean) {
         require(isValidPluginId(pluginId)) { "Invalid plugin id." }
-        preferences.edit().putBoolean(pluginId, granted).apply()
+        check(preferences.edit().putBoolean(pluginId, granted).commit()) {
+            "Plugin consent could not be persisted."
+        }
     }
 
     fun revokeAll() {
-        preferences.edit().clear().apply()
+        check(preferences.edit().clear().commit()) {
+            "Plugin consent could not be cleared."
+        }
     }
 
     private fun isValidPluginId(pluginId: String): Boolean =
