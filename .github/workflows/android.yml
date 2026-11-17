@@ -66,7 +66,7 @@ jobs:
       - name: Record resolved Android runtime dependencies
         run: |
           mkdir -p app/build/release-evidence
-          gradle --no-daemon dependencies --configuration debugRuntimeClasspath > app/build/release-evidence/debug-runtime-dependencies.txt
+          gradle --no-daemon -p app dependencies --configuration debugRuntimeClasspath > app/build/release-evidence/debug-runtime-dependencies.txt
 
       - name: Enable KVM
         run: |
