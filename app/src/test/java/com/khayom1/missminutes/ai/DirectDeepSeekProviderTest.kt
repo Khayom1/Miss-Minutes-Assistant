@@ -59,12 +59,12 @@ class DirectDeepSeekProviderTest {
     }
 
     @Test
-    fun mapsInvalidDeepSeekKeyToAuthenticationError() = runBlocking {
+    fun mapsInvalidDeepSeekKeyToTypedInvalidKeyError() = runBlocking {
         val transport = FakeTransport(AiHttpResponse(401, """{"error":"invalid key"}"""))
         val error = runCatching {
             DirectDeepSeekProvider(DeepSeekApiKeySource { "sk-invalid-test-key-123456" }, transport).complete(request)
         }.exceptionOrNull()
-        assertTrue(error is AiProviderException.AuthenticationRequired)
+        assertTrue(error is AiProviderException.InvalidApiKey)
         assertFalse(error?.message.orEmpty().contains("invalid key"))
     }
 
