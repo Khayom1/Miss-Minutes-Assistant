@@ -3,11 +3,13 @@ package com.khayom1.missminutes
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
+import android.Manifest
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -194,6 +196,11 @@ class MainActivityTest {
 
     @Test
     fun chatExposesUserInitiatedOfflineDictationControl() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
+            context.packageName,
+            Manifest.permission.RECORD_AUDIO
+        )
         signIn()
         composeRule.onNodeWithTag("speech_input").assertIsDisplayed()
         composeRule.onNodeWithText("Dictate").performClick()
@@ -256,7 +263,7 @@ class MainActivityTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         WakeWordServiceState.setEnabled(context, true)
         composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("Sign out").performClick()
+        composeRule.onNodeWithText("Sign out").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             !WakeWordServiceState.isEnabled(context) &&
                 composeRule.onAllNodesWithText("Sign in to Miss Minutes")
@@ -313,8 +320,8 @@ class MainActivityTest {
 
         composeRule.onNodeWithTag("wake_phrase_disclosure").assertIsDisplayed()
         composeRule.onNodeWithText("Offline wake phrase").assertIsDisplayed()
+        composeRule.onNodeWithTag("wake_phrase_toggle").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Enable microphone listening").assertIsDisplayed()
-        composeRule.onNodeWithTag("wake_phrase_toggle").assertIsDisplayed()
     }
 
     @Test
