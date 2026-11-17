@@ -17,7 +17,8 @@ object BackupPayloadAdapters {
     data class RestoredPayloads(
         val conversationExportJson: String?,
         val settings: SettingsBackupAdapter.Settings?,
-        val pluginManifests: List<PluginManifest>?
+        val pluginManifests: List<PluginManifest>?,
+        val singleConversation: Boolean = false
     )
 
     fun encode(
@@ -31,9 +32,16 @@ object BackupPayloadAdapters {
         val result = linkedMapOf<BackupArchive.Category, JsonObject>()
         if (BackupArchive.Category.CHAT_HISTORY in selected) {
             val raw = requireNotNull(conversationExportJson) { "Conversation data is unavailable." }
+            val source = Json.parseToJsonElement(raw).jsonObject
+            val singleConversation = "conversation" in source
             val chat = normalizeConversationPayload(raw, conversationRetentionDays)
             validateConversationPayload(chat)
-            result[BackupArchive.Category.CHAT_HISTORY] = chat
+            result[BackupArchive.Category.CHAT_HISTORY] = if (singleConversation) {
+                kotlinx.serialization.json.buildJsonObject {
+                    put("payloadType", "selectedConversation")
+                    put("data", chat)
+                }
+            } else chat
         }
         if (BackupArchive.Category.APP_SETTINGS in selected) {
             result[BackupArchive.Category.APP_SETTINGS] = SettingsBackupAdapter.encode(
@@ -47,7 +55,17 @@ object BackupPayloadAdapters {
     }
 
     fun decode(decoded: BackupArchive.Decoded): RestoredPayloads {
-        val chat = decoded.payloads[BackupArchive.Category.CHAT_HISTORY]
+        val rawChat = decoded.payloads[BackupArchive.Category.CHAT_HISTORY]
+        val singleConversation = rawChat?.get("payloadType")?.jsonPrimitive?.content == "selectedConversation"
+        if (singleConversation) {
+            require(rawChat?.keys == setOf("payloadType", "data")) {
+                "Selected conversation archive wrapper is invalid."
+            }
+        }
+        val chat = if (singleConversation) {
+            rawChat?.get("data")?.jsonObject
+                ?: throw IllegalArgumentException("Selected conversation data is missing.")
+        } else rawChat
         chat?.let(::validateConversationPayload)
         val settings = decoded.payloads[BackupArchive.Category.APP_SETTINGS]?.let(
             SettingsBackupAdapter::decode
@@ -58,7 +76,7 @@ object BackupPayloadAdapters {
         require(decoded.preview.categories == decoded.payloads.keys) {
             "Backup preview does not match its decoded categories."
         }
-        return RestoredPayloads(chat?.toString(), settings, plugins)
+        return RestoredPayloads(chat?.toString(), settings, plugins, singleConversation)
     }
 
     private fun normalizeConversationPayload(raw: String, retentionDays: Int): JsonObject {
