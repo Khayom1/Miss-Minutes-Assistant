@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -38,6 +39,8 @@ internal fun BackupRestorePanel(
     onConfirmRestore: () -> Unit,
     onDismissPreview: () -> Unit,
     pluginManifests: List<PluginManifest>,
+    pluginConsentStates: Map<String, Boolean>,
+    onPluginConsentChange: (String, Boolean) -> Unit,
     onExportPlugin: (String) -> Unit
 ) {
     val isTajik = language == AppLanguage.Tajik
@@ -86,6 +89,10 @@ internal fun BackupRestorePanel(
             pluginManifests.forEach { manifest ->
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(manifest.displayName, modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = pluginConsentStates[manifest.id] == true,
+                        onCheckedChange = { onPluginConsentChange(manifest.id, it) }
+                    )
                     TextButton(
                         enabled = !busy && password.length >= 10,
                         onClick = { onExportPlugin(manifest.id) }
