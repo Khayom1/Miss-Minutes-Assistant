@@ -36,6 +36,10 @@ class AndroidPlatformPolicyTest {
         val permissions = packageInfo().requestedPermissions.orEmpty().toSet()
 
         assertTrue("android.permission.INTERNET" in permissions)
+        assertTrue("android.permission.RECORD_AUDIO" in permissions)
+        assertTrue("android.permission.POST_NOTIFICATIONS" in permissions)
+        assertTrue("android.permission.FOREGROUND_SERVICE_MICROPHONE" in permissions)
+        assertTrue("android.permission.FOREGROUND_SERVICE_SPECIAL_USE" in permissions)
         assertFalse("android.permission.ACCESS_LOCAL_NETWORK" in permissions)
     }
 
