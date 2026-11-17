@@ -1,16 +1,16 @@
 package com.khayom1.missminutes.plugins
 
-enum class PluginCapability {
+enum class PluginCapability(val requiresConfirmation: Boolean = false) {
     DEVICE_INFORMATION,
     BATTERY_STATUS,
     CALENDAR_READ,
-    CALENDAR_WRITE,
+    CALENDAR_WRITE(true),
     CONTACTS_READ,
     LOCATION_APPROXIMATE,
     LOCATION_PRECISE,
     NOTIFICATION_READ,
     GITHUB_REPOSITORY_READ,
-    GITHUB_REPOSITORY_WRITE
+    GITHUB_REPOSITORY_WRITE(true)
 }
 
 enum class PluginValueType {
