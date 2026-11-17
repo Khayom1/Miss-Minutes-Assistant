@@ -128,6 +128,34 @@ class BackupPayloadAdaptersTest {
     }
 
     @Test
+    fun rejectsNestedCredentialLikeFieldsInConversationBackup() {
+        val payload = buildJsonObject {
+            put("schemaVersion", 2)
+            put("exportedAt", 1234L)
+            put("retentionDays", 90)
+            put("conversations", kotlinx.serialization.json.buildJsonArray {
+                add(buildJsonObject {
+                    put("id", "conversation-1")
+                    put("title", "Chat")
+                    put("createdAt", 1L)
+                    put("updatedAt", 2L)
+                    put("apiKey", "must-not-be-imported")
+                    put("messages", kotlinx.serialization.json.buildJsonArray {})
+                })
+            })
+            put("memory", kotlinx.serialization.json.buildJsonArray {})
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupPayloadAdapters.encode(
+                setOf(BackupArchive.Category.CHAT_HISTORY),
+                payload.toString(),
+                null,
+                emptyList()
+            )
+        }
+    }
+
+    @Test
     fun rejectsEmptySelection() {
         assertThrows(IllegalArgumentException::class.java) {
             BackupPayloadAdapters.encode(emptySet(), null, null, emptyList())
