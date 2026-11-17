@@ -112,7 +112,7 @@ private enum class AppScreen(val symbol: String) {
     Settings("⚙")
 }
 
-private enum class AppLanguage(val nativeName: String) {
+internal enum class AppLanguage(val nativeName: String) {
     English("English"),
     Russian("Русский"),
     Tajik("Тоҷикӣ")
