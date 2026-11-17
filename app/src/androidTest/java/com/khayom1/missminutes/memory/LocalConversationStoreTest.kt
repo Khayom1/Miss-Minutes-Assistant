@@ -124,6 +124,23 @@ class LocalConversationStoreTest {
     }
 
     @Test
+    fun savedMemoryIsNotSentToAiUntilExplicitlyEnabledAndPreferencePersists() {
+        val (name, store) = newStore()
+        try {
+            assertFalse(store.isMemoryContextEnabled("owner"))
+            store.setMemoryContextEnabled("owner", true)
+            assertTrue(store.isMemoryContextEnabled("owner"))
+            store.setRetentionDays("owner", 365)
+            assertTrue(store.isMemoryContextEnabled("owner"))
+            assertFalse(store.isMemoryContextEnabled("another-owner"))
+            store.setMemoryContextEnabled("owner", false)
+            assertFalse(store.isMemoryContextEnabled("owner"))
+        } finally {
+            clean(name, store)
+        }
+    }
+
+    @Test
     fun deleteAllRemovesConversationsAndMemoryButKeepsRetentionPreference() {
         val (name, store) = newStore()
         try {
