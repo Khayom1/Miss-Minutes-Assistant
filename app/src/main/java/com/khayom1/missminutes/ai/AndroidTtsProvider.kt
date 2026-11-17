@@ -21,7 +21,6 @@ class AndroidTtsProvider(
     private val appContext = context.applicationContext
     @Volatile private var engine: TextToSpeech? = null
     @Volatile private var ready = false
-    @Volatile private var selectedLocale: Locale = locale
     @Volatile private var activeUtteranceId: String? = null
     @Volatile private var completion: (() -> Unit)? = null
     @Volatile private var failure: (() -> Unit)? = null
@@ -37,11 +36,10 @@ class AndroidTtsProvider(
             val fallback = if (requested >= TextToSpeech.LANG_AVAILABLE) locale else Locale.getDefault()
             val result = tts.setLanguage(fallback)
             if (result >= TextToSpeech.LANG_AVAILABLE) {
-                selectedLocale = fallback
                 // Prefer an installed offline voice and the highest available quality.
                 val voice = tts.voices
                     ?.filter { it.locale.language == fallback.language && !it.isNetworkConnectionRequired }
-                    ?.maxByOrNull(Voice::getQuality)
+                    ?.maxByOrNull { it.quality }
                 if (voice != null) tts.voice = voice
                 tts.setSpeechRate(0.96f)
                 tts.setPitch(0.98f)
