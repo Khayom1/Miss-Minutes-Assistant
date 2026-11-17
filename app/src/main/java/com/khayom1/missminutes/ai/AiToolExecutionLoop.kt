@@ -23,6 +23,7 @@ class AiToolExecutionLoop(
     suspend fun complete(request: AiRequest): AiCompletion {
         val allowedNames = request.tools.map { it.name }.toSet()
         val messages = request.messages.toMutableList()
+        val seenCallIds = mutableSetOf<String>()
         var completion = provider.complete(request)
         var executedCalls = 0
         var rounds = 0
@@ -32,13 +33,22 @@ class AiToolExecutionLoop(
                 throw AiProviderException.InvalidResponse()
             }
             val calls = completion.toolCalls
-            if (calls.size > 4 || calls.map { it.id }.distinct().size != calls.size ||
-                calls.any { it.name !in allowedNames } ||
-                executedCalls + calls.size > maxToolCalls
+            if (calls.size > 4 ||
+                calls.map { it.id }.distinct().size != calls.size ||
+                calls.any { it.id in seenCallIds || it.name !in allowedNames } ||
+                executedCalls + calls.size > maxToolCalls ||
+                messages.size + 1 + calls.size > MAX_MESSAGES
             ) {
                 throw AiProviderException.InvalidResponse()
             }
 
+            val baseCharacters = messages.sumOf { it.content.length } + completion.content.length
+            if (baseCharacters > MAX_MESSAGE_CHARACTERS) {
+                throw AiProviderException.InvalidResponse()
+            }
+            var remainingCharacters = MAX_MESSAGE_CHARACTERS - baseCharacters
+
+            seenCallIds += calls.map { it.id }
             messages += AiMessage(
                 role = AiRole.ASSISTANT,
                 content = completion.content,
@@ -52,9 +62,12 @@ class AiToolExecutionLoop(
                 } catch (_: Exception) {
                     "TOOL_EXECUTION_FAILED: The action could not be completed safely."
                 }
-                val safeResult = result.take(1_000).ifBlank {
+                val candidate = result.take(MAX_TOOL_RESULT_CHARACTERS).ifBlank {
                     "TOOL_EXECUTION_FAILED: The action returned no result."
                 }
+                val safeResult = candidate.take(remainingCharacters)
+                if (safeResult.isBlank()) throw AiProviderException.InvalidResponse()
+                remainingCharacters -= safeResult.length
                 messages += AiMessage(
                     role = AiRole.TOOL,
                     content = safeResult,
@@ -68,5 +81,11 @@ class AiToolExecutionLoop(
             rounds++
         }
         return completion
+    }
+
+    private companion object {
+        const val MAX_MESSAGES = 32
+        const val MAX_MESSAGE_CHARACTERS = 20_000
+        const val MAX_TOOL_RESULT_CHARACTERS = 1_000
     }
 }
