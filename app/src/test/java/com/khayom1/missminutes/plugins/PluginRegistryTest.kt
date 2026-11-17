@@ -290,6 +290,43 @@ class PluginRegistryTest {
         assertEquals(listOf(manifest), registry.installedPlugins())
     }
 
+    @Test
+    fun grantingConsentRequiresDurableAuditAndFailsClosedWhenAuditIsUnavailable() {
+        var currentGrant = false
+        val events = mutableListOf<PluginAuditEntry>()
+        val consent = object : MutablePluginConsentStore {
+            override fun isGranted(pluginId: String) = currentGrant
+            override fun setGranted(pluginId: String, granted: Boolean) {
+                currentGrant = granted
+            }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(handler { PluginActionOutput(true, "ok") }),
+            consentStore = consent,
+            auditLog = PluginAuditLog { events += it }
+        )
+        registry.install(manifest)
+        assertTrue(registry.grantConsent("test_plugin"))
+        assertTrue(consent.isGranted("test_plugin"))
+        assertTrue(events.any { it.actionId == "consent" && it.outcome == "consent_granted" })
+
+        val blockedConsent = object : MutablePluginConsentStore {
+            var granted = false
+            override fun isGranted(pluginId: String) = granted
+            override fun setGranted(pluginId: String, granted: Boolean) {
+                this.granted = granted
+            }
+        }
+        val blocked = PluginRegistry(
+            handlers = listOf(handler { PluginActionOutput(true, "ok") }),
+            consentStore = blockedConsent,
+            auditLog = PluginAuditLog { throw IllegalStateException("audit unavailable") }
+        )
+        blocked.install(manifest)
+        assertFalse(blocked.grantConsent("test_plugin"))
+        assertFalse(blockedConsent.isGranted("test_plugin"))
+    }
+
     private fun registry(consented: Boolean, action: () -> PluginActionOutput) = PluginRegistry(
         handlers = listOf(handler(action)),
         consentStore = PluginConsentStore { consented },
