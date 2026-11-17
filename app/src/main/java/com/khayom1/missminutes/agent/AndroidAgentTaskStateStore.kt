@@ -82,7 +82,7 @@ class AndroidAgentTaskStateStore(
                     is PluginValue.Flag -> JSONObject().put("type", "flag").put("value", value.value)
                 })
             }
-            val dependencies = JSONArray().apply { node.dependsOn.forEach(::put) }
+            val dependencies = JSONArray().apply { node.dependsOn.forEach { put(it) } }
             nodes.put(
                 JSONObject()
                     .put("id", node.id)
@@ -102,6 +102,7 @@ class AndroidAgentTaskStateStore(
                     .put("status", node.status.name)
                     .put("message", node.message ?: JSONObject.NULL)
                     .put("idempotencyKey", node.idempotencyKey)
+                    .put("approved", node.approved)
             )
         }
         return JSONObject()
@@ -171,12 +172,14 @@ class AndroidAgentTaskStateStore(
                         nodeId = nodeId,
                         status = AgentNodeStatus.valueOf(item.getString("status")),
                         message = message,
-                        idempotencyKey = item.getString("idempotencyKey")
+                        idempotencyKey = item.getString("idempotencyKey"),
+                        approved = item.optBoolean("approved", false)
                     )
                 )
             }
         }
         require(nodeStates.keys == nodes.map { it.id }.toSet())
+        require(nodeStates.size == nodes.size)
         val maxSteps = json.getInt("maxSteps")
         require(maxSteps in 1..nodes.size)
         val completedSteps = json.getInt("completedSteps")
