@@ -33,27 +33,35 @@ class LocalConversationStoreTest {
     }
 
     @Test
-    fun messagesAndMemoryPersistEncryptedAndRemainAccountScoped() {
-        val (name, store) = newStore()
+    fun messagesAndMemoryPersistAcrossStoreInstancesAndRemainAccountScoped() {
+        val (name, firstStore) = newStore()
+        val conversationId: String
+        val memoryId: String
         try {
-            val conversationId = store.createConversation("user-a", nowMillis = 1_000L)
-            store.appendMessage("user-a", conversationId, "user", "private message alpha", 2_000L)
-            store.appendMessage("user-a", conversationId, "assistant", "private reply beta", 3_000L)
-            store.addMemory("user-a", "private memory gamma", 4_000L)
-
-            assertEquals("private message alpha", store.getMessages("user-a", conversationId)[0].content)
-            assertEquals(2, store.getMessages("user-a", conversationId).size)
-            assertEquals("private memory gamma", store.listMemory("user-a").single().content)
-            assertTrue(store.listConversations("user-b").isEmpty())
-            assertTrue(store.getMessages("user-b", conversationId).isEmpty())
-            assertFalse(store.deleteConversation("user-b", conversationId))
-            assertFalse(store.deleteMemory("user-b", store.listMemory("user-a").single().id))
+            conversationId = firstStore.createConversation("user-a", nowMillis = 1_000L)
+            firstStore.appendMessage("user-a", conversationId, "user", "private message alpha", 2_000L)
+            firstStore.appendMessage("user-a", conversationId, "assistant", "private reply beta", 3_000L)
+            memoryId = firstStore.addMemory("user-a", "private memory gamma", 4_000L)
         } finally {
-            clean(name, store)
+            firstStore.close()
         }
 
-        val databaseBytes = context.getDatabasePath(name).takeIf { it.exists() }?.readBytes()
-        assertTrue(databaseBytes == null || databaseBytes.isEmpty())
+        val reopened = LocalConversationStore(
+            context,
+            AndroidKeystoreConversationCipher("miss_minutes_test_conversation_aes_v1"),
+            name
+        )
+        try {
+            assertEquals("private message alpha", reopened.getMessages("user-a", conversationId)[0].content)
+            assertEquals(2, reopened.getMessages("user-a", conversationId).size)
+            assertEquals("private memory gamma", reopened.listMemory("user-a").single().content)
+            assertTrue(reopened.listConversations("user-b").isEmpty())
+            assertTrue(reopened.getMessages("user-b", conversationId).isEmpty())
+            assertFalse(reopened.deleteConversation("user-b", conversationId))
+            assertFalse(reopened.deleteMemory("user-b", memoryId))
+        } finally {
+            clean(name, reopened)
+        }
     }
 
     @Test
