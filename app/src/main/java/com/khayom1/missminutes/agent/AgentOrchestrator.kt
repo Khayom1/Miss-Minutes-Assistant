@@ -18,7 +18,7 @@ data class AgentTaskNode(
 data class AgentTaskPlan(
     val id: String,
     val nodes: List<AgentTaskNode>,
-    val maxSteps: Int = 12,
+    val maxSteps: Int = minOf(12, nodes.size),
     val deadlineAtMillis: Long
 )
 
