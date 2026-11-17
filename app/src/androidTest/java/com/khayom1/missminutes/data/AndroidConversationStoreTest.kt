@@ -185,6 +185,7 @@ class AndroidConversationStoreTest {
         legacy.close()
 
         store = AndroidConversationStore(context, databaseName)
+        store.deleteOlderThan("legacy-owner", 0L) // Opening through SQLiteOpenHelper executes v1→v3 migration.
         val migrated = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
         try {
             migrated.rawQuery("PRAGMA user_version", null).use {
