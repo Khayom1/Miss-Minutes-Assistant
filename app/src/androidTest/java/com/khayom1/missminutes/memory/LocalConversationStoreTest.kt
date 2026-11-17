@@ -197,6 +197,33 @@ class LocalConversationStoreTest {
     }
 
     @Test
+    fun replaceRestoreCanPreserveSettingsWhenSettingsCategoryIsNotSelected() {
+        val (name, store) = newStore()
+        try {
+            store.createConversation("owner", title = "Existing")
+            store.setRetentionDays("owner", 30)
+            store.setMemoryContextEnabled("owner", true)
+            val emptyBackup = """
+                {"schemaVersion":2,"exportedAt":1000,"retentionDays":365,
+                 "conversations":[],"memory":[]}
+            """.trimIndent()
+
+            store.restoreAll(
+                "owner",
+                emptyBackup,
+                RestoreConflictPolicy.REPLACE,
+                restoreSettings = false
+            )
+
+            assertTrue(store.listConversations("owner").isEmpty())
+            assertEquals(30, store.getRetentionDays("owner"))
+            assertTrue(store.isMemoryContextEnabled("owner"))
+        } finally {
+            clean(name, store)
+        }
+    }
+
+    @Test
     fun replaceRestoreRollsBackEntireTransactionWhenEncryptionFails() {
         val name = "restore-rollback-${UUID.randomUUID()}.db"
         val cipher = FailingConversationCipher()
