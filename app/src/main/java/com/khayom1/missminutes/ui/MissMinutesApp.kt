@@ -65,6 +65,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.ProductIdentity
 import com.khayom1.missminutes.backup.AndroidAppSettingsStore
+import com.khayom1.missminutes.backup.BackupArchive
+import com.khayom1.missminutes.backup.BackupPayloadAdapters
+import com.khayom1.missminutes.backup.SettingsBackupAdapter
 import com.khayom1.missminutes.agent.AgentOrchestrator
 import com.khayom1.missminutes.agent.AgentTaskRuntime
 import com.khayom1.missminutes.ai.AiCompletion
@@ -99,12 +102,14 @@ import com.khayom1.missminutes.memory.ConversationSummary
 import com.khayom1.missminutes.memory.ConversationLimitReachedException
 import com.khayom1.missminutes.memory.LocalConversationStore
 import com.khayom1.missminutes.memory.MemoryItem
+import com.khayom1.missminutes.memory.RestoreConflictPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.khayom1.missminutes.ai.SpeechInputProvider
 import java.util.Locale
+import java.io.ByteArrayOutputStream
 
 private const val GUEST_OWNER_ID = "guest-local"
 
@@ -559,6 +564,96 @@ fun MissMinutesApp(
     var exportError by remember { mutableStateOf<String?>(null) }
     var pendingDeleteConversationId by remember { mutableStateOf<String?>(null) }
     var confirmDeleteAll by remember { mutableStateOf(false) }
+    var backupCategories by remember {
+        mutableStateOf(BackupArchive.Category.entries.toSet())
+    }
+    var backupPassword by remember { mutableStateOf("") }
+    var backupConflictPolicy by remember { mutableStateOf(RestoreConflictPolicy.MERGE) }
+    var backupPreview by remember { mutableStateOf<BackupArchive.Preview?>(null) }
+    var pendingRestorePayload by remember { mutableStateOf<BackupPayloadAdapters.RestoredPayloads?>(null) }
+    var pendingBackupBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var backupStatus by remember { mutableStateOf<String?>(null) }
+    var backupError by remember { mutableStateOf<String?>(null) }
+    var backupBusy by remember { mutableStateOf(false) }
+
+    val createBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val bytes = pendingBackupBytes
+        if (uri != null && bytes != null) {
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        val output = context.contentResolver.openOutputStream(uri, "w")
+                            ?: throw IllegalStateException("The selected backup file could not be opened.")
+                        output.use { it.write(bytes) }
+                    }
+                    backupStatus = when (language) {
+                        AppLanguage.English -> "Encrypted backup saved."
+                        AppLanguage.Russian -> "Зашифрованная копия сохранена."
+                        AppLanguage.Tajik -> "Нусхаи рамзгузоришуда нигоҳ дошта шуд."
+                    }
+                    backupError = null
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Backup could not be saved."
+                } finally {
+                    bytes.fill(0)
+                    pendingBackupBytes = null
+                    backupBusy = false
+                }
+            }
+        } else {
+            bytes?.fill(0)
+            pendingBackupBytes = null
+            backupBusy = false
+        }
+    }
+
+    val openBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val passwordCopy = backupPassword.toCharArray()
+            scope.launch {
+                backupBusy = true
+                backupError = null
+                try {
+                    val bytes = withContext(Dispatchers.IO) {
+                        val input = context.contentResolver.openInputStream(uri)
+                            ?: throw IllegalArgumentException("The selected backup file could not be opened.")
+                        input.use { stream ->
+                            val output = ByteArrayOutputStream()
+                            val buffer = ByteArray(8_192)
+                            var total = 0
+                            while (true) {
+                                val count = stream.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                require(total <= 4_600_000) { "Backup file exceeds the size limit." }
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        }
+                    }
+                    val decoded = withContext(Dispatchers.IO) {
+                        BackupArchive.instance.decode(bytes, passwordCopy)
+                    }
+                    val restored = withContext(Dispatchers.IO) {
+                        BackupPayloadAdapters.decode(decoded)
+                    }
+                    backupPreview = decoded.preview
+                    pendingRestorePayload = restored
+                    backupStatus = null
+                } catch (error: Exception) {
+                    backupError = error.message ?: "Backup could not be read."
+                } finally {
+                    passwordCopy.fill('\\u0000')
+                    backupBusy = false
+                }
+            }
+        }
+    }
+
     val copy = copyFor(language)
 
     suspend fun loadConversation(ownerId: String, preferredConversationId: String? = null) {
