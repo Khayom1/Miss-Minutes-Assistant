@@ -9,7 +9,7 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 | P0 | Complete | Clean Android foundation, architecture/security baseline, CI and repository stabilization |
 | P1 | Complete | ChatGPT-like Compose UI foundation |
 | P2 | In progress | Direct DeepSeek connection using a user-owned, locally encrypted API key and optional local inference contract |
-| P3 | Not started | Hybrid speech input/output and ElevenLabs adapter |
+| P3 | In progress | On-device TTS, permission-gated offline wake phrase, speech input and hosted ElevenLabs adapter |
 | P4 | Not started | Persistent local conversation history and memory, optional authenticated sync |
 | P5 | Not started | Explicitly permissioned Android-native capabilities |
 | P6 | Not started | Typed plugin/skill manifest, capability allowlist and execution boundary |
@@ -74,7 +74,13 @@ P2 acceptance:
 - Only documented Android APIs and explicit runtime permissions.
 - User-visible capability manifest, permission rationale and confirmation for sensitive actions.
 - Each operation has an allowlist, parameter validation, timeout, cancellation and audit event.
-- No root requirement, silent background control, unrestricted AccessibilityService automation or notification scraping.
+- Notification Intelligence: an opt-in NotificationListenerService receives only notifications Android exposes after the user explicitly grants Notification Access; no hidden app databases, historical inbox scraping, or bypass of notification privacy.
+- Classify and summarize exposed notifications on-device by urgency, source app/sender, time sensitivity and actionable intent. Detect and suppress OTP, banking, password-reset and other sensitive categories from AI processing by default.
+- Extract candidate calendar events (title, date, time, location, participants and source notification). Validate date/time completeness, deduplicate, and ask the user to confirm ambiguous or external actions.
+- Calendar integration uses Android Calendar Provider only after explicit calendar permission, or a user-confirmed Calendar insert intent. No event is silently created from an uncertain message.
+- User controls include per-app allowlists, pause/resume, notification retention/deletion, category exclusions and a visible processing/audit history.
+- Continuous background work must respect Android foreground-service, notification-listener, battery and process lifecycle restrictions; no guarantee of uninterrupted operation after force-stop or OS restrictions.
+- No root requirement, silent background control, unrestricted AccessibilityService automation, raw SMS access by default, or notification scraping outside the documented NotificationListenerService API.
 
 ## P6 — Plugin and skill system (not started)
 
