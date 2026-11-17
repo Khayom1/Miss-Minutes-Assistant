@@ -8,6 +8,7 @@ Status: in progress. This is a gated handoff checklist, not a declaration that t
 - [x] CI runs Supabase AI and TTS function tests.
 - [x] CI runs JVM tests, Android lint and API 35 instrumentation.
 - [ ] CI builds both debug and unsigned release APKs on the exact P8 head.
+- [x] Align Kotlin Gradle plugins with the AGP 8.13.2 compatibility range (Kotlin 2.4.21); exact build verification is pending CI.
 - [ ] CI exports the resolved Android runtime dependency graph.
 - [ ] CI generates SHA-256 checksums for both APKs.
 - [ ] Uploaded artifact contains both APKs, dependency report and checksum file.
