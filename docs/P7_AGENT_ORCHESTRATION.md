@@ -1,6 +1,6 @@
 # P7 — Bounded Agent Orchestration
 
-Status: core engine, encrypted task-state adapter, P6 registry adapter and a visible two-step diagnostic task panel implemented; lifecycle-worker integration and CI acceptance pending.
+Status: bounded orchestration core, Android Keystore persistence, process-restart task discovery, WorkManager execution and localized task controls implemented; exact-head CI acceptance pending.
 
 ## Delivered in this phase branch
 
@@ -18,9 +18,9 @@ Status: core engine, encrypted task-state adapter, P6 registry adapter and a vis
 
 - The engine is a deterministic orchestration core, not a free-form model planner. A future planner must convert model suggestions into this typed graph and pass the same validation and approval gates.
 - The execution adapter must route each request through PluginRegistry (or another explicitly allowlisted capability adapter) and must propagate idempotency keys to any remote side effect. No generic shell, arbitrary Android intent or unrestricted accessibility executor is provided.
-- This phase does not claim unattended multi-hour work. A lifecycle-aware Android worker/scheduler, foreground-service UX where justified, visible task UI, and adapter wiring are still required before end-to-end P7 acceptance.
+- WorkManager provides deferrable, OS-managed background execution; it is not a permanent foreground process. Android may delay work under Doze/battery restrictions, and force-stop prevents scheduled work until the user launches the app again. No claim of uninterrupted multi-hour execution is made.\n- The current worker intentionally exposes only the compiled read-only device/battery status plugin. Mutating or remote actions remain unavailable until their adapters propagate idempotency keys and add explicit user confirmation.
 - A recovered RUNNING action requires human verification; the engine deliberately does not guess whether an external side effect occurred.
 
 ## Acceptance evidence
 
-P7 is not accepted until the exact PR head has passing JVM tests, APK build/lint, API 35 instrumentation, artifact upload and reviewed code diff. Physical Galaxy A35 / Android 17 behavior remains a P8 device check.
+P7 is not accepted until the exact PR head has passing JVM tests, APK build/lint, API 35 instrumentation, artifact upload and reviewed code diff, including worker scheduling and restart restoration. Physical Galaxy A35 / Android 17 behavior remains a P8 device check.
