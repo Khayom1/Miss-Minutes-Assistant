@@ -10,25 +10,28 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.khayom1.missminutes.agent.AgentAction
-import com.khayom1.missminutes.agent.AgentAdvanceResult
 import com.khayom1.missminutes.agent.AgentOrchestrator
 import com.khayom1.missminutes.agent.AgentTaskNode
 import com.khayom1.missminutes.agent.AgentTaskPlan
 import com.khayom1.missminutes.agent.AgentTaskState
 import com.khayom1.missminutes.agent.AgentTaskStatus
+import com.khayom1.missminutes.agent.AgentTaskWorker
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -39,10 +42,27 @@ internal fun AgentTaskPanel(
     language: AppLanguage,
     enabled: Boolean
 ) {
+    val context = LocalContext.current
     var taskState by remember { mutableStateOf<AgentTaskState?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(orchestrator) {
+        taskState = withContext(Dispatchers.IO) { orchestrator.latestTask() }
+    }
+
+    LaunchedEffect(orchestrator, taskState?.plan?.id, taskState?.status) {
+        val id = taskState?.plan?.id ?: return@LaunchedEffect
+        while (true) {
+            val latest = withContext(Dispatchers.IO) { orchestrator.state(id) }
+            taskState = latest
+            if (latest == null || latest.status !in setOf(AgentTaskStatus.READY, AgentTaskStatus.RUNNING)) {
+                break
+            }
+            delay(500)
+        }
+    }
 
     fun perform(action: suspend () -> AgentTaskState?) {
         scope.launch {
@@ -60,13 +80,6 @@ internal fun AgentTaskPanel(
                 busy = false
             }
         }
-    }
-
-    fun stateFrom(result: AgentAdvanceResult): AgentTaskState = when (result) {
-        is AgentAdvanceResult.Progress -> result.state
-        is AgentAdvanceResult.BlockedForApproval -> result.state
-        is AgentAdvanceResult.Finished -> result.state
-        is AgentAdvanceResult.Rejected -> throw IllegalStateException(result.reason)
     }
 
     val current = taskState
@@ -91,9 +104,9 @@ internal fun AgentTaskPanel(
         Text(title, fontWeight = FontWeight.SemiBold)
         Text(
             when (language) {
-                AppLanguage.Tajik -> "Нақшаи санҷишии дуқадамӣ. Ҳар қадам танҳо бо иҷозати плагини Android иҷро мешавад."
-                AppLanguage.Russian -> "Двухшаговая диагностическая задача. Каждый шаг проходит через разрешённый Android-плагин."
-                AppLanguage.English -> "A two-step diagnostic task. Each step runs only through the allowlisted Android plugin."
+                AppLanguage.Tajik -> "Вазифаи ташхисӣ дар WorkManager иҷро мешавад. Ҳолат рамзгузорӣ ва баъди бозоғозии барнома барқарор мешавад."
+                AppLanguage.Russian -> "Диагностика выполняется через WorkManager. Зашифрованное состояние восстанавливается после перезапуска приложения."
+                AppLanguage.English -> "Diagnostics run through WorkManager. Encrypted task state is restored after app restart."
             },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
@@ -123,16 +136,17 @@ internal fun AgentTaskPanel(
                         maxSteps = 2,
                         deadlineAtMillis = System.currentTimeMillis() + 120_000L
                     )
-                    orchestrator.create(plan)
-                    stateFrom(orchestrator.advance(id))
+                    val created = orchestrator.create(plan)
+                    AgentTaskWorker.enqueue(context, id)
+                    created
                 }
             }
         ) {
             Text(
                 when (language) {
-                    AppLanguage.Tajik -> "Оғози вазифа"
-                    AppLanguage.Russian -> "Начать задачу"
-                    AppLanguage.English -> "Start task"
+                    AppLanguage.Tajik -> "Оғози худкор"
+                    AppLanguage.Russian -> "Запустить автоматически"
+                    AppLanguage.English -> "Run automatically"
                 }
             )
         }
@@ -151,33 +165,39 @@ internal fun AgentTaskPanel(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    enabled = !busy && !terminal && current.status != AgentTaskStatus.PAUSED,
-                    onClick = { perform { stateFrom(orchestrator.advance(current.plan.id)) } }
-                ) {
-                    Text(
-                        when (language) {
-                            AppLanguage.Tajik -> "Қадами навбатӣ"
-                            AppLanguage.Russian -> "Следующий шаг"
-                            AppLanguage.English -> "Next step"
-                        }
-                    )
-                }
                 TextButton(
                     enabled = !busy && !terminal && current.status != AgentTaskStatus.PAUSED,
-                    onClick = { perform { orchestrator.pause(current.plan.id) } }
+                    onClick = {
+                        perform {
+                            val paused = orchestrator.pause(current.plan.id)
+                            AgentTaskWorker.cancel(context, current.plan.id)
+                            paused
+                        }
+                    }
                 ) {
                     Text(if (language == AppLanguage.Tajik) "Таваққуф" else if (language == AppLanguage.Russian) "Пауза" else "Pause")
                 }
                 TextButton(
                     enabled = !busy && current.status == AgentTaskStatus.PAUSED,
-                    onClick = { perform { orchestrator.resume(current.plan.id) } }
+                    onClick = {
+                        perform {
+                            val resumed = orchestrator.resume(current.plan.id)
+                            AgentTaskWorker.enqueue(context, current.plan.id)
+                            resumed
+                        }
+                    }
                 ) {
                     Text(if (language == AppLanguage.Tajik) "Идома" else if (language == AppLanguage.Russian) "Продолжить" else "Resume")
                 }
                 TextButton(
                     enabled = !busy && !terminal,
-                    onClick = { perform { orchestrator.cancel(current.plan.id) } }
+                    onClick = {
+                        perform {
+                            val cancelled = orchestrator.cancel(current.plan.id)
+                            AgentTaskWorker.cancel(context, current.plan.id)
+                            cancelled
+                        }
+                    }
                 ) {
                     Text(if (language == AppLanguage.Tajik) "Бекор" else if (language == AppLanguage.Russian) "Отмена" else "Cancel")
                 }
