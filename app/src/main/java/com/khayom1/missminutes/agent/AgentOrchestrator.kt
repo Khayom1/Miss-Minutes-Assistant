@@ -48,7 +48,8 @@ data class AgentNodeState(
     val nodeId: String,
     val status: AgentNodeStatus = AgentNodeStatus.PENDING,
     val message: String? = null,
-    val idempotencyKey: String
+    val idempotencyKey: String,
+    val approved: Boolean = false
 )
 
 data class AgentTaskState(
@@ -240,7 +241,8 @@ class AgentOrchestrator(
             return AgentAdvanceResult.Finished(current)
         }
 
-        val pendingState = current.nodes.getValue(pending.id)\n        if (pending.action.approvalRequired && !pendingState.approved) {
+        val pendingState = current.nodes.getValue(pending.id)
+        if (pending.action.approvalRequired && !pendingState.approved) {
             val nodes = current.nodes + (pending.id to current.nodes.getValue(pending.id)
                 .copy(status = AgentNodeStatus.WAITING_APPROVAL, message = "User approval required."))
             current = current.copy(nodes = nodes, status = AgentTaskStatus.WAITING_APPROVAL, updatedAtMillis = now)
@@ -254,7 +256,10 @@ class AgentOrchestrator(
         store.save(current)
 
         val result = try {
-            executor.execute(\n                pending.action.request.copy(userConfirmed = pendingState.approved || pending.action.request.userConfirmed),\n                running.getValue(pending.id).idempotencyKey\n            )
+            executor.execute(
+                pending.action.request.copy(userConfirmed = pendingState.approved || pending.action.request.userConfirmed),
+                running.getValue(pending.id).idempotencyKey
+            )
         } catch (_: Exception) {
             PluginExecutionResult(false, "Action failed safely.", pending.action.requestCapability())
         }
