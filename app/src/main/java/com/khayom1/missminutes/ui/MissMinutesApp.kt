@@ -2188,6 +2188,86 @@ private fun SettingsScreen(
     onDismissBackupPreview: () -> Unit
 ) {
     val settingsScope = rememberCoroutineScope()
+    var settingsPageName by rememberSaveable { mutableStateOf(SettingsPage.HOME.name) }
+    val settingsPage = SettingsPage.entries.firstOrNull { it.name == settingsPageName }
+        ?: SettingsPage.HOME
+    BackHandler(enabled = settingsPage != SettingsPage.HOME) {
+        settingsPageName = SettingsPage.HOME.name
+    }
+
+    fun pageTitle(page: SettingsPage): String = when (page) {
+        SettingsPage.HOME, SettingsPage.GENERAL -> copy.settingsTitle
+        SettingsPage.AI_VOICE -> when (language) {
+            AppLanguage.English -> "AI and voice"
+            AppLanguage.Russian -> "ИИ и голос"
+            AppLanguage.Tajik -> "AI ва овоз"
+        }
+        SettingsPage.FLOATING_ASSISTANT -> when (language) {
+            AppLanguage.English -> "Floating assistant controls"
+            AppLanguage.Russian -> "Управление плавающим помощником"
+            AppLanguage.Tajik -> "Идоракунии ёвари шинокунанда"
+        }
+        SettingsPage.PLUGINS_DEVICE -> when (language) {
+            AppLanguage.English -> "Plugins and device"
+            AppLanguage.Russian -> "Плагины и устройство"
+            AppLanguage.Tajik -> "Плагинҳо ва дастгоҳ"
+        }
+        SettingsPage.PRIVACY_MEMORY -> when (language) {
+            AppLanguage.English -> "Privacy and memory"
+            AppLanguage.Russian -> "Конфиденциальность и память"
+            AppLanguage.Tajik -> "Махфият ва хотира"
+        }
+        SettingsPage.BACKUP_RESTORE -> when (language) {
+            AppLanguage.English -> "Backup"
+            AppLanguage.Russian -> "Резервная копия"
+            AppLanguage.Tajik -> "Нусхаи эҳтиётӣ"
+        }
+        SettingsPage.ACCOUNT_ABOUT -> when (language) {
+            AppLanguage.English -> "Account and about"
+            AppLanguage.Russian -> "Аккаунт и о приложении"
+            AppLanguage.Tajik -> "Ҳисоб ва маълумот"
+        }
+    }
+
+    fun pageDescription(page: SettingsPage): String = when (page) {
+        SettingsPage.HOME -> ""
+        SettingsPage.GENERAL -> when (language) {
+            AppLanguage.English -> "Language and appearance preferences."
+            AppLanguage.Russian -> "Язык и внешний вид приложения."
+            AppLanguage.Tajik -> "Забон ва намуди зоҳирии барнома."
+        }
+        SettingsPage.AI_VOICE -> when (language) {
+            AppLanguage.English -> "DeepSeek key, microphone disclosure and offline voice controls."
+            AppLanguage.Russian -> "Ключ DeepSeek, сведения о микрофоне и офлайн-голос."
+            AppLanguage.Tajik -> "Калиди DeepSeek, огоҳӣ дар бораи микрофон ва овози офлайн."
+        }
+        SettingsPage.FLOATING_ASSISTANT -> when (language) {
+            AppLanguage.English -> "Start or stop the user-controlled floating shortcut."
+            AppLanguage.Russian -> "Запуск и остановка плавающей кнопки по вашему запросу."
+            AppLanguage.Tajik -> "Фаъол ва қатъ кардани тугмачаи шинокунанда бо дархости шумо."
+        }
+        SettingsPage.PLUGINS_DEVICE -> when (language) {
+            AppLanguage.English -> "Manage plugin consent, device capabilities and AI tasks."
+            AppLanguage.Russian -> "Управление разрешениями плагинов, функциями устройства и задачами ИИ."
+            AppLanguage.Tajik -> "Идоракунии иҷозати плагинҳо, имкониятҳои дастгоҳ ва вазифаҳои AI."
+        }
+        SettingsPage.PRIVACY_MEMORY -> when (language) {
+            AppLanguage.English -> "Manage saved memory, AI context and retention."
+            AppLanguage.Russian -> "Управление памятью, контекстом ИИ и сроком хранения."
+            AppLanguage.Tajik -> "Идоракунии хотира, контексти AI ва муҳлати нигоҳдорӣ."
+        }
+        SettingsPage.BACKUP_RESTORE -> when (language) {
+            AppLanguage.English -> "Export or restore encrypted local data."
+            AppLanguage.Russian -> "Экспорт и восстановление зашифрованных локальных данных."
+            AppLanguage.Tajik -> "Содирот ё барқарор кардани маълумоти маҳаллии рамзгузоришуда."
+        }
+        SettingsPage.ACCOUNT_ABOUT -> when (language) {
+            AppLanguage.English -> "Account status, sign-out and application version."
+            AppLanguage.Russian -> "Состояние аккаунта, выход и версия приложения."
+            AppLanguage.Tajik -> "Ҳолати ҳисоб, баромадан ва версияи барнома."
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2195,7 +2275,53 @@ private fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(copy.settingsTitle, style = MaterialTheme.typography.headlineMedium)
+        if (settingsPage == SettingsPage.HOME) {
+            Text(
+                copy.settingsTitle,
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.headlineMedium
+            )
+            listOf(
+                SettingsPage.GENERAL,
+                SettingsPage.AI_VOICE,
+                SettingsPage.FLOATING_ASSISTANT,
+                SettingsPage.PLUGINS_DEVICE,
+                SettingsPage.PRIVACY_MEMORY,
+                SettingsPage.BACKUP_RESTORE,
+                SettingsPage.ACCOUNT_ABOUT
+            ).forEach { page ->
+                SettingsPageButton(
+                    title = pageTitle(page),
+                    description = pageDescription(page),
+                    tag = page.testTag,
+                    onClick = { settingsPageName = page.name }
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(
+                    onClick = { settingsPageName = SettingsPage.HOME.name },
+                    modifier = Modifier.testTag("settings_back")
+                ) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Бозгашт"
+                            AppLanguage.Russian -> "Назад"
+                            AppLanguage.English -> "Back"
+                        }
+                    )
+                }
+                Text(
+                    pageTitle(settingsPage),
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            }
+        }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(copy.language, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
