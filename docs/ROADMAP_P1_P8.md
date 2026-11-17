@@ -8,7 +8,7 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 |---|---|---|
 | P0 | Complete | Clean Android foundation, architecture/security baseline, CI and repository stabilization |
 | P1 | Complete | ChatGPT-like Compose UI foundation |
-| P2 | In progress | Authenticated AI provider gateway, DeepSeek proxy and optional local inference contract |
+| P2 | In progress | Direct DeepSeek connection using a user-owned, locally encrypted API key and optional local inference contract |
 | P3 | Not started | Hybrid speech input/output and ElevenLabs adapter |
 | P4 | Not started | Persistent local conversation history and memory, optional authenticated sync |
 | P5 | Not started | Explicitly permissioned Android-native capabilities |
@@ -35,14 +35,15 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 
 Deliverables:
 - Provider-neutral request/response/error contracts in Kotlin, with a fail-closed optional local-runtime adapter seam.
-- Authenticated Supabase Edge Function as the only remote AI egress path.
-- DeepSeek model and output limits controlled by the server, not the Android client.
-- DeepSeek API credential stored only as a Supabase Edge Function secret.
-- Persistent per-user request quota enforced by a private database table and a server-only RPC.
+- DeepSeek requests are sent directly from Android to `https://api.deepseek.com/chat/completions` using the user's own API key.
+- The key is entered in Settings, masked in the UI, encrypted with AES-256-GCM and a non-exportable Android Keystore key, and stored only on the device.
+- No DeepSeek provider key is embedded in the APK, committed to Git, sent to Supabase, or stored in a server secret.
+- Provider requests use HTTPS, bounded message/output sizes, timeouts and normalized errors.
+- The user can replace or remove the local key at any time.
 - Optional local-inference adapter interface; the application must report unavailable rather than fabricate a local model response when no runtime/model is installed.
 - Android email/password sign-in/sign-up, session restore/refresh and sign-out are wired to the app UI.
 - Session tokens are stored only as AES-256-GCM ciphertext using a non-exportable Android Keystore key; passwords are transient UI state.
-- Android transport uses HTTPS, the signed-in user's JWT and the publishable key. It must never contain the DeepSeek credential.
+- Supabase Auth remains an independent account/session feature; the DeepSeek request path does not send Supabase JWTs or Supabase keys.
 - Supabase `sb_secret_*` credentials are sent on `apikey` only; legacy service-role JWT fallback uses the Bearer header.
 - The edge handler streams and caps request bodies before parsing and does not consume quota when provider configuration is missing.
 
@@ -51,8 +52,7 @@ P2 acceptance:
 - Gitleaks, APK/lint, API 35 instrumentation and artifact upload pass on the exact P2 head.
 - Auth rejects missing/expired sessions; server quota blocks over-limit calls before provider egress.
 - Provider error bodies and credentials are not returned to or logged by the app.
-- Live provider test is recorded only when a valid Supabase Auth session and server-side DeepSeek secret are configured.
-- The exact deployed function version is inspected with `verify_jwt=true`; the service-role header semantics are verified by Deno tests.
+- Live provider test is recorded only when the user supplies a valid DeepSeek API key in the app and a real request succeeds.
 - No P3 work starts until P2 is accepted.
 
 ## P3 — Hybrid voice (not started)
