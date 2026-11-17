@@ -535,43 +535,51 @@ fun MissMinutesApp(
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val copy = copyFor(language)
 
-    LaunchedEffect(currentOwnerId) {
-        messages.clear()
-        activeConversationId = null
-        savedConversations.clear()
-        savedMemories.clear()
-        val owner = currentOwnerId ?: return@LaunchedEffect
-        val restored = withContext(Dispatchers.IO) {
-            val conversations = conversationStore.listConversations(owner)
-            val latest = conversations.firstOrNull()
-            val restoredMessages = latest?.let { conversationStore.loadMessages(owner, it.id) }.orEmpty()
-            val memories = conversationStore.listMemories(owner)
-            Triple(conversations, latest?.id to restoredMessages, memories)
-        }
-        savedConversations.addAll(restored.first)
-        savedMemories.addAll(restored.third)
-        val (conversationId, restoredMessages) = restored.second
-        activeConversationId = conversationId
-        restoredMessages.forEach { stored ->
-            nextMessageId += 1
-            messages.add(ChatMessage(nextMessageId, stored.content, stored.role == ConversationRole.USER))
-        }
-    }
-
+    var loadedOwnerId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentOwnerId, retentionDays) {
-        val owner = currentOwnerId ?: return@LaunchedEffect
-        withContext(Dispatchers.IO) {
+        val owner = currentOwnerId
+        if (owner == null) {
+            messages.clear()
+            activeConversationId = null
+            savedConversations.clear()
+            savedMemories.clear()
+            loadedOwnerId = null
+            return@LaunchedEffect
+        }
+
+        val ownerChanged = loadedOwnerId != owner
+        if (ownerChanged) {
+            messages.clear()
+            activeConversationId = null
+            savedConversations.clear()
+            savedMemories.clear()
+        }
+        val restored = withContext(Dispatchers.IO) {
             if (retentionDays > 0) {
                 conversationStore.deleteOlderThan(
                     owner,
                     System.currentTimeMillis() - retentionDays.toLong() * MILLIS_PER_DAY
                 )
             }
-            conversationStore.listConversations(owner)
-        }.let { latestHistory ->
-            savedConversations.clear()
-            savedConversations.addAll(latestHistory)
+            val conversations = conversationStore.listConversations(owner)
+            val latest = if (ownerChanged) conversations.firstOrNull() else null
+            val restoredMessages = latest?.let { conversationStore.loadMessages(owner, it.id) }.orEmpty()
+            val memories = conversationStore.listMemories(owner)
+            Triple(conversations, latest?.id to restoredMessages, memories)
         }
+        savedConversations.clear()
+        savedConversations.addAll(restored.first)
+        savedMemories.clear()
+        savedMemories.addAll(restored.third)
+        if (ownerChanged) {
+            val (conversationId, restoredMessages) = restored.second
+            activeConversationId = conversationId
+            restoredMessages.forEach { stored ->
+                nextMessageId += 1
+                messages.add(ChatMessage(nextMessageId, stored.content, stored.role == ConversationRole.USER))
+            }
+        }
+        loadedOwnerId = owner
     }
 
     val speechLocale = when (language) {
