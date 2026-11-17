@@ -84,7 +84,23 @@ jobs:
 
       - name: Run Android instrumentation tests (API 37.0)
         run: |
-          echo "no" | avdmanager create avd --force -n android17-api37 -k "system-images;android-37.0;google_apis;x86_64" -d "pixel_2"
+          set -euo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          export ANDROID_SDK_HOME="$HOME/.android"
+          mkdir -p "$ANDROID_AVD_HOME"
+          AVD_OUTPUT="$(printf 'no\n' | avdmanager create avd --force -n android17-api37 -k "system-images;android-37.0;google_apis;x86_64" -d "pixel_2" -p "$ANDROID_AVD_HOME/android17-api37.avd" 2>&1)" || {
+            printf '%s\n' "$AVD_OUTPUT"
+            avdmanager list avd
+            exit 1
+          }
+          printf '%s\n' "$AVD_OUTPUT"
+          if [ ! -s "$ANDROID_AVD_HOME/android17-api37.ini" ] || [ ! -s "$ANDROID_AVD_HOME/android17-api37.avd/config.ini" ]; then
+            echo "API 37 AVD was not created in ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >&2
+            find "$HOME/.android" -maxdepth 3 -type f -name '*.ini' -print || true
+            avdmanager list avd
+            exit 1
+          fi
+          emulator -list-avds | grep -Fx "android17-api37"
           emulator -avd android17-api37 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-snapshot-save -wipe-data &
           EMULATOR_PID=$!
           trap 'adb emu kill >/dev/null 2>&1 || kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
