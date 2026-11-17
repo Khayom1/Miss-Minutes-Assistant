@@ -32,6 +32,9 @@ class AndroidAgentTaskStateStore(
     override fun load(taskId: String): AgentTaskState? = readStates()[taskId]
 
     @Synchronized
+    override fun all(): List<AgentTaskState> = readStates().values.sortedByDescending { it.updatedAtMillis }
+
+    @Synchronized
     override fun save(state: AgentTaskState) {
         val states = readStates()
         check(states.containsKey(state.plan.id)) { "Unknown agent task." }
