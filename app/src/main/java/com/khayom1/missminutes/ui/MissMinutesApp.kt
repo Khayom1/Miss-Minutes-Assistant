@@ -806,7 +806,7 @@ fun MissMinutesApp(
                     backupError = error.message ?: "Plugin backup could not be created."
                     backupBusy = false
                 } finally {
-                    passwordCopy.fill('\\u0000')
+                    passwordCopy.fill('\u0000')
                 }
             }
         }
