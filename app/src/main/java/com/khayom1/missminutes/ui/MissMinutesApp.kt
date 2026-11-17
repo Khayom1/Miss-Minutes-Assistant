@@ -53,8 +53,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -2352,7 +2354,10 @@ private fun SettingsScreen(
                     Switch(
                         checked = darkTheme,
                         onCheckedChange = onDarkThemeChange,
-                        modifier = Modifier.testTag("dark_mode_switch")
+                        modifier = Modifier.testTag("dark_mode_switch").semantics {
+                            contentDescription = copy.darkMode
+                            stateDescription = if (darkTheme) "On" else "Off"
+                        }
                     )
                 }
             }
@@ -2542,6 +2547,14 @@ private fun SettingsScreen(
 
         }
         if (settingsPage == SettingsPage.PLUGINS_DEVICE) {
+            PluginManagerPanel(
+                language = language,
+                manifests = pluginManifests,
+                consentStates = pluginConsentStates,
+                auditEntries = pluginAuditEntries,
+                onConsentChange = onDeclarativePluginConsentChange,
+                onUninstall = onUninstallPlugin
+            )
             var pendingDeviceCommand by remember { mutableStateOf<DeviceToolCommand?>(null) }
             var deviceToolMessage by remember { mutableStateOf<String?>(null) }
             var shareTextDraft by rememberSaveable { mutableStateOf("") }
@@ -2657,7 +2670,14 @@ private fun SettingsScreen(
                     Switch(
                         checked = pluginConsent,
                         onCheckedChange = onPluginConsentChange,
-                        modifier = Modifier.testTag("plugin_consent_android_device_status")
+                        modifier = Modifier.testTag("plugin_consent_android_device_status").semantics {
+                            contentDescription = when (language) {
+                                AppLanguage.Tajik -> "Розигии плагини ҳолати Android"
+                                AppLanguage.Russian -> "Согласие на плагин состояния Android"
+                                AppLanguage.English -> "Android status plugin consent"
+                            }
+                            stateDescription = if (pluginConsent) "Enabled" else "Disabled"
+                        }
                     )
                 }
                 DeviceToolCapability.entries.forEach { capability ->
@@ -2696,7 +2716,10 @@ private fun SettingsScreen(
                         Switch(
                             checked = deviceGrants[capability] == true,
                             onCheckedChange = { onDeviceGrantChange(capability, it) },
-                            modifier = Modifier.testTag("device_capability_${capability.name.lowercase()}")
+                            modifier = Modifier.testTag("device_capability_${capability.name.lowercase()}").semantics {
+                                contentDescription = label
+                                stateDescription = if (deviceGrants[capability] == true) "Enabled" else "Disabled"
+                            }
                         )
                     }
                 }
@@ -2857,7 +2880,14 @@ private fun SettingsScreen(
                     Switch(
                         checked = memoryContextEnabled,
                         onCheckedChange = onMemoryContextChange,
-                        modifier = Modifier.testTag("memory_context_toggle")
+                        modifier = Modifier.testTag("memory_context_toggle").semantics {
+                            contentDescription = when (language) {
+                                AppLanguage.Tajik -> "Илова кардани хотираи маҳаллӣ ба дархостҳои AI"
+                                AppLanguage.Russian -> "Добавлять локальную память в запросы ИИ"
+                                AppLanguage.English -> "Include local memory in AI requests"
+                            }
+                            stateDescription = if (memoryContextEnabled) "On" else "Off"
+                        }
                     )
                 }
                 Text(
