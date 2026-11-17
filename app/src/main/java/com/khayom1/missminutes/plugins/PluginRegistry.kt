@@ -342,7 +342,7 @@ class PluginRegistry(
         manifest.actions.forEach { action ->
             require(ACTION_ID.matches(action.id)) { "Invalid action id." }
             val handler = handlersById[action.id]
-            require(handler?.capability == action.capability) {
+            require(handler != null && handler.capability == action.capability) {
                 "Action is not backed by a compiled allowlisted handler."
             }
             require(action.arguments == handler.argumentSchema) {
