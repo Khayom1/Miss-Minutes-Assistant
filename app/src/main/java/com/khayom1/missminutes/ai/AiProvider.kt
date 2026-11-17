@@ -173,7 +173,7 @@ class SupabaseDeepSeekProvider(
     }
 
     private companion object {
-        const val MAX_RESPONSE_CHARS = 64_000
+        const val MAX_RESPONSE_BYTES = 64 * 1024
     }
 }
 
@@ -238,10 +238,15 @@ class OkHttpAiHttpTransport(
 
         try {
             client.newCall(request).execute().use { response ->
-                val text = response.body?.string().orEmpty()
-                if (text.length > MAX_RESPONSE_CHARS) {
-                    throw AiProviderException.InvalidResponse()
-                }
+                // Bound bytes while reading. ResponseBody.string() buffers the
+                // entire upstream payload before a post-read size check, which
+                // could exhaust memory if the gateway or an intermediary misbehaves.
+                val text = response.body?.source()?.use { source ->
+                    if (source.request(MAX_RESPONSE_BYTES + 1L)) {
+                        throw AiProviderException.InvalidResponse()
+                    }
+                    source.readUtf8()
+                }.orEmpty()
                 AiHttpResponse(statusCode = response.code, body = text)
             }
         } catch (error: AiProviderException) {
