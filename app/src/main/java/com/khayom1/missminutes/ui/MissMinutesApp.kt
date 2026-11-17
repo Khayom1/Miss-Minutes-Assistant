@@ -174,24 +174,29 @@ private data class HistoryCopy(
     val cancel: String,
     val confirmDeleteAll: String,
     val retention: String,
-    val empty: String
+    val empty: String,
+    val memoryTitle: String,
+    val memoryKey: String,
+    val memoryValue: String,
+    val saveMemory: String,
+    val noMemories: String
 )
 
 private fun historyCopyFor(language: AppLanguage) = when (language) {
     AppLanguage.English -> HistoryCopy(
         "New conversation", "Export JSON", "Delete all history", "Delete", "Cancel",
         "Permanently delete all local conversations and messages?", "Automatic retention: 90 days.",
-        "No saved conversations yet."
+        "No saved conversations yet.", "Saved memory", "Memory label", "What should Miss Minutes remember?", "Save memory", "No saved memories."
     )
     AppLanguage.Russian -> HistoryCopy(
         "Новый диалог", "Экспорт JSON", "Удалить всю историю", "Удалить", "Отмена",
         "Безвозвратно удалить все локальные диалоги и сообщения?", "Автоматическое хранение: 90 дней.",
-        "Сохранённых диалогов пока нет."
+        "Сохранённых диалогов пока нет.", "Сохранённая память", "Название", "Что Miss Minutes должна запомнить?", "Сохранить", "Сохранённых заметок нет."
     )
     AppLanguage.Tajik -> HistoryCopy(
         "Гуфтугӯи нав", "Содироти JSON", "Пок кардани тамоми таърих", "Пок кардан", "Бекор кардан",
         "Ҳамаи гуфтугӯҳо ва паёмҳои маҳаллӣ бебозгашт пок карда шаванд?", "Муҳлати нигоҳдорӣ: 90 рӯз.",
-        "Ҳоло гуфтугӯи сабтшуда нест."
+        "Ҳоло гуфтугӯи сабтшуда нест.", "Хотираи сабтшуда", "Номи хотира", "Мисс Минутс чиро дар хотир нигоҳ дорад?", "Сабт кардан", "Хотираи сабтшуда нест."
     )
 }
 
