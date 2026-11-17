@@ -39,7 +39,6 @@ class MainActivity : ComponentActivity() {
             MissMinutesApp(
                 sessionManager = sessionManager,
                 aiProvider = aiProvider,
-                ttsProvider = ttsProvider,
                 ttsProvider = localTts
             )
         }
