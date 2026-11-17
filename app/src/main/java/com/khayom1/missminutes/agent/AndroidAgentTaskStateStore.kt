@@ -20,22 +20,22 @@ class AndroidAgentTaskStateStore(
         Context.MODE_PRIVATE
     )
 
-    @Synchronized
-    override fun create(state: AgentTaskState): Boolean {
+    override fun create(state: AgentTaskState): Boolean = synchronized(STORAGE_LOCK) {
         val states = readStates()
-        if (states.containsKey(state.plan.id) || states.size >= MAX_TASKS) return false
+        if (states.containsKey(state.plan.id) || states.size >= MAX_TASKS) return@synchronized false
         writeStates(states + (state.plan.id to state))
-        return true
+        true
     }
 
-    @Synchronized
-    override fun load(taskId: String): AgentTaskState? = readStates()[taskId]
+    override fun load(taskId: String): AgentTaskState? = synchronized(STORAGE_LOCK) {
+        readStates()[taskId]
+    }
 
-    @Synchronized
-    override fun all(): List<AgentTaskState> = readStates().values.sortedByDescending { it.updatedAtMillis }
+    override fun all(): List<AgentTaskState> = synchronized(STORAGE_LOCK) {
+        readStates().values.sortedByDescending { it.updatedAtMillis }
+    }
 
-    @Synchronized
-    override fun save(state: AgentTaskState) {
+    override fun save(state: AgentTaskState) = synchronized(STORAGE_LOCK) {
         val states = readStates()
         check(states.containsKey(state.plan.id)) { "Unknown agent task." }
         writeStates(states + (state.plan.id to state))
@@ -202,6 +202,7 @@ class AndroidAgentTaskStateStore(
     }
 
     private companion object {
+        val STORAGE_LOCK = Any()
         const val PREFERENCES_NAME = "miss_minutes_agent_tasks"
         const val STORAGE_KEY = "encrypted_task_graphs_v1"
         const val CIPHER_OWNER = "agent_task_state_v1"
