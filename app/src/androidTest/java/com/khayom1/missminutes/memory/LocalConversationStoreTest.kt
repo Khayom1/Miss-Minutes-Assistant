@@ -35,8 +35,8 @@ class LocalConversationStoreTest {
     @Test
     fun messagesAndMemoryPersistAcrossStoreInstancesAndRemainAccountScoped() {
         val (name, firstStore) = newStore()
-        val conversationId: String
-        val memoryId: String
+        var conversationId = ""
+        var memoryId = ""
         try {
             conversationId = firstStore.createConversation("user-a", nowMillis = 1_000L)
             firstStore.appendMessage("user-a", conversationId, "user", "private message alpha", 2_000L)
@@ -82,6 +82,14 @@ class LocalConversationStoreTest {
             store.close()
             context.deleteDatabase(name)
         }
+    }
+
+    @Test
+    fun authenticatedEncryptionRejectsCiphertextFromAnotherOwner() {
+        val cipher = AndroidKeystoreConversationCipher("miss_minutes_test_conversation_aes_v1")
+        val encrypted = cipher.encrypt("owner-a", "owner-private-value")
+        val error = runCatching { cipher.decrypt("owner-b", encrypted) }.exceptionOrNull()
+        assertTrue(error is IllegalStateException)
     }
 
     @Test
@@ -203,6 +211,7 @@ class LocalConversationStoreTest {
 
         val migrated = LocalConversationStore(context, cipher, name)
         try {
+            assertEquals(LocalConversationStore.DATABASE_VERSION, migrated.readableDatabase.version)
             assertEquals("Migrated conversation", migrated.listConversations(owner).single().title)
             assertEquals("Migrated message", migrated.getMessages(owner, conversationId).single().content)
             migrated.addMemory(owner, "Memory table created by migration")
