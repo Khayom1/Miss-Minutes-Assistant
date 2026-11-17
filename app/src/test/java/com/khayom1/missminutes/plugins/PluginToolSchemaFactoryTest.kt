@@ -44,6 +44,12 @@ class PluginToolSchemaFactoryTest {
     }
 
     @Test
+    fun duplicateDisconnectedToolNamesAreIgnored() {
+        val schema = PluginToolSchemaFactory.create(listOf(descriptor(false), descriptor(false)))
+        assertTrue(schema.isEmpty())
+    }
+
+    @Test
     fun duplicateToolNamesAreRejected() {
         try {
             PluginToolSchemaFactory.create(listOf(descriptor(true), descriptor(true)))

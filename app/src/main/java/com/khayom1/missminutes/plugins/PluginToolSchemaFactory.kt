@@ -10,9 +10,6 @@ import kotlinx.serialization.json.put
 /** Converts the trusted local catalog into provider-neutral function-tool JSON Schema. */
 object PluginToolSchemaFactory {
     fun create(tools: Collection<PluginToolDescriptor>): JsonArray {
-        require(tools.map { it.toolName }.distinct().size == tools.size) {
-            "Tool names must be unique."
-        }
         return buildJsonArray {
             toAiToolDefinitions(tools).forEach { tool ->
                 add(buildJsonObject {
@@ -28,10 +25,11 @@ object PluginToolSchemaFactory {
     }
 
     fun toAiToolDefinitions(tools: Collection<PluginToolDescriptor>): List<AiToolDefinition> {
-        require(tools.map { it.toolName }.distinct().size == tools.size) {
-            "Tool names must be unique."
+        val connectedTools = tools.filter { it.connected }
+        require(connectedTools.map { it.toolName }.distinct().size == connectedTools.size) {
+            "Connected tool names must be unique."
         }
-        return tools.filter { it.connected }.sortedBy { it.toolName }.map { tool ->
+        return connectedTools.sortedBy { it.toolName }.map { tool ->
             AiToolDefinition(
                 name = tool.toolName,
                 description = (tool.pluginName + ": " + tool.description).take(512),
