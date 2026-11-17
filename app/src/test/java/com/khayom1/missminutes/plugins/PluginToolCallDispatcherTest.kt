@@ -84,10 +84,10 @@ class PluginToolCallDispatcherTest {
 
         val typedNumbersAndBooleans = dispatcher.execute(
             name,
-            """{"count":7,"enabled":true}"""
+            """{"locale":"en","count":7,"enabled":true}"""
         )
         assertTrue(typedNumbersAndBooleans.success)
-        assertEquals("typed arguments accepted", typedNumbersAndBooleans.message)
+        assertEquals("en", typedNumbersAndBooleans.message)
         assertEquals(2, calls())
     }
 
