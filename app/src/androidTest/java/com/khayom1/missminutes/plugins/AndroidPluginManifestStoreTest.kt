@@ -46,6 +46,19 @@ class AndroidPluginManifestStoreTest {
     }
 
     @Test
+    fun importedManifestWithExistingIdCannotReplaceStoredDefinition() {
+        val store = AndroidPluginManifestStore(context)
+        val original = AndroidDeviceStatusPlugin.manifest()
+        store.replace(listOf(original))
+
+        val merged = store.mergeImported(listOf(original.copy(displayName = "Untrusted replacement")))
+
+        assertEquals(listOf(original), merged)
+        assertEquals(listOf(original), store.load())
+        store.replace(emptyList())
+    }
+
+    @Test
     fun removeDeletesOnlyTheSelectedPersistedManifest() {
         val store = AndroidPluginManifestStore(context)
         store.replace(listOf(AndroidDeviceStatusPlugin.manifest()))
