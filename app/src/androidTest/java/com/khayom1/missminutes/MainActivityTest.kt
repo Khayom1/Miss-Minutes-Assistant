@@ -19,6 +19,7 @@ import kotlinx.coroutines.CompletableDeferred
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AuthFlowResult
 import com.khayom1.missminutes.ai.SessionManager
+import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.SessionStore
 import com.khayom1.missminutes.ai.SupabaseAuthRepository
 import com.khayom1.missminutes.ai.SupabaseAuthSession
@@ -106,7 +107,12 @@ class MainActivityTest {
             com.khayom1.missminutes.ui.MissMinutesApp(
                 sessionManager = sessionManager,
                 aiProvider = aiProvider,
-                apiKeyStore = apiKeyStore
+                apiKeyStore = apiKeyStore,
+                ttsProvider = object : TtsProvider {
+                    override fun speak(text: String, onDone: () -> Unit, onError: () -> Unit) = onDone()
+                    override fun stop() = Unit
+                    override fun close() = Unit
+                }
             )
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
