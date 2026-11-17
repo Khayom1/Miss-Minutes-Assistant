@@ -1,6 +1,5 @@
 package com.khayom1.missminutes.plugins
 
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -22,7 +21,7 @@ object PluginManifestArchive {
     fun encode(manifests: List<PluginManifest>): JsonObject {
         require(manifests.size <= MAX_PLUGINS)
         require(manifests.map { it.id }.distinct().size == manifests.size)
-        return buildJsonObject {
+        val encoded = buildJsonObject {
             put("schemaVersion", SCHEMA_VERSION)
             put("plugins", buildJsonArray {
                 manifests.sortedBy { it.id }.forEach { manifest ->
@@ -30,10 +29,13 @@ object PluginManifestArchive {
                 }
             })
         }
+        require(encoded.toString().toByteArray(Charsets.UTF_8).size <= MAX_ARCHIVE_BYTES)
+        return encoded
     }
 
     fun decode(payload: JsonObject): List<PluginManifest> {
         require(payload.toString().toByteArray(Charsets.UTF_8).size <= MAX_ARCHIVE_BYTES)
+        require(payload.keys == setOf("schemaVersion", "plugins")) { "Unknown plugin archive fields." }
         val version = payload["schemaVersion"]?.jsonPrimitive?.content?.toIntOrNull()
             ?: throw IllegalArgumentException("Plugin archive schema version is missing.")
         require(version == SCHEMA_VERSION) { "Unsupported plugin archive version." }
@@ -42,11 +44,13 @@ object PluginManifestArchive {
         require(entries.size <= MAX_PLUGINS)
         val manifests = entries.map { entry ->
             val item = entry.jsonObject
+            require(item.keys == setOf("id", "version", "displayName", "description", "capabilities", "maxCallsPerMinute", "maxExecutionMillis", "actions"))
             val actions = item["actions"]?.jsonArray
                 ?: throw IllegalArgumentException("Plugin actions are missing.")
             require(actions.isNotEmpty() && actions.size <= 16)
             val parsedActions = actions.map { rawAction ->
                 val action = rawAction.jsonObject
+                require(action.keys == setOf("id", "capability", "requiresConfirmation", "arguments"))
                 val argumentsObject = action["arguments"]?.jsonObject ?: JsonObject(emptyMap())
                 require(argumentsObject.size <= 8)
                 val arguments = argumentsObject.mapValues { (key, rawField) ->
