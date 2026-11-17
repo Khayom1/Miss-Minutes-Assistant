@@ -410,6 +410,7 @@ class PluginRegistryTest {
         val protectedHandler = object : PluginActionHandler {
             override val actionId = "read_info"
             override val capability = PluginCapability.DEVICE_INFORMATION
+            override val argumentSchema = manifest.actions.single().arguments
             override val requiresConfirmation = true
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 calls++
