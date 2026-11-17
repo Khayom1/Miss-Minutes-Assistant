@@ -49,7 +49,7 @@ private data class DeepSeekFunctionDefinition(
 @Serializable
 private data class DeepSeekToolCall(
     val id: String,
-    val type: String = "function",
+    val type: String,
     val function: DeepSeekFunctionCall
 )
 
