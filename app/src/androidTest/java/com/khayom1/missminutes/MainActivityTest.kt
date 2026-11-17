@@ -390,7 +390,7 @@ class MainActivityTest {
         composeRule.onNodeWithTag("plugin_consent_android_device_status")
             .performScrollTo()
             .performClick()
-        composeRule.onNodeWithText("Chat").performClick()
+        composeRule.onNodeWithText("New").performClick()
         composeRule.onNodeWithTag("chat_input").performTextInput("What device tools are available?")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
