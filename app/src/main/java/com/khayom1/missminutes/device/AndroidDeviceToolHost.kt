@@ -53,11 +53,12 @@ class FileDeviceToolAuditLog(context: Context) : DeviceToolAuditLog {
 
     @Synchronized
     override fun append(entry: DeviceToolAuditEntry) {
-        if (file.exists() && file.length() > MAX_BYTES) {
-            file.delete()
-        }
         val line = "${entry.timestampMillis}\t${entry.capability.name}\t${entry.outcome}\n"
-        FileOutputStream(file, true).bufferedWriter(Charsets.UTF_8).use { it.append(line) }
+        val bytes = line.toByteArray(Charsets.UTF_8)
+        if (file.exists() && file.length() + bytes.size > MAX_BYTES && !file.delete()) {
+            throw java.io.IOException("Unable to rotate device audit log")
+        }
+        FileOutputStream(file, true).use { it.write(bytes) }
     }
 
     companion object {
