@@ -831,6 +831,13 @@ fun MissMinutesApp(
                             conversationStore.restoreAll(owner, oldChat, RestoreConflictPolicy.REPLACE, restoreSettings = false)
                         }
                     }
+                    selectedLanguageName = when (oldAppearance.language) {
+                        "ru" -> AppLanguage.Russian.name
+                        "tg" -> AppLanguage.Tajik.name
+                        else -> AppLanguage.English.name
+                    }
+                    darkTheme = oldAppearance.darkMode
+                    selectedAiRuntimeProfileName = oldAiRuntimeProfile.name
                     pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
                         it.id to pluginConsentStore.isGranted(it.id)
                     }

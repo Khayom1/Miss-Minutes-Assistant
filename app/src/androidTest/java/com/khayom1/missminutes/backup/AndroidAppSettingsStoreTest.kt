@@ -32,7 +32,7 @@ class AndroidAppSettingsStoreTest {
     @Test
     fun backupAppliesOnlyAllowlistedAppearancePreferences() {
         val store = AndroidAppSettingsStore(context)
-        store.applyBackup(SettingsBackupAdapter.Settings("ru", true, 90, false))
+        store.applyBackup(SettingsBackupAdapter.Settings("ru", true, 90, false, "MAX"))
         assertEquals(AndroidAppSettingsStore.Appearance("ru", true), store.loadAppearance())
         assertEquals(AiRuntimeProfile.MAX, store.loadAiRuntimeProfile())
         store.saveAppearance("en", false)
