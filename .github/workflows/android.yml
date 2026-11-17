@@ -116,6 +116,12 @@ jobs:
             avdmanager list avd
             exit 1
           fi
+          # The default Pixel 2 data partition is too small for the current
+          # debug + instrumentation APK split. Give API 37 a clean 4 GiB userdata.
+          AVD_CONFIG="$ANDROID_AVD_HOME/android17-api37.avd/config.ini"
+          sed -i '/^disk.dataPartition.size=/d' "$AVD_CONFIG"
+          printf '\ndisk.dataPartition.size=4G\n' >> "$AVD_CONFIG"
+          grep -Fx 'disk.dataPartition.size=4G' "$AVD_CONFIG"
           emulator -list-avds | grep -Fx "android17-api37"
           emulator -avd android17-api37 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-snapshot-save -wipe-data &
           EMULATOR_PID=$!
@@ -133,6 +139,13 @@ jobs:
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
+          DATA_AVAILABLE_KB="$(adb shell df -k /data | awk 'NR==2 {print $4}' | tr -d '\r')"
+          if [ -z "$DATA_AVAILABLE_KB" ] || [ "$DATA_AVAILABLE_KB" -lt 524288 ]; then
+            echo "API 37 emulator has less than 512 MiB available in /data." >&2
+            adb shell df -h /data
+            exit 1
+          fi
+          adb shell df -h /data
           gradle --no-daemon connectedDebugAndroidTest
 
       - name: Run Android instrumentation tests (API 35 compatibility)
