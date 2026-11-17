@@ -188,6 +188,17 @@ class AgentOrchestrator(
             return AgentAdvanceResult.Finished(current)
         }
 
+        val interrupted = current.nodes.values.firstOrNull { it.status == AgentNodeStatus.RUNNING }
+        if (interrupted != null) {
+            val nodes = current.nodes + (interrupted.nodeId to interrupted.copy(
+                status = AgentNodeStatus.RECOVERY_REQUIRED,
+                message = "Execution was interrupted; verify the external effect before any manual retry."
+            ))
+            current = current.copy(nodes = nodes, status = AgentTaskStatus.RECOVERY_REQUIRED, updatedAtMillis = now)
+            store.save(current)
+            return AgentAdvanceResult.Finished(current)
+        }
+
         val recovery = current.nodes.values.firstOrNull { it.status == AgentNodeStatus.RECOVERY_REQUIRED }
         if (recovery != null) {
             current = current.copy(status = AgentTaskStatus.RECOVERY_REQUIRED, updatedAtMillis = now)
