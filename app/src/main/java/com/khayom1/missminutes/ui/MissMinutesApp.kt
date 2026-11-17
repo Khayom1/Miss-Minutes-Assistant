@@ -55,6 +55,7 @@ import com.khayom1.missminutes.ai.AiProvider
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
+import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.SupabaseAuthException
 import kotlinx.coroutines.CancellationException
@@ -287,7 +288,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
 @Composable
 fun MissMinutesApp(
     sessionManager: SessionManager,
-    aiProvider: AiProvider
+    aiProvider: AiProvider,
+    apiKeyStore: DeepSeekApiKeyStore
 ) {
     val scope = rememberCoroutineScope()
     var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
@@ -307,10 +309,17 @@ fun MissMinutesApp(
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
+    var apiKeyConfigured by remember { mutableStateOf(false) }
+    var apiKeyInput by remember { mutableStateOf("") }
+    var apiKeyMessage by remember { mutableStateOf<String?>(null) }
     var nextMessageId by remember { mutableStateOf(0L) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val language = AppLanguage.valueOf(selectedLanguageName)
     val copy = copyFor(language)
+
+    LaunchedEffect(apiKeyStore) {
+        apiKeyConfigured = runCatching { !apiKeyStore.load().isNullOrBlank() }.getOrDefault(false)
+    }
 
     LaunchedEffect(sessionManager) {
         // Saved Compose state can outlive a revoked/expired session. Start fail-closed
@@ -401,6 +410,43 @@ fun MissMinutesApp(
                     authBusy = false
                 }
             }
+        }
+    }
+
+    val saveApiKey: () -> Unit = {
+        val candidate = apiKeyInput.trim()
+        try {
+            apiKeyStore.save(candidate)
+            apiKeyConfigured = true
+            apiKeyInput = ""
+            apiKeyMessage = when (language) {
+                AppLanguage.English -> "API key saved securely on this device."
+                AppLanguage.Russian -> "API-ключ надёжно сохранён на этом устройстве."
+                AppLanguage.Tajik -> "Калиди API дар ҳамин телефон бехатар нигоҳ дошта шуд."
+            }
+        } catch (_: IllegalArgumentException) {
+            apiKeyMessage = when (language) {
+                AppLanguage.English -> "The key format looks invalid. Check your DeepSeek key."
+                AppLanguage.Russian -> "Неверный формат ключа. Проверьте ключ DeepSeek."
+                AppLanguage.Tajik -> "Формати калид нодуруст аст. Калиди DeepSeek-ро санҷед."
+            }
+        } catch (_: Exception) {
+            apiKeyMessage = when (language) {
+                AppLanguage.English -> "Could not save the key securely."
+                AppLanguage.Russian -> "Не удалось безопасно сохранить ключ."
+                AppLanguage.Tajik -> "Калидро бехатар нигоҳ доштан нашуд."
+            }
+        }
+    }
+
+    val clearApiKey: () -> Unit = {
+        runCatching { apiKeyStore.clear() }
+        apiKeyConfigured = false
+        apiKeyInput = ""
+        apiKeyMessage = when (language) {
+            AppLanguage.English -> "API key removed from this device."
+            AppLanguage.Russian -> "API-ключ удалён с этого устройства."
+            AppLanguage.Tajik -> "Калиди API аз телефон пок карда шуд."
         }
     }
 
@@ -571,6 +617,12 @@ fun MissMinutesApp(
                                 darkTheme = darkTheme,
                                 email = userEmail,
                                 isBusy = authBusy,
+                                apiKeyConfigured = apiKeyConfigured,
+                                apiKeyInput = apiKeyInput,
+                                apiKeyMessage = apiKeyMessage,
+                                onApiKeyInputChange = { apiKeyInput = it.take(512) },
+                                onSaveApiKey = saveApiKey,
+                                onClearApiKey = clearApiKey,
                                 onLanguageChange = { selectedLanguageName = it.name },
                                 onDarkThemeChange = { darkTheme = it },
                                 onSignOut = signOut
@@ -838,6 +890,12 @@ private fun SettingsScreen(
     darkTheme: Boolean,
     email: String,
     isBusy: Boolean,
+    apiKeyConfigured: Boolean,
+    apiKeyInput: String,
+    apiKeyMessage: String?,
+    onApiKeyInputChange: (String) -> Unit,
+    onSaveApiKey: () -> Unit,
+    onClearApiKey: () -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
     onDarkThemeChange: (Boolean) -> Unit,
     onSignOut: () -> Unit
@@ -880,6 +938,63 @@ private fun SettingsScreen(
                     onCheckedChange = onDarkThemeChange,
                     modifier = Modifier.testTag("dark_mode_switch")
                 )
+            }
+        }
+        val keyTitle = when (language) {
+            AppLanguage.English -> "DeepSeek API key"
+            AppLanguage.Russian -> "Ключ API DeepSeek"
+            AppLanguage.Tajik -> "Калиди API-и DeepSeek"
+        }
+        val keyHint = when (language) {
+            AppLanguage.English -> "Paste your personal API key. It is encrypted with Android Keystore and stays on this phone."
+            AppLanguage.Russian -> "Вставьте личный API-ключ. Он шифруется Android Keystore и остаётся на этом телефоне."
+            AppLanguage.Tajik -> "Калиди шахсии худро гузоред. Он бо Android Keystore рамзгузорӣ шуда, дар ҳамин телефон мемонад."
+        }
+        val keyPlaceholder = when (language) {
+            AppLanguage.English -> "DeepSeek API key"
+            AppLanguage.Russian -> "Ключ DeepSeek"
+            AppLanguage.Tajik -> "Калиди DeepSeek"
+        }
+        val keySaved = when (language) {
+            AppLanguage.English -> "Key is stored securely on this device."
+            AppLanguage.Russian -> "Ключ безопасно хранится на устройстве."
+            AppLanguage.Tajik -> "Калид дар телефон бехатар нигоҳ дошта мешавад."
+        }
+        val saveLabel = when (language) {
+            AppLanguage.English -> "Save API key"
+            AppLanguage.Russian -> "Сохранить ключ"
+            AppLanguage.Tajik -> "Нигоҳ доштани калид"
+        }
+        val removeLabel = when (language) {
+            AppLanguage.English -> "Remove key"
+            AppLanguage.Russian -> "Удалить ключ"
+            AppLanguage.Tajik -> "Пок кардани калид"
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(keyTitle, fontWeight = FontWeight.SemiBold)
+            Text(keyHint, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(
+                value = apiKeyInput,
+                onValueChange = onApiKeyInputChange,
+                modifier = Modifier.fillMaxWidth().testTag("deepseek_api_key"),
+                label = { Text(keyPlaceholder) },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done)
+            )
+            if (apiKeyConfigured) {
+                Text(keySaved, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+            if (apiKeyMessage != null) {
+                Text(apiKeyMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSaveApiKey, enabled = apiKeyInput.isNotBlank() && !isBusy) {
+                    Text(saveLabel)
+                }
+                if (apiKeyConfigured) {
+                    TextButton(onClick = onClearApiKey, enabled = !isBusy) { Text(removeLabel) }
+                }
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
