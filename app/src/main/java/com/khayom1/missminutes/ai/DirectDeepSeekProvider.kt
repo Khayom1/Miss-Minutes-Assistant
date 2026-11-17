@@ -41,7 +41,7 @@ class DirectDeepSeekProvider(
 ) : AiProvider {
     override suspend fun complete(request: AiRequest): AiCompletion {
         val key = keySource.currentApiKey()?.takeIf { it.isNotBlank() }
-            ?: throw AiProviderException.AuthenticationRequired()
+            ?: throw AiProviderException.MissingApiKey()
         val payload = try {
             json.encodeToString(
                 DeepSeekRequest.serializer(),
