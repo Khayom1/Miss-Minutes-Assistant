@@ -153,7 +153,7 @@ class MainActivityTest {
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(
-                "Add your DeepSeek API key in Settings to use online AI. Conversations remain on this device."
+                "Add your DeepSeek API key in Settings to use AI replies. Guest conversations remain on this device."
             ).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
