@@ -34,6 +34,14 @@ jobs:
         with:
           packages: "platform-tools"
 
+      - name: Update Android SDK command-line tools
+        run: |
+          sdkmanager --install "cmdline-tools;latest"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+          sdkmanager --version
+          sdkmanager --list --channel=3 | grep -E 'platforms;android-37|system-images;android-37|build-tools;37' || true
+
       - name: Install Android platform
         run: sdkmanager --channel=3 "platforms;android-35" "platforms;android-37" "build-tools;37.0.0"
 
