@@ -11,10 +11,12 @@ internal class TtsBackgroundPlaybackGuard(
     private val stopPlayback: () -> Unit,
     private val onStopped: () -> Unit
 ) : LifecycleEventObserver {
+    fun onBackgrounded() {
+        stopPlayback()
+        onStopped()
+    }
+
     override fun onStateChanged(source: Lifecycle, event: Lifecycle.Event) {
-        if (event == Lifecycle.Event.ON_STOP) {
-            stopPlayback()
-            onStopped()
-        }
+        if (event == Lifecycle.Event.ON_STOP) onBackgrounded()
     }
 }
