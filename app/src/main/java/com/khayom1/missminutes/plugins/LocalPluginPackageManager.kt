@@ -1,5 +1,7 @@
 package com.khayom1.missminutes.plugins
 
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 
@@ -40,7 +42,11 @@ class LocalPluginPackageManager(
         require(bytes.isNotEmpty() && bytes.size <= MAX_PACKAGE_BYTES) {
             "Plugin package is empty or exceeds the size limit."
         }
-        val root = json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonObject
+        val decoded = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+        val root = json.parseToJsonElement(decoded.toString()).jsonObject
         return PluginManifestArchive.decode(root).also {
             require(it.isNotEmpty()) { "Plugin package does not contain any manifests." }
         }

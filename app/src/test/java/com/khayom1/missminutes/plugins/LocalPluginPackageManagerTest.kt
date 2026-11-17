@@ -224,7 +224,13 @@ class LocalPluginPackageManagerTest {
     fun previewRejectsMalformedAndOversizedPackages() {
         val fixture = fixture()
 
+        assertTrue(runCatching { fixture.manager.previewImport(byteArrayOf()) }.isFailure)
         assertTrue(runCatching { fixture.manager.previewImport("not-json".toByteArray()) }.isFailure)
+        assertTrue(
+            runCatching {
+                fixture.manager.previewImport(byteArrayOf(0x7B, 0x22, 0xFF.toByte(), 0x22, 0x3A, 0x31, 0x7D))
+            }.isFailure
+        )
         assertTrue(
             runCatching {
                 fixture.manager.previewImport(ByteArray(LocalPluginPackageManager.MAX_PACKAGE_BYTES + 1))
