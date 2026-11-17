@@ -444,6 +444,7 @@ class MainActivityTest {
         }
 
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("settings_page_account_about").performClick()
         composeRule.onNodeWithText("new-user@example.test").performScrollTo().assertIsDisplayed()
         assertEquals(
             0,
@@ -532,7 +533,7 @@ class MainActivityTest {
         composeRule.onAllNodesWithText("Настройки приложения").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Язык").assertIsDisplayed()
 
-        composeRule.onNodeWithText("settings_back").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_back").assertIsDisplayed()
         composeRule.onNodeWithTag("settings_back").performClick()
         composeRule.onNodeWithText("ИИ и голос").assertIsDisplayed()
         composeRule.onNodeWithTag("settings_back").performClick()
