@@ -4,10 +4,6 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -50,7 +46,7 @@ data class AiCompletion(
 
 sealed class AiProviderException(message: String, cause: Throwable? = null) :
     Exception(message, cause) {
-    class AuthenticationRequired : AiProviderException("A valid signed-in session is required.")
+    class LocalWorkspaceUnavailable : AiProviderException("The local workspace is not ready.")
     class MissingApiKey : AiProviderException("A DeepSeek API key must be added in Settings.")
     class InvalidApiKey : AiProviderException("The DeepSeek API key was rejected.")
     class RateLimited : AiProviderException("The AI service rate limit was reached.")
@@ -64,10 +60,6 @@ interface AiProvider {
     suspend fun complete(request: AiRequest): AiCompletion
 }
 
-fun interface AccessTokenSource {
-    suspend fun currentAccessToken(): String?
-}
-
 data class AiHttpResponse(
     val statusCode: Int,
     val body: String
@@ -79,105 +71,6 @@ interface AiHttpTransport {
         headers: Map<String, String>,
         body: String
     ): AiHttpResponse
-}
-
-@Serializable
-private data class FunctionRequest(
-    val messages: List<WireMessage>
-)
-
-@Serializable
-private data class WireMessage(
-    val role: String,
-    val content: String
-)
-
-@Serializable
-private data class FunctionResponse(
-    val content: String,
-    val model: String = "deepseek-chat"
-)
-
-/**
- * Calls only the authenticated Supabase Edge Function. The DeepSeek provider
- * credential is never stored in or transmitted from the Android application.
- */
-class SupabaseDeepSeekProvider(
-    private val functionUrl: String,
-    private val publishableKey: String,
-    private val accessTokenSource: AccessTokenSource,
-    private val transport: AiHttpTransport,
-    private val json: Json = Json { ignoreUnknownKeys = true }
-) : AiProvider {
-    init {
-        require(functionUrl.startsWith("https://")) {
-            "The AI function endpoint must use HTTPS."
-        }
-        require(publishableKey.isNotBlank()) {
-            "A Supabase publishable/anon key is required."
-        }
-    }
-
-    override suspend fun complete(request: AiRequest): AiCompletion {
-        val token = accessTokenSource.currentAccessToken()
-            ?.takeIf { it.isNotBlank() }
-            ?: throw AiProviderException.AuthenticationRequired()
-
-        val requestBody = try {
-            json.encodeToString(
-                FunctionRequest.serializer(),
-                FunctionRequest(
-                    messages = request.messages.map {
-                        WireMessage(role = it.role.wireValue, content = it.content)
-                    }
-                )
-            )
-        } catch (error: SerializationException) {
-            throw AiProviderException.InvalidResponse(error)
-        }
-
-        val response = try {
-            transport.post(
-                url = functionUrl,
-                headers = mapOf(
-                    "Authorization" to "Bearer $token",
-                    "apikey" to publishableKey,
-                    "Content-Type" to "application/json"
-                ),
-                body = requestBody
-            )
-        } catch (error: IOException) {
-            throw AiProviderException.Unavailable(error)
-        }
-
-        when (response.statusCode) {
-            200 -> Unit
-            401, 403 -> throw AiProviderException.AuthenticationRequired()
-            429 -> throw AiProviderException.RateLimited()
-            in 500..599 -> throw AiProviderException.Unavailable()
-            else -> throw AiProviderException.InvalidResponse()
-        }
-
-        val decoded = try {
-            json.decodeFromString(FunctionResponse.serializer(), response.body)
-        } catch (error: SerializationException) {
-            throw AiProviderException.InvalidResponse(error)
-        }
-
-        val text = decoded.content.trim()
-        if (text.isEmpty() || text.length > MAX_RESPONSE_CHARS) {
-            throw AiProviderException.InvalidResponse()
-        }
-
-        return AiCompletion(
-            content = text,
-            model = decoded.model.ifBlank { "deepseek-chat" }
-        )
-    }
-
-    private companion object {
-        const val MAX_RESPONSE_CHARS = 64_000
-    }
 }
 
 /**
@@ -222,6 +115,8 @@ class OkHttpAiHttpTransport(
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .callTimeout(50, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 ) : AiHttpTransport {
     override suspend fun post(

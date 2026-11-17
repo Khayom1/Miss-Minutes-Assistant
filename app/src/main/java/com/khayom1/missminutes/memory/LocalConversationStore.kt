@@ -52,8 +52,7 @@ class ConversationLimitReachedException : IllegalStateException(
 /**
  * Offline-first local store. Message and memory content is encrypted with
  * Android Keystore AES-256-GCM before insertion; only ciphertext is stored in
- * SQLite. All reads and writes are explicitly scoped to the authenticated
- * Supabase user id.
+ * SQLite. All reads and writes are scoped to the local workspace owner id.
  */
 class LocalConversationStore(
     context: Context,
