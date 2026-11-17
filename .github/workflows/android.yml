@@ -18,7 +18,7 @@ jobs:
   build:
     name: Build, test and lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,10 +60,13 @@ jobs:
           deno test supabase/functions/miss-minutes-ai/index_test.ts
           deno test supabase/functions/miss-minutes-tts/index_test.ts
 
-      # DeepSeek inference now calls the official provider directly from Android.
-      # No live Supabase AI gateway is required by the Android client.
-      - name: Run unit tests, build APK and lint
-        run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug
+      - name: Run JVM tests, debug and release builds, and lint
+        run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
+
+      - name: Record resolved Android runtime dependencies
+        run: |
+          mkdir -p app/build/release-evidence
+          gradle --no-daemon -p app dependencies --configuration debugRuntimeClasspath > app/build/release-evidence/debug-runtime-dependencies.txt
 
       - name: Enable KVM
         run: |
@@ -83,10 +86,17 @@ jobs:
           disable-animations: true
           script: gradle --no-daemon connectedDebugAndroidTest
 
-      - name: Upload debug APK
+      - name: Generate APK checksums
+        run: |
+          sha256sum app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk > app/build/release-evidence/SHA256SUMS.txt
+
+      - name: Upload release evidence
         uses: actions/upload-artifact@v4
         with:
-          name: miss-minutes-foundation-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: miss-minutes-p8-release-candidates
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/release-evidence/
           if-no-files-found: error
           retention-days: 14
