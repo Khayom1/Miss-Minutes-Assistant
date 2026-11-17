@@ -455,6 +455,16 @@ class MainActivityTest {
     }
 
     @Test
+    fun settingsExposeExplicitFloatingAssistantControls() {
+        signIn()
+        composeRule.onNodeWithText("Settings").performClick()
+
+        composeRule.onNodeWithText("Floating assistant").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("overlay_start").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("overlay_stop").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun settingsShowsMicrophoneDisclosureBeforeListeningIsEnabled() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
