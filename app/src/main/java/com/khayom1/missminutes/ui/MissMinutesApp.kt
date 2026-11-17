@@ -154,6 +154,7 @@ private data class UiCopy(
     val version: String,
     val authTitle: String,
     val authBody: String,
+    val continueAsGuest: String,
     val email: String,
     val password: String,
     val signIn: String,
@@ -215,7 +216,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         about = "About",
         version = "Version",
         authTitle = "Sign in to Miss Minutes",
-        authBody = "Use your Supabase account to access your assistant.",
+        authBody = "Sign in to sync an account, or continue without registration.",
+        continueAsGuest = "Continue as guest — no account needed",
         email = "Email",
         password = "Password",
         signIn = "Sign in",
@@ -275,7 +277,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         about = "О приложении",
         version = "Версия",
         authTitle = "Вход в Miss Minutes",
-        authBody = "Войдите через аккаунт Supabase, чтобы пользоваться помощником.",
+        authBody = "Войдите для использования аккаунта или продолжите без регистрации.",
+        continueAsGuest = "Продолжить без регистрации",
         email = "Электронная почта",
         password = "Пароль",
         signIn = "Войти",
@@ -335,7 +338,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         about = "Дар бораи барнома",
         version = "Версия",
         authTitle = "Вуруд ба Miss Minutes",
-        authBody = "Барои истифодаи ёвар бо ҳисоби Supabase ворид шавед.",
+        authBody = "Бо ҳисоб ҳамоҳанг кунед ё бе бақайдгирӣ истифода баред.",
+        continueAsGuest = "Бе бақайдгирӣ идома додан",
         email = "Почтаи электронӣ",
         password = "Рамз",
         signIn = "Ворид шудан",
@@ -632,6 +636,21 @@ fun MissMinutesApp(
             authMessage = copy.authUnavailable
         } finally {
             isRestoring = false
+        }
+    }
+
+    val continueAsGuest: () -> Unit = {
+        if (!authBusy && !isRestoring) {
+            sessionGeneration += 1
+            authMessage = null
+            authPassword = ""
+            isAuthenticated = true
+            userEmail = copy.continueAsGuest
+            selectedScreenName = AppScreen.Chat.name
+            scope.launch {
+                runCatching { loadConversation("guest-local") }
+                    .onFailure { chatError = copy.sendFailed }
+            }
         }
     }
 
@@ -1079,7 +1098,8 @@ fun MissMinutesApp(
                     authMessage = null
                     authPassword = ""
                 },
-                onSubmit = submitAuth
+                onSubmit = submitAuth,
+                onContinueAsGuest = continueAsGuest
             )
             else -> {
                 val screen = AppScreen.valueOf(selectedScreenName)
@@ -1260,7 +1280,8 @@ private fun AuthScreen(
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onModeChange: () -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    onContinueAsGuest: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1325,6 +1346,13 @@ private fun AuthScreen(
             Text(
                 if (isBusy) copy.wait else if (isSignUp) copy.createAccount else copy.signIn
             )
+        }
+        TextButton(
+            onClick = onContinueAsGuest,
+            enabled = !isBusy,
+            modifier = Modifier.testTag("auth_continue_guest")
+        ) {
+            Text(copy.continueAsGuest)
         }
         TextButton(
             onClick = onModeChange,
