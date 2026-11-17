@@ -27,7 +27,7 @@ require_match 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE' "$manifest"
 source_files="app/src/main"
 if grep -RInE \
   --include='*.kt' --include='*.java' --include='*.xml' \
-  '(DexClassLoader|PathClassLoader|InMemoryDexClassLoader|URLClassLoader|ScriptEngine|System\\.load(Library)?[[:space:]]*\\(|Runtime\\.getRuntime\\(\\)\\.exec|ProcessBuilder|Class\\.forName)' \
+  '(DexClassLoader|PathClassLoader|InMemoryDexClassLoader|URLClassLoader|ScriptEngine|System[.]load(Library)?[[:space:]]*[(]|Runtime[.]getRuntime[(][)][.]exec|ProcessBuilder|Class[.]forName)' \
   "$source_files"; then
   echo "Android platform policy failed: dynamic code loading or reflective execution is forbidden." >&2
   exit 1
