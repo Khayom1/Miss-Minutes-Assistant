@@ -122,6 +122,29 @@ object BackupPayloadAdapters {
             ?: throw IllegalArgumentException("Conversation list is missing.")
         val memories = payload["memory"]?.jsonArray
             ?: throw IllegalArgumentException("Memory list is missing.")
-        require(conversations.size <= 1_000 && memories.size <= 1_000)
+        require(conversations.size <= 200 && memories.size <= 500)
+        conversations.forEach { rawConversation ->
+            val conversation = rawConversation.jsonObject
+            require(conversation.keys == setOf("id", "title", "createdAt", "updatedAt", "messages")) {
+                "Conversation backup contains unknown fields."
+            }
+            val messages = conversation["messages"]?.jsonArray
+                ?: throw IllegalArgumentException("Conversation messages are missing.")
+            require(messages.size <= 2_000)
+            messages.forEach { rawMessage ->
+                val message = rawMessage.jsonObject
+                require(
+                    message.keys == setOf("role", "content", "createdAt") ||
+                        message.keys == setOf("id", "role", "content", "createdAt")
+                ) { "Message backup contains unknown fields." }
+            }
+        }
+        memories.forEach { rawMemory ->
+            val memory = rawMemory.jsonObject
+            require(
+                memory.keys == setOf("id", "content", "createdAt") ||
+                    memory.keys == setOf("id", "content", "createdAt", "updatedAt")
+            ) { "Memory backup contains unknown fields." }
+        }
     }
 }
