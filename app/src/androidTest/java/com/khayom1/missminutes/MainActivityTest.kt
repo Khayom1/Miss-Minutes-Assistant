@@ -469,7 +469,7 @@ class MainActivityTest {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
 
-        composeRule.onNodeWithTag("wake_phrase_disclosure").assertIsDisplayed()
+        composeRule.onNodeWithTag("wake_phrase_disclosure").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Offline wake phrase").assertIsDisplayed()
         composeRule.onNodeWithTag("wake_phrase_toggle").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Enable microphone listening").performScrollTo().assertIsDisplayed()
