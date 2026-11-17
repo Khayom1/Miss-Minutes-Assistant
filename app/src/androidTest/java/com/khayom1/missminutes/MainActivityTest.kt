@@ -202,6 +202,28 @@ class MainActivityTest {
     }
 
     @Test
+    fun historyPersistsConversationAndUserManagedMemory() {
+        signIn()
+        composeRule.onNodeWithTag("chat_input").performTextInput("My long-term study plan")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Mock AI response").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("History").performClick()
+        composeRule.onNodeWithText("My long-term study plan").assertIsDisplayed()
+        composeRule.onNodeWithTag("history_memory_key").performTextInput("Study goal")
+        composeRule.onNodeWithTag("history_memory_value").performTextInput("Finish dentistry degree")
+        composeRule.onNodeWithTag("history_save_memory").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Finish dentistry degree").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("History").assertIsDisplayed()
+        composeRule.onNodeWithTag("retention_30").assertIsDisplayed()
+        composeRule.onNodeWithTag("retention_90").assertIsDisplayed()
+    }
+
+    @Test
     fun chatExposesUserInitiatedOfflineDictationControl() {
         signIn()
         composeRule.onNodeWithTag("speech_input").assertIsDisplayed()
