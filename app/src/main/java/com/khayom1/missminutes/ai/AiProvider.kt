@@ -173,7 +173,7 @@ class SupabaseDeepSeekProvider(
     }
 
     private companion object {
-        const val MAX_RESPONSE_BYTES = 64 * 1024
+        const val MAX_RESPONSE_CHARS = 64_000
     }
 }
 
@@ -257,6 +257,6 @@ class OkHttpAiHttpTransport(
     }
 
     private companion object {
-        const val MAX_RESPONSE_CHARS = 64_000
+        const val MAX_RESPONSE_BYTES = 64 * 1024
     }
 }
