@@ -43,7 +43,6 @@ internal fun BackupRestorePanel(
     onDismissPreview: () -> Unit,
     pluginManifests: List<PluginManifest>,
     pluginConsentStates: Map<String, Boolean>,
-    onPluginConsentChange: (String, Boolean) -> Unit,
     onExportPlugin: (String) -> Unit
 ) {
     val isTajik = language == AppLanguage.Tajik
