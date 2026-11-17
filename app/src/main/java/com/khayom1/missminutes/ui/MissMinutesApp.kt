@@ -783,7 +783,8 @@ fun MissMinutesApp(
                         val ownerId = currentOwnerId ?: throw AiProviderException.AuthenticationRequired()
                         val conversationId = activeConversationId ?: withContext(Dispatchers.IO) {
                             conversationStore.createConversation(ownerId)
-                        }.also { activeConversationId = it }
+                        }
+                        if (activeConversationId == null) activeConversationId = conversationId
                         requestConversationId = conversationId
                         val userMessageId = withContext(Dispatchers.IO) {
                             conversationStore.appendMessage(
