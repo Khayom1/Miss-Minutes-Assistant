@@ -60,6 +60,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.ProductIdentity
+import com.khayom1.missminutes.data.AndroidConversationStore
+import com.khayom1.missminutes.data.ConversationRole
+import com.khayom1.missminutes.data.StoredConversation
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
@@ -355,6 +358,10 @@ fun MissMinutesApp(
     var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
     val language = AppLanguage.valueOf(selectedLanguageName)
     val context = LocalContext.current
+    val conversationStore = remember(context) { AndroidConversationStore(context) }
+    DisposableEffect(conversationStore) {
+        onDispose { conversationStore.close() }
+    }
     var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
     var wakeMessage by remember { mutableStateOf<String?>(null) }
     DisposableEffect(context) {
@@ -460,6 +467,9 @@ fun MissMinutesApp(
     var sessionGeneration by remember { mutableStateOf(0L) }
     var authMessage by remember { mutableStateOf<String?>(null) }
     var userEmail by remember { mutableStateOf("") }
+    var currentOwnerId by remember { mutableStateOf<String?>(null) }
+    var activeConversationId by remember { mutableStateOf<String?>(null) }
+    val savedConversations = remember { mutableStateListOf<StoredConversation>() }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
@@ -474,6 +484,27 @@ fun MissMinutesApp(
     var nextMessageId by remember { mutableStateOf(0L) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val copy = copyFor(language)
+
+    LaunchedEffect(currentOwnerId) {
+        messages.clear()
+        activeConversationId = null
+        savedConversations.clear()
+        val owner = currentOwnerId ?: return@LaunchedEffect
+        val restored = withContext(Dispatchers.IO) {
+            conversationStore.deleteOlderThan(owner, System.currentTimeMillis() - DEFAULT_RETENTION_MILLIS)
+            val conversations = conversationStore.listConversations(owner)
+            val latest = conversations.firstOrNull()
+            val restoredMessages = latest?.let { conversationStore.loadMessages(owner, it.id) }.orEmpty()
+            conversations to (latest?.id to restoredMessages)
+        }
+        savedConversations.addAll(restored.first)
+        val (conversationId, restoredMessages) = restored.second
+        activeConversationId = conversationId
+        restoredMessages.forEach { stored ->
+            nextMessageId += 1
+            messages.add(ChatMessage(nextMessageId, stored.content, stored.role == ConversationRole.USER))
+        }
+    }
 
     val speechLocale = when (language) {
         AppLanguage.English -> Locale.US
@@ -529,6 +560,7 @@ fun MissMinutesApp(
             val session = sessionManager.restoreSession()
             if (session != null) {
                 isAuthenticated = true
+                currentOwnerId = session.userId
                 userEmail = session.email.orEmpty()
                 authEmail = session.email.orEmpty()
             } else {
@@ -556,6 +588,7 @@ fun MissMinutesApp(
                         if (session != null) {
                             sessionGeneration += 1
                             isAuthenticated = true
+                            currentOwnerId = session.userId
                             userEmail = session.email ?: authEmail.trim()
                             authEmail = userEmail
                             authPassword = ""
@@ -568,6 +601,7 @@ fun MissMinutesApp(
                         val session = sessionManager.signIn(authEmail.trim(), authPassword)
                         sessionGeneration += 1
                         isAuthenticated = true
+                        currentOwnerId = session.userId
                         userEmail = session.email ?: authEmail.trim()
                         authEmail = userEmail
                         authPassword = ""
@@ -593,6 +627,7 @@ fun MissMinutesApp(
             disableWakeListening()
             sessionGeneration += 1
             isAuthenticated = false
+            currentOwnerId = null
             userEmail = ""
             authEmail = ""
             authPassword = ""
@@ -730,6 +765,7 @@ fun MissMinutesApp(
                         authBusy = true
                         disableWakeListening()
                         isAuthenticated = false
+                        currentOwnerId = null
                         userEmail = ""
                         authEmail = ""
                         authPassword = ""
