@@ -153,7 +153,7 @@ class AgentOrchestratorTest {
             assertTrue(request.userConfirmed)
             PluginExecutionResult(true, "done", PluginCapability.DEVICE_INFORMATION)
         }
-        engine.create(plan(listOf(node("sensitive", approval = true))))
+        engine.create(plan(listOf(node("sensitive", approval = true)), deadline = 100_000L))
         engine.advance("task_1")
         engine.approve("task_1", "sensitive")
 
