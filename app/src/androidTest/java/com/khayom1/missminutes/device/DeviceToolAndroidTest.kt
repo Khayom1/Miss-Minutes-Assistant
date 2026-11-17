@@ -30,6 +30,26 @@ class DeviceToolAndroidTest {
     }
 
     @Test
+    fun auditLogNeverExceedsConfiguredSizeCap() {
+        val logFile = File(context.filesDir, "device-tool-audit.log")
+        logFile.delete()
+        val log = FileDeviceToolAuditLog(context)
+
+        repeat(5_000) { index ->
+            log.append(
+                DeviceToolAuditEntry(
+                    timestampMillis = index.toLong(),
+                    capability = DeviceToolCapability.DEVICE_INFO,
+                    outcome = "success"
+                )
+            )
+        }
+
+        assertTrue(logFile.length() <= 64 * 1024L)
+        logFile.delete()
+    }
+
+    @Test
     fun auditLogContainsMetadataButNeverCommandPayload() {
         val logFile = File(context.filesDir, "device-tool-audit.log")
         logFile.delete()
