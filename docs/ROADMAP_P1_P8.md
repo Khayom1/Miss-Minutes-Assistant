@@ -10,7 +10,7 @@ This roadmap is a sequence of independently accepted implementation phases. A ph
 | P1 | Complete | ChatGPT-like Compose UI foundation |
 | P2 | In progress | Direct DeepSeek connection using a user-owned, locally encrypted API key; CI and API 35 instrumentation passed, live provider request still required |
 | P3 | In progress | On-device TTS, permission-gated offline wake phrase, speech input and hosted ElevenLabs adapter |
-| P4 | Not started | Persistent local conversation history and memory, optional authenticated sync |
+| P4 | In progress | Encrypted local conversation history and user-managed memory, schema migrations, export/delete/retention controls |
 | P5 | Not started | Explicitly permissioned Android-native capabilities |
 | P6 | Not started | Typed plugin/skill manifest, capability allowlist and execution boundary |
 | P7 | Not started | Bounded multi-step agent/task orchestration |
