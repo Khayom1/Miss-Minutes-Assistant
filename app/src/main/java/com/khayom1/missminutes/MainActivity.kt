@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.khayom1.missminutes.ai.AndroidSessionStore
+import com.khayom1.missminutes.ai.AndroidSpeechInputProvider
+import com.khayom1.missminutes.ai.SpeechInputProvider
 import com.khayom1.missminutes.ai.AndroidTtsProvider
 import com.khayom1.missminutes.ai.AndroidDeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.DeepSeekApiKeySource
@@ -17,6 +19,7 @@ import com.khayom1.missminutes.ui.MissMinutesApp
 
 class MainActivity : ComponentActivity() {
     private var ttsProvider: TtsProvider? = null
+    private var speechInputProvider: SpeechInputProvider? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,13 +48,16 @@ class MainActivity : ComponentActivity() {
             offlineFallback = offlineTts
         )
         ttsProvider = hybridTts
+        val speechInput = AndroidSpeechInputProvider(applicationContext)
+        speechInputProvider = speechInput
 
         setContent {
             MissMinutesApp(
                 sessionManager = sessionManager,
                 aiProvider = aiProvider,
                 apiKeyStore = apiKeyStore,
-                ttsProvider = hybridTts
+                ttsProvider = hybridTts,
+                speechInputProvider = speechInput
             )
         }
     }
@@ -59,6 +65,8 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         ttsProvider?.close()
         ttsProvider = null
+        speechInputProvider?.close()
+        speechInputProvider = null
         super.onDestroy()
     }
 }
