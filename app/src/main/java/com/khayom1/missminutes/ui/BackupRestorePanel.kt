@@ -12,9 +12,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.khayom1.missminutes.backup.BackupArchive
@@ -52,7 +55,7 @@ internal fun BackupRestorePanel(
         BackupArchive.Category.PLUGINS to if (isTajik) "Метамаълумоти плагинҳо" else if (isRussian) "Метаданные плагинов" else "Plugin manifests"
     )
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(title, modifier = Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
         Text(
             if (isTajik) "Нусха бо парол рамзгузорӣ мешавад. Калидҳои API, иҷозатҳои Android ва розигии плагинҳо дохил намешаванд."
             else if (isRussian) "Резервная копия шифруется паролем. API-ключи, разрешения Android и согласия плагинов не включаются."
@@ -64,7 +67,10 @@ internal fun BackupRestorePanel(
             Row(modifier = Modifier.fillMaxWidth()) {
                 Checkbox(
                     checked = category in categories,
-                    onCheckedChange = { onToggleCategory(category) }
+                    onCheckedChange = { onToggleCategory(category) },
+                    modifier = Modifier.semantics {
+                        contentDescription = categoryLabels.getValue(category)
+                    }
                 )
                 Text(categoryLabels.getValue(category), modifier = Modifier.weight(1f))
             }
@@ -72,7 +78,7 @@ internal fun BackupRestorePanel(
         OutlinedTextField(
             value = password,
             onValueChange = onPasswordChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("backup_password"),
             label = {
                 Text(if (isTajik) "Пароли нусха (ҳадди ақал 10 аломат)" else if (isRussian) "Пароль копии (не менее 10 символов)" else "Backup password (at least 10 characters)")
             },
@@ -88,11 +94,18 @@ internal fun BackupRestorePanel(
             )
             pluginManifests.forEach { manifest ->
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    Text(manifest.displayName, modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = pluginConsentStates[manifest.id] == true,
-                        onCheckedChange = { onPluginConsentChange(manifest.id, it) }
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(manifest.displayName)
+                        Text(
+                            if (pluginConsentStates[manifest.id] == true) {
+                                if (isTajik) "Иҷозат фаъол аст" else if (isRussian) "Разрешение включено" else "Consent enabled"
+                            } else {
+                                if (isTajik) "Иҷозат хомӯш аст" else if (isRussian) "Разрешение выключено" else "Consent disabled"
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     TextButton(
                         enabled = !busy && password.length >= 10,
                         onClick = { onExportPlugin(manifest.id) }
