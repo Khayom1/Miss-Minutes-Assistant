@@ -2325,370 +2325,424 @@ private fun SettingsScreen(
             }
         }
         if (settingsPage == SettingsPage.GENERAL) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(copy.language, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AppLanguage.entries.forEach { item ->
-                        FilterChip(
-                            selected = language == item,
-                            onClick = { onLanguageChange(item) },
-                            label = { Text(item.nativeName) }
-                        )
-                    }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(copy.language, fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppLanguage.entries.forEach { item ->
+                    FilterChip(
+                        selected = language == item,
+                        onClick = { onLanguageChange(item) },
+                        label = { Text(item.nativeName) }
+                    )
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(copy.appearance, fontWeight = FontWeight.SemiBold)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(copy.darkMode)
-                        Text(
-                            copy.darkModeBody,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    Switch(
-                        checked = darkTheme,
-                        onCheckedChange = onDarkThemeChange,
-                        modifier = Modifier.testTag("dark_mode_switch").semantics {
-                            contentDescription = copy.darkMode
-                            stateDescription = if (darkTheme) {
-                                when (language) {
-                                    AppLanguage.Tajik -> "Фаъол"
-                                    AppLanguage.Russian -> "Включено"
-                                    AppLanguage.English -> "On"
-                                }
-                            } else {
-                                when (language) {
-                                    AppLanguage.Tajik -> "Хомӯш"
-                                    AppLanguage.Russian -> "Выключено"
-                                    AppLanguage.English -> "Off"
-                                }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(copy.appearance, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(copy.darkMode)
+                    Text(
+                        copy.darkModeBody,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Switch(
+                    checked = darkTheme,
+                    onCheckedChange = onDarkThemeChange,
+                    modifier = Modifier.testTag("dark_mode_switch").semantics {
+                        contentDescription = copy.darkMode
+                        stateDescription = if (darkTheme) {
+                            when (language) {
+                                AppLanguage.Tajik -> "Фаъол"
+                                AppLanguage.Russian -> "Включено"
+                                AppLanguage.English -> "On"
                             }
+                        } else {
+                            when (language) {
+                                AppLanguage.Tajik -> "Хомӯш"
+                                AppLanguage.Russian -> "Выключено"
+                                AppLanguage.English -> "Off"
+                            }
+                        }
+                    }
+                )
+            }
+        }
+
+        }
+        if (settingsPage == SettingsPage.AI_VOICE) {
+        val keyTitle = when (language) {
+            AppLanguage.English -> "DeepSeek API key"
+            AppLanguage.Russian -> "Ключ API DeepSeek"
+            AppLanguage.Tajik -> "Калиди API-и DeepSeek"
+        }
+        val keyHint = when (language) {
+            AppLanguage.English -> "Paste your personal API key. It is encrypted with Android Keystore and stays on this phone."
+            AppLanguage.Russian -> "Вставьте личный API-ключ. Он шифруется Android Keystore и остаётся на этом телефоне."
+            AppLanguage.Tajik -> "Калиди шахсии худро гузоред. Он бо Android Keystore рамзгузорӣ шуда, дар ҳамин телефон мемонад."
+        }
+        val keyPlaceholder = when (language) {
+            AppLanguage.English -> "DeepSeek API key"
+            AppLanguage.Russian -> "Ключ DeepSeek"
+            AppLanguage.Tajik -> "Калиди DeepSeek"
+        }
+        val keySaved = when (language) {
+            AppLanguage.English -> "Key is stored securely on this device."
+            AppLanguage.Russian -> "Ключ безопасно хранится на устройстве."
+            AppLanguage.Tajik -> "Калид дар телефон бехатар нигоҳ дошта мешавад."
+        }
+        val saveLabel = when (language) {
+            AppLanguage.English -> "Save API key"
+            AppLanguage.Russian -> "Сохранить ключ"
+            AppLanguage.Tajik -> "Нигоҳ доштани калид"
+        }
+        val removeLabel = when (language) {
+            AppLanguage.English -> "Remove key"
+            AppLanguage.Russian -> "Удалить ключ"
+            AppLanguage.Tajik -> "Пок кардани калид"
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(keyTitle, fontWeight = FontWeight.SemiBold)
+            Text(keyHint, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(
+                value = apiKeyInput,
+                onValueChange = onApiKeyInputChange,
+                modifier = Modifier.fillMaxWidth().testTag("deepseek_api_key"),
+                label = { Text(keyPlaceholder) },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done)
+            )
+            if (apiKeyConfigured) {
+                Text(keySaved, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+            if (apiKeyMessage != null) {
+                Text(apiKeyMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSaveApiKey, enabled = apiKeyInput.isNotBlank() && !isBusy) {
+                    Text(saveLabel)
+                }
+                if (apiKeyConfigured) {
+                    TextButton(onClick = onClearApiKey, enabled = !isBusy) { Text(removeLabel) }
+                }
+            }
+        }
+
+        }
+        if (settingsPage == SettingsPage.FLOATING_ASSISTANT) {
+        val overlayContext = LocalContext.current
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Ёвари шинокунанда"
+                    AppLanguage.Russian -> "Плавающий помощник"
+                    AppLanguage.English -> "Floating assistant"
+                },
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Тугмачаи Miss Minutes дар болои барномаҳои дигар пайдо мешавад. Барои он иҷозати махсуси Android лозим аст. Он танҳо бо пахши шумо фаъол мешавад ва микрофонро истифода намекунад."
+                    AppLanguage.Russian -> "Плавающая кнопка Miss Minutes будет отображаться поверх других приложений. Требуется специальное разрешение Android. Она запускается только по вашему нажатию и не использует микрофон."
+                    AppLanguage.English -> "A Miss Minutes shortcut appears above other apps. Android requires a special permission. It starts only after your tap and does not use the microphone."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        if (android.provider.Settings.canDrawOverlays(overlayContext)) {
+                            androidx.core.content.ContextCompat.startForegroundService(
+                                overlayContext,
+                                android.content.Intent(
+                                    overlayContext,
+                                    com.khayom1.missminutes.overlay.MissMinutesOverlayService::class.java
+                                ).setAction(com.khayom1.missminutes.overlay.MissMinutesOverlayService.ACTION_START)
+                            )
+                        } else {
+                            overlayContext.startActivity(
+                                android.content.Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:${overlayContext.packageName}")
+                                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
+                    enabled = !isBusy,
+                    modifier = Modifier.testTag("overlay_start")
+                ) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Фаъол кардан"
+                            AppLanguage.Russian -> "Включить"
+                            AppLanguage.English -> "Show bubble"
+                        }
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        overlayContext.stopService(
+                            android.content.Intent(
+                                overlayContext,
+                                com.khayom1.missminutes.overlay.MissMinutesOverlayService::class.java
+                            )
+                        )
+                    },
+                    modifier = Modifier.testTag("overlay_stop")
+                ) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Пинҳон кардан"
+                            AppLanguage.Russian -> "Скрыть"
+                            AppLanguage.English -> "Hide"
                         }
                     )
                 }
             }
+        }
 
         }
         if (settingsPage == SettingsPage.AI_VOICE) {
-            val keyTitle = when (language) {
-                AppLanguage.English -> "DeepSeek API key"
-                AppLanguage.Russian -> "Ключ API DeepSeek"
-                AppLanguage.Tajik -> "Калиди API-и DeepSeek"
-            }
-            val keyHint = when (language) {
-                AppLanguage.English -> "Paste your personal API key. It is encrypted with Android Keystore and stays on this phone."
-                AppLanguage.Russian -> "Вставьте личный API-ключ. Он шифруется Android Keystore и остаётся на этом телефоне."
-                AppLanguage.Tajik -> "Калиди шахсии худро гузоред. Он бо Android Keystore рамзгузорӣ шуда, дар ҳамин телефон мемонад."
-            }
-            val keyPlaceholder = when (language) {
-                AppLanguage.English -> "DeepSeek API key"
-                AppLanguage.Russian -> "Ключ DeepSeek"
-                AppLanguage.Tajik -> "Калиди DeepSeek"
-            }
-            val keySaved = when (language) {
-                AppLanguage.English -> "Key is stored securely on this device."
-                AppLanguage.Russian -> "Ключ безопасно хранится на устройстве."
-                AppLanguage.Tajik -> "Калид дар телефон бехатар нигоҳ дошта мешавад."
-            }
-            val saveLabel = when (language) {
-                AppLanguage.English -> "Save API key"
-                AppLanguage.Russian -> "Сохранить ключ"
-                AppLanguage.Tajik -> "Нигоҳ доштани калид"
-            }
-            val removeLabel = when (language) {
-                AppLanguage.English -> "Remove key"
-                AppLanguage.Russian -> "Удалить ключ"
-                AppLanguage.Tajik -> "Пок кардани калид"
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(keyTitle, fontWeight = FontWeight.SemiBold)
-                Text(keyHint, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
-                    value = apiKeyInput,
-                    onValueChange = onApiKeyInputChange,
-                    modifier = Modifier.fillMaxWidth().testTag("deepseek_api_key"),
-                    label = { Text(keyPlaceholder) },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done)
-                )
-                if (apiKeyConfigured) {
-                    Text(keySaved, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
-                }
-                if (apiKeyMessage != null) {
-                    Text(apiKeyMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onSaveApiKey, enabled = apiKeyInput.isNotBlank() && !isBusy) {
-                        Text(saveLabel)
-                    }
-                    if (apiKeyConfigured) {
-                        TextButton(onClick = onClearApiKey, enabled = !isBusy) { Text(removeLabel) }
-                    }
-                }
-            }
-
+        val wakeTitle = when (language) {
+            AppLanguage.English -> "Offline wake phrase"
+            AppLanguage.Russian -> "Офлайн-фраза активации"
+            AppLanguage.Tajik -> "Ибораи бедоркунии офлайн"
         }
-        if (settingsPage == SettingsPage.FLOATING_ASSISTANT) {
-            val overlayContext = LocalContext.current
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    when (language) {
-                        AppLanguage.Tajik -> "Ёвари шинокунанда"
-                        AppLanguage.Russian -> "Плавающий помощник"
-                        AppLanguage.English -> "Floating assistant"
-                    },
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    when (language) {
-                        AppLanguage.Tajik -> "Тугмачаи Miss Minutes дар болои барномаҳои дигар пайдо мешавад. Барои он иҷозати махсуси Android лозим аст. Он танҳо бо пахши шумо фаъол мешавад ва микрофонро истифода намекунад."
-                        AppLanguage.Russian -> "Плавающая кнопка Miss Minutes будет отображаться поверх других приложений. Требуется специальное разрешение Android. Она запускается только по вашему нажатию и не использует микрофон."
-                        AppLanguage.English -> "A Miss Minutes shortcut appears above other apps. Android requires a special permission. It starts only after your tap and does not use the microphone."
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            if (android.provider.Settings.canDrawOverlays(overlayContext)) {
-                                androidx.core.content.ContextCompat.startForegroundService(
-                                    overlayContext,
-                                    android.content.Intent(
-                                        overlayContext,
-                                        com.khayom1.missminutes.overlay.MissMinutesOverlayService::class.java
-                                    ).setAction(com.khayom1.missminutes.overlay.MissMinutesOverlayService.ACTION_START)
-                                )
-                            } else {
-                                overlayContext.startActivity(
-                                    android.content.Intent(
-                                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        android.net.Uri.parse("package:${overlayContext.packageName}")
-                                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
-                            }
-                        },
-                        enabled = !isBusy,
-                        modifier = Modifier.testTag("overlay_start")
-                    ) {
-                        Text(
-                            when (language) {
-                                AppLanguage.Tajik -> "Фаъол кардан"
-                                AppLanguage.Russian -> "Включить"
-                                AppLanguage.English -> "Show bubble"
-                            }
-                        )
-                    }
-                    TextButton(
-                        onClick = {
-                            overlayContext.stopService(
-                                android.content.Intent(
-                                    overlayContext,
-                                    com.khayom1.missminutes.overlay.MissMinutesOverlayService::class.java
-                                )
-                            )
-                        },
-                        modifier = Modifier.testTag("overlay_stop")
-                    ) {
-                        Text(
-                            when (language) {
-                                AppLanguage.Tajik -> "Пинҳон кардан"
-                                AppLanguage.Russian -> "Скрыть"
-                                AppLanguage.English -> "Hide"
-                            }
-                        )
-                    }
-                }
-            }
-
+        val wakeDisclosure = when (language) {
+            AppLanguage.English -> "When enabled, Miss Minutes keeps the microphone active through an Android foreground service while this feature is on. Audio is processed only by Android's on-device speech recognizer (Android 12+ with an installed offline English model); there is no cloud fallback or audio upload. If local recognition is unavailable, listening stops. A persistent notification is shown. Android may stop the service because of Force stop, permission changes or system restrictions."
+            AppLanguage.Russian -> "При включении Miss Minutes использует микрофон через фоновую службу Android, пока функция активна. Звук обрабатывается только встроенным офлайн-распознавателем Android (Android 12+ с установленной офлайн-моделью английского языка); облачного резервного режима и отправки аудио нет. Если локальное распознавание недоступно, прослушивание остановится. Постоянное уведомление обязательно. Android может остановить службу при принудительной остановке, отзыве разрешений или системных ограничениях."
+            AppLanguage.Tajik -> "Ҳангоми фаъол будан Miss Minutes микрофонро тавассути хидмати пешзаминаи Android истифода мебарад. Овоз танҳо дар дастгоҳ коркард мешавад (Android 12+ ва модели офлайнии забони англисӣ лозим аст); ба абр фиристода намешавад ва роҳи эҳтиётии онлайн вуҷуд надорад. Агар шинохти маҳаллӣ дастнорас бошад, гӯшкунӣ қатъ мешавад. Огоҳиномаи доимӣ нишон дода мешавад. Android метавонад хидматро ҳангоми Force stop, бекор шудани иҷозат ё маҳдудияти система қатъ кунад."
         }
-        if (settingsPage == SettingsPage.AI_VOICE) {
-            val wakeTitle = when (language) {
-                AppLanguage.English -> "Offline wake phrase"
-                AppLanguage.Russian -> "Офлайн-фраза активации"
-                AppLanguage.Tajik -> "Ибораи бедоркунии офлайн"
+        val wakeStart = when (language) {
+            AppLanguage.English -> "Enable microphone listening"
+            AppLanguage.Russian -> "Включить прослушивание"
+            AppLanguage.Tajik -> "Фаъол кардани гӯшкунии микрофон"
+        }
+        val wakeStop = when (language) {
+            AppLanguage.English -> "Stop listening"
+            AppLanguage.Russian -> "Остановить прослушивание"
+            AppLanguage.Tajik -> "Қатъ кардани гӯшкунӣ"
+        }
+        val wakeState = when (language) {
+            AppLanguage.English -> if (wakeEnabled) "Listening requested" else "Not listening"
+            AppLanguage.Russian -> if (wakeEnabled) "Прослушивание запрошено" else "Не прослушивает"
+            AppLanguage.Tajik -> if (wakeEnabled) "Гӯшкунӣ дархост шудааст" else "Гӯш намекунад"
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(wakeTitle, fontWeight = FontWeight.SemiBold)
+            Text("Miss Minutes", fontWeight = FontWeight.Medium)
+            Text(
+                wakeDisclosure,
+                modifier = Modifier.testTag("wake_phrase_disclosure"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(wakeState, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            if (wakeMessage != null) {
+                Text(wakeMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
-            val wakeDisclosure = when (language) {
-                AppLanguage.English -> "When enabled, Miss Minutes keeps the microphone active through an Android foreground service while this feature is on. Audio is processed only by Android's on-device speech recognizer (Android 12+ with an installed offline English model); there is no cloud fallback or audio upload. If local recognition is unavailable, listening stops. A persistent notification is shown. Android may stop the service because of Force stop, permission changes or system restrictions."
-                AppLanguage.Russian -> "При включении Miss Minutes использует микрофон через фоновую службу Android, пока функция активна. Звук обрабатывается только встроенным офлайн-распознавателем Android (Android 12+ с установленной офлайн-моделью английского языка); облачного резервного режима и отправки аудио нет. Если локальное распознавание недоступно, прослушивание остановится. Постоянное уведомление обязательно. Android может остановить службу при принудительной остановке, отзыве разрешений или системных ограничениях."
-                AppLanguage.Tajik -> "Ҳангоми фаъол будан Miss Minutes микрофонро тавассути хидмати пешзаминаи Android истифода мебарад. Овоз танҳо дар дастгоҳ коркард мешавад (Android 12+ ва модели офлайнии забони англисӣ лозим аст); ба абр фиристода намешавад ва роҳи эҳтиётии онлайн вуҷуд надорад. Агар шинохти маҳаллӣ дастнорас бошад, гӯшкунӣ қатъ мешавад. Огоҳиномаи доимӣ нишон дода мешавад. Android метавонад хидматро ҳангоми Force stop, бекор шудани иҷозат ё маҳдудияти система қатъ кунад."
+            Button(
+                onClick = if (wakeEnabled) onDisableWakeListening else onEnableWakeListening,
+                enabled = !isBusy,
+                modifier = Modifier.testTag("wake_phrase_toggle")
+            ) {
+                Text(if (wakeEnabled) wakeStop else wakeStart)
             }
-            val wakeStart = when (language) {
-                AppLanguage.English -> "Enable microphone listening"
-                AppLanguage.Russian -> "Включить прослушивание"
-                AppLanguage.Tajik -> "Фаъол кардани гӯшкунии микрофон"
-            }
-            val wakeStop = when (language) {
-                AppLanguage.English -> "Stop listening"
-                AppLanguage.Russian -> "Остановить прослушивание"
-                AppLanguage.Tajik -> "Қатъ кардани гӯшкунӣ"
-            }
-            val wakeState = when (language) {
-                AppLanguage.English -> if (wakeEnabled) "Listening requested" else "Not listening"
-                AppLanguage.Russian -> if (wakeEnabled) "Прослушивание запрошено" else "Не прослушивает"
-                AppLanguage.Tajik -> if (wakeEnabled) "Гӯшкунӣ дархост шудааст" else "Гӯш намекунад"
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(wakeTitle, fontWeight = FontWeight.SemiBold)
-                Text("Miss Minutes", fontWeight = FontWeight.Medium)
-                Text(
-                    wakeDisclosure,
-                    modifier = Modifier.testTag("wake_phrase_disclosure"),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(wakeState, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
-                if (wakeMessage != null) {
-                    Text(wakeMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                }
-                Button(
-                    onClick = if (wakeEnabled) onDisableWakeListening else onEnableWakeListening,
-                    enabled = !isBusy,
-                    modifier = Modifier.testTag("wake_phrase_toggle")
-                ) {
-                    Text(if (wakeEnabled) wakeStop else wakeStart)
-                }
-            }
+        }
 
         }
         if (settingsPage == SettingsPage.PLUGINS_DEVICE) {
-            PluginManagerPanel(
-                language = language,
-                manifests = pluginManifests,
-                consentStates = pluginConsentStates,
-                auditEntries = pluginAuditEntries,
-                onConsentChange = onDeclarativePluginConsentChange,
-                onUninstall = onUninstallPlugin
-            )
-            var pendingDeviceCommand by remember { mutableStateOf<DeviceToolCommand?>(null) }
-            var deviceToolMessage by remember { mutableStateOf<String?>(null) }
-            var shareTextDraft by rememberSaveable { mutableStateOf("") }
-            fun pluginResultText(result: PluginExecutionResult): String {
-                if (!result.success) {
-                    return when (language) {
-                        AppLanguage.Tajik -> "Плагин иҷозат нагирифт ё амалро иҷро накард."
-                        AppLanguage.Russian -> "Плагин не получил разрешение или не выполнил действие."
-                        AppLanguage.English -> "Plugin permission was denied or the action failed."
-                    }
-                }
-                return when (result.capability) {
-                    PluginCapability.DEVICE_INFORMATION -> when (language) {
-                        AppLanguage.Tajik -> "Дастгоҳ: ${result.message}"
-                        AppLanguage.Russian -> "Устройство: ${result.message}"
-                        AppLanguage.English -> "Device: ${result.message}"
-                    }
-                    PluginCapability.BATTERY_STATUS -> when {
-                        result.message == "unavailable" -> when (language) {
-                            AppLanguage.Tajik -> "Сатҳи батарея дастрас нест."
-                            AppLanguage.Russian -> "Уровень батареи недоступен."
-                            AppLanguage.English -> "Battery level is unavailable."
-                        }
-                        language == AppLanguage.Tajik -> "Батарея: ${result.message}"
-                        language == AppLanguage.Russian -> "Батарея: ${result.message}"
-                        else -> "Battery: ${result.message}"
-                    }
+        PluginManagerPanel(
+            language = language,
+            manifests = pluginManifests,
+            consentStates = pluginConsentStates,
+            auditEntries = pluginAuditEntries,
+            onConsentChange = onDeclarativePluginConsentChange,
+            onUninstall = onUninstallPlugin
+        )
+        var pendingDeviceCommand by remember { mutableStateOf<DeviceToolCommand?>(null) }
+        var deviceToolMessage by remember { mutableStateOf<String?>(null) }
+        var shareTextDraft by rememberSaveable { mutableStateOf("") }
+        fun pluginResultText(result: PluginExecutionResult): String {
+            if (!result.success) {
+                return when (language) {
+                    AppLanguage.Tajik -> "Плагин иҷозат нагирифт ё амалро иҷро накард."
+                    AppLanguage.Russian -> "Плагин не получил разрешение или не выполнил действие."
+                    AppLanguage.English -> "Plugin permission was denied or the action failed."
                 }
             }
-            fun deviceResultText(result: DeviceToolResult): String {
-                if (!result.success) {
-                    return when (language) {
-                        AppLanguage.Tajik -> "Амал иҷозат дода нашуд ё иҷро нагардид."
-                        AppLanguage.Russian -> "Действие не разрешено или не выполнено."
-                        AppLanguage.English -> "The action was denied or could not be completed."
-                    }
+            return when (result.capability) {
+                PluginCapability.DEVICE_INFORMATION -> when (language) {
+                    AppLanguage.Tajik -> "Дастгоҳ: ${result.message}"
+                    AppLanguage.Russian -> "Устройство: ${result.message}"
+                    AppLanguage.English -> "Device: ${result.message}"
                 }
-                return when (result.capability) {
-                    DeviceToolCapability.DEVICE_INFO -> when (language) {
-                        AppLanguage.Tajik -> "Дастгоҳ: ${result.message}"
-                        AppLanguage.Russian -> "Устройство: ${result.message}"
-                        AppLanguage.English -> "Device: ${result.message}"
+                PluginCapability.BATTERY_STATUS -> when {
+                    result.message == "unavailable" -> when (language) {
+                        AppLanguage.Tajik -> "Сатҳи батарея дастрас нест."
+                        AppLanguage.Russian -> "Уровень батареи недоступен."
+                        AppLanguage.English -> "Battery level is unavailable."
                     }
-                    DeviceToolCapability.BATTERY_STATUS -> when {
-                        result.message == "unavailable" -> when (language) {
-                            AppLanguage.Tajik -> "Сатҳи батарея дастрас нест."
-                            AppLanguage.Russian -> "Уровень батареи недоступен."
-                            AppLanguage.English -> "Battery level is unavailable."
+                    language == AppLanguage.Tajik -> "Батарея: ${result.message}"
+                    language == AppLanguage.Russian -> "Батарея: ${result.message}"
+                    else -> "Battery: ${result.message}"
+                }
+            }
+        }
+        fun deviceResultText(result: DeviceToolResult): String {
+            if (!result.success) {
+                return when (language) {
+                    AppLanguage.Tajik -> "Амал иҷозат дода нашуд ё иҷро нагардид."
+                    AppLanguage.Russian -> "Действие не разрешено или не выполнено."
+                    AppLanguage.English -> "The action was denied or could not be completed."
+                }
+            }
+            return when (result.capability) {
+                DeviceToolCapability.DEVICE_INFO -> when (language) {
+                    AppLanguage.Tajik -> "Дастгоҳ: ${result.message}"
+                    AppLanguage.Russian -> "Устройство: ${result.message}"
+                    AppLanguage.English -> "Device: ${result.message}"
+                }
+                DeviceToolCapability.BATTERY_STATUS -> when {
+                    result.message == "unavailable" -> when (language) {
+                        AppLanguage.Tajik -> "Сатҳи батарея дастрас нест."
+                        AppLanguage.Russian -> "Уровень батареи недоступен."
+                        AppLanguage.English -> "Battery level is unavailable."
+                    }
+                    language == AppLanguage.Tajik -> "Батарея: ${result.message}"
+                    language == AppLanguage.Russian -> "Батарея: ${result.message}"
+                    else -> "Battery: ${result.message}"
+                }
+                DeviceToolCapability.OPEN_WIFI_SETTINGS -> when (language) {
+                    AppLanguage.Tajik -> "Танзимоти Wi-Fi кушода шуд."
+                    AppLanguage.Russian -> "Настройки Wi-Fi открыты."
+                    AppLanguage.English -> "Wi-Fi settings opened."
+                }
+                DeviceToolCapability.OPEN_APP_SETTINGS -> when (language) {
+                    AppLanguage.Tajik -> "Танзимоти барнома кушода шуд."
+                    AppLanguage.Russian -> "Настройки приложения открыты."
+                    AppLanguage.English -> "App settings opened."
+                }
+                DeviceToolCapability.SHARE_TEXT -> when (language) {
+                    AppLanguage.Tajik -> "Менюи мубодила кушода шуд."
+                    AppLanguage.Russian -> "Меню отправки открыто."
+                    AppLanguage.English -> "Android share sheet opened."
+                }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Android device tools"
+                    AppLanguage.Russian -> "Инструменты Android"
+                    AppLanguage.Tajik -> "Абзорҳои Android"
+                },
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Each capability is off until you enable it. External actions always ask for confirmation. Activity is recorded without message content."
+                    AppLanguage.Russian -> "Каждая возможность выключена, пока вы её не разрешите. Внешние действия требуют подтверждения. Журнал не сохраняет содержимое сообщений."
+                    AppLanguage.Tajik -> "Ҳар имконият то иҷозати шумо хомӯш аст. Амалҳои беруна тасдиқ мехоҳанд. Журнал матни паёмҳоро нигоҳ намедорад."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Плагини ҳолати Android"
+                            AppLanguage.Russian -> "Плагин состояния Android"
+                            AppLanguage.English -> "Android status plugin"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Розигии алоҳидаи плагин. Иҷозатҳои дастгоҳ низ ҳатман лозиманд."
+                            AppLanguage.Russian -> "Отдельное согласие на плагин. Разрешения устройства также обязательны."
+                            AppLanguage.English -> "Separate plugin consent. Device capability grants are also required."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Switch(
+                    checked = pluginConsent,
+                    onCheckedChange = onPluginConsentChange,
+                    modifier = Modifier.testTag("plugin_consent_android_device_status").semantics {
+                        contentDescription = when (language) {
+                            AppLanguage.Tajik -> "Розигии плагини ҳолати Android"
+                            AppLanguage.Russian -> "Согласие на плагин состояния Android"
+                            AppLanguage.English -> "Android status plugin consent"
                         }
-                        language == AppLanguage.Tajik -> "Батарея: ${result.message}"
-                        language == AppLanguage.Russian -> "Батарея: ${result.message}"
-                        else -> "Battery: ${result.message}"
+                        stateDescription = if (pluginConsent) {
+                            when (language) {
+                                AppLanguage.Tajik -> "Фаъол"
+                                AppLanguage.Russian -> "Включено"
+                                AppLanguage.English -> "Enabled"
+                            }
+                        } else {
+                            when (language) {
+                                AppLanguage.Tajik -> "Хомӯш"
+                                AppLanguage.Russian -> "Выключено"
+                                AppLanguage.English -> "Disabled"
+                            }
+                        }
+                    }
+                )
+            }
+            DeviceToolCapability.entries.forEach { capability ->
+                val label = when (capability) {
+                    DeviceToolCapability.DEVICE_INFO -> when (language) {
+                        AppLanguage.Tajik -> "Маълумоти дастгоҳ"
+                        AppLanguage.Russian -> "Сведения об устройстве"
+                        AppLanguage.English -> "Device information"
+                    }
+                    DeviceToolCapability.BATTERY_STATUS -> when (language) {
+                        AppLanguage.Tajik -> "Ҳолати батарея"
+                        AppLanguage.Russian -> "Состояние батареи"
+                        AppLanguage.English -> "Battery status"
                     }
                     DeviceToolCapability.OPEN_WIFI_SETTINGS -> when (language) {
-                        AppLanguage.Tajik -> "Танзимоти Wi-Fi кушода шуд."
-                        AppLanguage.Russian -> "Настройки Wi-Fi открыты."
-                        AppLanguage.English -> "Wi-Fi settings opened."
+                        AppLanguage.Tajik -> "Танзимоти шабакаи бесим"
+                        AppLanguage.Russian -> "Настройки беспроводной сети"
+                        AppLanguage.English -> "Wireless network settings"
                     }
                     DeviceToolCapability.OPEN_APP_SETTINGS -> when (language) {
-                        AppLanguage.Tajik -> "Танзимоти барнома кушода шуд."
-                        AppLanguage.Russian -> "Настройки приложения открыты."
-                        AppLanguage.English -> "App settings opened."
+                        AppLanguage.Tajik -> "Маълумоти барнома"
+                        AppLanguage.Russian -> "Сведения о приложении"
+                        AppLanguage.English -> "Application details"
                     }
                     DeviceToolCapability.SHARE_TEXT -> when (language) {
-                        AppLanguage.Tajik -> "Менюи мубодила кушода шуд."
-                        AppLanguage.Russian -> "Меню отправки открыто."
-                        AppLanguage.English -> "Android share sheet opened."
+                        AppLanguage.Tajik -> "Иҷозати мубодилаи матн"
+                        AppLanguage.Russian -> "Разрешить обмен текстом"
+                        AppLanguage.English -> "Text sharing permission"
                     }
                 }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    when (language) {
-                        AppLanguage.English -> "Android device tools"
-                        AppLanguage.Russian -> "Инструменты Android"
-                        AppLanguage.Tajik -> "Абзорҳои Android"
-                    },
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    when (language) {
-                        AppLanguage.English -> "Each capability is off until you enable it. External actions always ask for confirmation. Activity is recorded without message content."
-                        AppLanguage.Russian -> "Каждая возможность выключена, пока вы её не разрешите. Внешние действия требуют подтверждения. Журнал не сохраняет содержимое сообщений."
-                        AppLanguage.Tajik -> "Ҳар имконият то иҷозати шумо хомӯш аст. Амалҳои беруна тасдиқ мехоҳанд. Журнал матни паёмҳоро нигоҳ намедорад."
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            when (language) {
-                                AppLanguage.Tajik -> "Плагини ҳолати Android"
-                                AppLanguage.Russian -> "Плагин состояния Android"
-                                AppLanguage.English -> "Android status plugin"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            when (language) {
-                                AppLanguage.Tajik -> "Розигии алоҳидаи плагин. Иҷозатҳои дастгоҳ низ ҳатман лозиманд."
-                                AppLanguage.Russian -> "Отдельное согласие на плагин. Разрешения устройства также обязательны."
-                                AppLanguage.English -> "Separate plugin consent. Device capability grants are also required."
-                            },
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                     Switch(
-                        checked = pluginConsent,
-                        onCheckedChange = onPluginConsentChange,
-                        modifier = Modifier.testTag("plugin_consent_android_device_status").semantics {
-                            contentDescription = when (language) {
-                                AppLanguage.Tajik -> "Розигии плагини ҳолати Android"
-                                AppLanguage.Russian -> "Согласие на плагин состояния Android"
-                                AppLanguage.English -> "Android status plugin consent"
-                            }
-                            stateDescription = if (pluginConsent) {
+                        checked = deviceGrants[capability] == true,
+                        onCheckedChange = { onDeviceGrantChange(capability, it) },
+                        modifier = Modifier.testTag("device_capability_${capability.name.lowercase()}").semantics {
+                            contentDescription = label
+                            stateDescription = if (deviceGrants[capability] == true) {
                                 when (language) {
                                     AppLanguage.Tajik -> "Фаъол"
                                     AppLanguage.Russian -> "Включено"
@@ -2704,342 +2758,288 @@ private fun SettingsScreen(
                         }
                     )
                 }
-                DeviceToolCapability.entries.forEach { capability ->
-                    val label = when (capability) {
-                        DeviceToolCapability.DEVICE_INFO -> when (language) {
-                            AppLanguage.Tajik -> "Маълумоти дастгоҳ"
-                            AppLanguage.Russian -> "Сведения об устройстве"
-                            AppLanguage.English -> "Device information"
-                        }
-                        DeviceToolCapability.BATTERY_STATUS -> when (language) {
-                            AppLanguage.Tajik -> "Ҳолати батарея"
-                            AppLanguage.Russian -> "Состояние батареи"
-                            AppLanguage.English -> "Battery status"
-                        }
-                        DeviceToolCapability.OPEN_WIFI_SETTINGS -> when (language) {
-                            AppLanguage.Tajik -> "Танзимоти шабакаи бесим"
-                            AppLanguage.Russian -> "Настройки беспроводной сети"
-                            AppLanguage.English -> "Wireless network settings"
-                        }
-                        DeviceToolCapability.OPEN_APP_SETTINGS -> when (language) {
-                            AppLanguage.Tajik -> "Маълумоти барнома"
-                            AppLanguage.Russian -> "Сведения о приложении"
-                            AppLanguage.English -> "Application details"
-                        }
-                        DeviceToolCapability.SHARE_TEXT -> when (language) {
-                            AppLanguage.Tajik -> "Иҷозати мубодилаи матн"
-                            AppLanguage.Russian -> "Разрешить обмен текстом"
-                            AppLanguage.English -> "Text sharing permission"
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                        Switch(
-                            checked = deviceGrants[capability] == true,
-                            onCheckedChange = { onDeviceGrantChange(capability, it) },
-                            modifier = Modifier.testTag("device_capability_${capability.name.lowercase()}").semantics {
-                                contentDescription = label
-                                stateDescription = if (deviceGrants[capability] == true) {
-                                    when (language) {
-                                        AppLanguage.Tajik -> "Фаъол"
-                                        AppLanguage.Russian -> "Включено"
-                                        AppLanguage.English -> "Enabled"
-                                    }
-                                } else {
-                                    when (language) {
-                                        AppLanguage.Tajik -> "Хомӯш"
-                                        AppLanguage.Russian -> "Выключено"
-                                        AppLanguage.English -> "Disabled"
-                                    }
-                                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    enabled = pluginConsent && deviceGrants[DeviceToolCapability.DEVICE_INFO] == true,
+                    onClick = {
+                        settingsScope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                onRunPluginAction("device_info")
                             }
-                        )
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = pluginConsent && deviceGrants[DeviceToolCapability.DEVICE_INFO] == true,
-                        onClick = {
-                            settingsScope.launch {
-                                val result = withContext(Dispatchers.IO) {
-                                    onRunPluginAction("device_info")
-                                }
-                                onRefreshPluginAudit()
-                                deviceToolMessage = pluginResultText(result)
-                            }
+                            onRefreshPluginAudit()
+                            deviceToolMessage = pluginResultText(result)
                         }
-                    ) {
-                        Text(if (language == AppLanguage.Tajik) "Маълумот" else if (language == AppLanguage.Russian) "Устройство" else "Device info")
                     }
-                    Button(
-                        enabled = pluginConsent && deviceGrants[DeviceToolCapability.BATTERY_STATUS] == true,
-                        onClick = {
-                            settingsScope.launch {
-                                val result = withContext(Dispatchers.IO) {
-                                    onRunPluginAction("battery_status")
-                                }
-                                onRefreshPluginAudit()
-                                deviceToolMessage = pluginResultText(result)
+                ) {
+                    Text(if (language == AppLanguage.Tajik) "Маълумот" else if (language == AppLanguage.Russian) "Устройство" else "Device info")
+                }
+                Button(
+                    enabled = pluginConsent && deviceGrants[DeviceToolCapability.BATTERY_STATUS] == true,
+                    onClick = {
+                        settingsScope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                onRunPluginAction("battery_status")
                             }
+                            onRefreshPluginAudit()
+                            deviceToolMessage = pluginResultText(result)
                         }
-                    ) {
-                        Text(if (language == AppLanguage.Tajik) "Батарея" else if (language == AppLanguage.Russian) "Батарея" else "Battery")
                     }
+                ) {
+                    Text(if (language == AppLanguage.Tajik) "Батарея" else if (language == AppLanguage.Russian) "Батарея" else "Battery")
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        enabled = deviceGrants[DeviceToolCapability.OPEN_WIFI_SETTINGS] == true,
-                        onClick = { pendingDeviceCommand = DeviceToolCommand.OpenWifiSettings }
-                    ) {
-                        Text(if (language == AppLanguage.Tajik) "Wi-Fi" else if (language == AppLanguage.Russian) "Wi-Fi" else "Wi-Fi settings")
-                    }
-                    TextButton(
-                        enabled = deviceGrants[DeviceToolCapability.OPEN_APP_SETTINGS] == true,
-                        onClick = { pendingDeviceCommand = DeviceToolCommand.OpenAppSettings }
-                    ) {
-                        Text(if (language == AppLanguage.Tajik) "Танзимоти система" else if (language == AppLanguage.Russian) "Системные настройки" else "System settings")
-                    }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    enabled = deviceGrants[DeviceToolCapability.OPEN_WIFI_SETTINGS] == true,
+                    onClick = { pendingDeviceCommand = DeviceToolCommand.OpenWifiSettings }
+                ) {
+                    Text(if (language == AppLanguage.Tajik) "Wi-Fi" else if (language == AppLanguage.Russian) "Wi-Fi" else "Wi-Fi settings")
                 }
-                OutlinedTextField(
-                    value = shareTextDraft,
-                    onValueChange = { shareTextDraft = it.take(1_000) },
-                    enabled = deviceGrants[DeviceToolCapability.SHARE_TEXT] == true,
-                    modifier = Modifier.fillMaxWidth().testTag("device_share_text"),
-                    label = {
+                TextButton(
+                    enabled = deviceGrants[DeviceToolCapability.OPEN_APP_SETTINGS] == true,
+                    onClick = { pendingDeviceCommand = DeviceToolCommand.OpenAppSettings }
+                ) {
+                    Text(if (language == AppLanguage.Tajik) "Танзимоти система" else if (language == AppLanguage.Russian) "Системные настройки" else "System settings")
+                }
+            }
+            OutlinedTextField(
+                value = shareTextDraft,
+                onValueChange = { shareTextDraft = it.take(1_000) },
+                enabled = deviceGrants[DeviceToolCapability.SHARE_TEXT] == true,
+                modifier = Modifier.fillMaxWidth().testTag("device_share_text"),
+                label = {
+                    Text(
+                        if (language == AppLanguage.Tajik) "Матни мубодилашаванда"
+                        else if (language == AppLanguage.Russian) "Текст для отправки"
+                        else "Text to share"
+                    )
+                },
+                maxLines = 3
+            )
+            TextButton(
+                enabled = deviceGrants[DeviceToolCapability.SHARE_TEXT] == true && shareTextDraft.isNotBlank(),
+                onClick = { pendingDeviceCommand = DeviceToolCommand.ShareText(shareTextDraft) }
+            ) {
+                Text(if (language == AppLanguage.Tajik) "Фиристодани матн" else if (language == AppLanguage.Russian) "Отправить текст" else "Send text")
+            }
+            if (deviceToolMessage != null) {
+                Text(deviceToolMessage!!, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            if (pendingDeviceCommand != null) {
+                AlertDialog(
+                    onDismissRequest = { pendingDeviceCommand = null },
+                    title = {
                         Text(
-                            if (language == AppLanguage.Tajik) "Матни мубодилашаванда"
-                            else if (language == AppLanguage.Russian) "Текст для отправки"
-                            else "Text to share"
+                            if (language == AppLanguage.Tajik) "Тасдиқи амал"
+                            else if (language == AppLanguage.Russian) "Подтвердите действие"
+                            else "Confirm action"
                         )
                     },
-                    maxLines = 3
-                )
-                TextButton(
-                    enabled = deviceGrants[DeviceToolCapability.SHARE_TEXT] == true && shareTextDraft.isNotBlank(),
-                    onClick = { pendingDeviceCommand = DeviceToolCommand.ShareText(shareTextDraft) }
-                ) {
-                    Text(if (language == AppLanguage.Tajik) "Фиристодани матн" else if (language == AppLanguage.Russian) "Отправить текст" else "Send text")
-                }
-                if (deviceToolMessage != null) {
-                    Text(deviceToolMessage!!, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                }
-                if (pendingDeviceCommand != null) {
-                    AlertDialog(
-                        onDismissRequest = { pendingDeviceCommand = null },
-                        title = {
-                            Text(
-                                if (language == AppLanguage.Tajik) "Тасдиқи амал"
-                                else if (language == AppLanguage.Russian) "Подтвердите действие"
-                                else "Confirm action"
-                            )
-                        },
-                        text = {
-                            Text(
-                                when (pendingDeviceCommand) {
-                                    is DeviceToolCommand.ShareText -> if (language == AppLanguage.Tajik) "Матни интихобшуда ба менюи мубодилаи Android дода мешавад. Давом диҳем?" else if (language == AppLanguage.Russian) "Выбранный текст будет передан в системное меню отправки Android. Продолжить?" else "The selected text will be passed to Android's share sheet. Continue?"
-                                    else -> if (language == AppLanguage.Tajik) "Miss Minutes танзимоти Android-ро мекушояд. Иҷозат медиҳед?" else if (language == AppLanguage.Russian) "Miss Minutes откроет системные настройки Android. Разрешить?" else "Miss Minutes will open Android system settings. Continue?"
-                                }
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                val command = pendingDeviceCommand
-                                pendingDeviceCommand = null
-                                if (command != null) deviceToolMessage = deviceResultText(onRunDeviceCommand(command, true))
-                            }) {
-                                Text(if (language == AppLanguage.Tajik) "Иҷозат" else if (language == AppLanguage.Russian) "Разрешить" else "Allow")
+                    text = {
+                        Text(
+                            when (pendingDeviceCommand) {
+                                is DeviceToolCommand.ShareText -> if (language == AppLanguage.Tajik) "Матни интихобшуда ба менюи мубодилаи Android дода мешавад. Давом диҳем?" else if (language == AppLanguage.Russian) "Выбранный текст будет передан в системное меню отправки Android. Продолжить?" else "The selected text will be passed to Android's share sheet. Continue?"
+                                else -> if (language == AppLanguage.Tajik) "Miss Minutes танзимоти Android-ро мекушояд. Иҷозат медиҳед?" else if (language == AppLanguage.Russian) "Miss Minutes откроет системные настройки Android. Разрешить?" else "Miss Minutes will open Android system settings. Continue?"
                             }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { pendingDeviceCommand = null }) {
-                                Text(if (language == AppLanguage.Tajik) "Бекор" else if (language == AppLanguage.Russian) "Отмена" else "Cancel")
-                            }
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val command = pendingDeviceCommand
+                            pendingDeviceCommand = null
+                            if (command != null) deviceToolMessage = deviceResultText(onRunDeviceCommand(command, true))
+                        }) {
+                            Text(if (language == AppLanguage.Tajik) "Иҷозат" else if (language == AppLanguage.Russian) "Разрешить" else "Allow")
                         }
-                    )
-                }
-            }
-            var showAgentTaskPanel by rememberSaveable { mutableStateOf(false) }
-            OutlinedButton(
-                onClick = { showAgentTaskPanel = !showAgentTaskPanel },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    when (language) {
-                        AppLanguage.Tajik -> if (showAgentTaskPanel) "Пӯшидани вазифаҳои AI" else "Вазифаҳои AI"
-                        AppLanguage.Russian -> if (showAgentTaskPanel) "Скрыть задачи ИИ" else "Задачи ИИ"
-                        AppLanguage.English -> if (showAgentTaskPanel) "Hide AI tasks" else "AI tasks"
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingDeviceCommand = null }) {
+                            Text(if (language == AppLanguage.Tajik) "Бекор" else if (language == AppLanguage.Russian) "Отмена" else "Cancel")
+                        }
                     }
                 )
             }
-            if (showAgentTaskPanel) {
-                AgentTaskPanel(
-                    orchestrator = agentOrchestrator,
-                    language = language,
-                    enabled = agentTaskEnabled
-                )
-            }
+        }
+        var showAgentTaskPanel by rememberSaveable { mutableStateOf(false) }
+        OutlinedButton(
+            onClick = { showAgentTaskPanel = !showAgentTaskPanel },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> if (showAgentTaskPanel) "Пӯшидани вазифаҳои AI" else "Вазифаҳои AI"
+                    AppLanguage.Russian -> if (showAgentTaskPanel) "Скрыть задачи ИИ" else "Задачи ИИ"
+                    AppLanguage.English -> if (showAgentTaskPanel) "Hide AI tasks" else "AI tasks"
+                }
+            )
+        }
+        if (showAgentTaskPanel) {
+            AgentTaskPanel(
+                orchestrator = agentOrchestrator,
+                language = language,
+                enabled = agentTaskEnabled
+            )
+        }
 
         }
         if (settingsPage == SettingsPage.PRIVACY_MEMORY) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Local memory"
+                    AppLanguage.Russian -> "Локальная память"
+                    AppLanguage.Tajik -> "Хотираи маҳаллӣ"
+                },
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Only items you explicitly save are stored. Content is encrypted with Android Keystore and is not synced to a server."
+                    AppLanguage.Russian -> "Сохраняются только добавленные вами записи. Данные шифруются Android Keystore и не синхронизируются с сервером."
+                    AppLanguage.Tajik -> "Танҳо маълумоте нигоҳ дошта мешавад, ки худатон илова мекунед. Он бо Android Keystore рамзгузорӣ шуда, ба сервер ҳамоҳанг намешавад."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     when (language) {
-                        AppLanguage.English -> "Local memory"
-                        AppLanguage.Russian -> "Локальная память"
-                        AppLanguage.Tajik -> "Хотираи маҳаллӣ"
+                        AppLanguage.English -> "Include saved memory in AI requests"
+                        AppLanguage.Russian -> "Добавлять сохранённую память в запросы ИИ"
+                        AppLanguage.Tajik -> "Илова кардани хотира ба дархостҳои AI"
                     },
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    when (language) {
-                        AppLanguage.English -> "Only items you explicitly save are stored. Content is encrypted with Android Keystore and is not synced to a server."
-                        AppLanguage.Russian -> "Сохраняются только добавленные вами записи. Данные шифруются Android Keystore и не синхронизируются с сервером."
-                        AppLanguage.Tajik -> "Танҳо маълумоте нигоҳ дошта мешавад, ки худатон илова мекунед. Он бо Android Keystore рамзгузорӣ шуда, ба сервер ҳамоҳанг намешавад."
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodySmall
                 )
+                Switch(
+                    checked = memoryContextEnabled,
+                    onCheckedChange = onMemoryContextChange,
+                    modifier = Modifier.testTag("memory_context_toggle").semantics {
+                        contentDescription = when (language) {
+                            AppLanguage.Tajik -> "Илова кардани хотираи маҳаллӣ ба дархостҳои AI"
+                            AppLanguage.Russian -> "Добавлять локальную память в запросы ИИ"
+                            AppLanguage.English -> "Include local memory in AI requests"
+                        }
+                        stateDescription = if (memoryContextEnabled) {
+                            when (language) {
+                                AppLanguage.Tajik -> "Фаъол"
+                                AppLanguage.Russian -> "Включено"
+                                AppLanguage.English -> "On"
+                            }
+                        } else {
+                            when (language) {
+                                AppLanguage.Tajik -> "Хомӯш"
+                                AppLanguage.Russian -> "Выключено"
+                                AppLanguage.English -> "Off"
+                            }
+                        }
+                    }
+                )
+            }
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Off by default. When enabled, saved notes are sent to DeepSeek with your next message."
+                    AppLanguage.Russian -> "По умолчанию выключено. При включении сохранённые заметки отправляются в DeepSeek вместе со следующим сообщением."
+                    AppLanguage.Tajik -> "Бо нобаёнӣ хомӯш аст. Ҳангоми фаъол кардан, хотира бо паёми навбатӣ ба DeepSeek фиристода мешавад."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            OutlinedTextField(
+                value = memoryDraft,
+                onValueChange = onMemoryDraftChange,
+                modifier = Modifier.fillMaxWidth().testTag("memory_input"),
+                label = { Text(if (language == AppLanguage.Tajik) "Чиро дар хотир нигоҳ дорам?" else if (language == AppLanguage.Russian) "Что запомнить?" else "What should I remember?") },
+                maxLines = 3
+            )
+            Button(onClick = onAddMemory, enabled = memoryDraft.isNotBlank()) {
+                Text(if (language == AppLanguage.Tajik) "Дар хотира нигоҳ дор" else if (language == AppLanguage.Russian) "Сохранить в памяти" else "Save memory")
+            }
+            if (memoryMessage != null) {
+                Text(memoryMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            memoryItems.forEach { item ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        when (language) {
-                            AppLanguage.English -> "Include saved memory in AI requests"
-                            AppLanguage.Russian -> "Добавлять сохранённую память в запросы ИИ"
-                            AppLanguage.Tajik -> "Илова кардани хотира ба дархостҳои AI"
-                        },
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Switch(
-                        checked = memoryContextEnabled,
-                        onCheckedChange = onMemoryContextChange,
-                        modifier = Modifier.testTag("memory_context_toggle").semantics {
-                            contentDescription = when (language) {
-                                AppLanguage.Tajik -> "Илова кардани хотираи маҳаллӣ ба дархостҳои AI"
-                                AppLanguage.Russian -> "Добавлять локальную память в запросы ИИ"
-                                AppLanguage.English -> "Include local memory in AI requests"
-                            }
-                            stateDescription = if (memoryContextEnabled) {
-                                when (language) {
-                                    AppLanguage.Tajik -> "Фаъол"
-                                    AppLanguage.Russian -> "Включено"
-                                    AppLanguage.English -> "On"
-                                }
-                            } else {
-                                when (language) {
-                                    AppLanguage.Tajik -> "Хомӯш"
-                                    AppLanguage.Russian -> "Выключено"
-                                    AppLanguage.English -> "Off"
-                                }
-                            }
-                        }
-                    )
-                }
-                Text(
-                    when (language) {
-                        AppLanguage.English -> "Off by default. When enabled, saved notes are sent to DeepSeek with your next message."
-                        AppLanguage.Russian -> "По умолчанию выключено. При включении сохранённые заметки отправляются в DeepSeek вместе со следующим сообщением."
-                        AppLanguage.Tajik -> "Бо нобаёнӣ хомӯш аст. Ҳангоми фаъол кардан, хотира бо паёми навбатӣ ба DeepSeek фиристода мешавад."
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
-                OutlinedTextField(
-                    value = memoryDraft,
-                    onValueChange = onMemoryDraftChange,
-                    modifier = Modifier.fillMaxWidth().testTag("memory_input"),
-                    label = { Text(if (language == AppLanguage.Tajik) "Чиро дар хотир нигоҳ дорам?" else if (language == AppLanguage.Russian) "Что запомнить?" else "What should I remember?") },
-                    maxLines = 3
-                )
-                Button(onClick = onAddMemory, enabled = memoryDraft.isNotBlank()) {
-                    Text(if (language == AppLanguage.Tajik) "Дар хотира нигоҳ дор" else if (language == AppLanguage.Russian) "Сохранить в памяти" else "Save memory")
-                }
-                if (memoryMessage != null) {
-                    Text(memoryMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-                memoryItems.forEach { item ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(item.content, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = { onDeleteMemory(item.id) }) {
-                            Text(if (language == AppLanguage.Tajik) "Пок" else if (language == AppLanguage.Russian) "Удалить" else "Delete")
-                        }
+                    Text(item.content, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { onDeleteMemory(item.id) }) {
+                        Text(if (language == AppLanguage.Tajik) "Пок" else if (language == AppLanguage.Russian) "Удалить" else "Delete")
                     }
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    if (language == AppLanguage.Tajik) "Муҳлати нигоҳдорӣ" else if (language == AppLanguage.Russian) "Срок хранения" else "Retention period",
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    if (language == AppLanguage.Tajik) "Гуфтугӯҳо ва хотираҳои кӯҳна ба таври худкор пок мешаванд. 0 маънои бе муҳлатро дорад." else if (language == AppLanguage.Russian) "Старые диалоги и записи удаляются автоматически. 0 означает без ограничения срока." else "Older conversations and memories are automatically deleted. 0 means no automatic age-based deletion.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(30, 90, 365, 0).forEach { days ->
-                        FilterChip(
-                            selected = retentionDays == days,
-                            onClick = { onRetentionChange(days) },
-                            label = {
-                                Text(
-                                    when (days) {
-                                        0 -> if (language == AppLanguage.Tajik) "Ҳамеша" else if (language == AppLanguage.Russian) "Всегда" else "Never"
-                                        365 -> if (language == AppLanguage.Tajik) "1 сол" else if (language == AppLanguage.Russian) "1 год" else "1 year"
-                                        else -> "$days"
-                                    }
-                                )
-                            }
-                        )
-                    }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                if (language == AppLanguage.Tajik) "Муҳлати нигоҳдорӣ" else if (language == AppLanguage.Russian) "Срок хранения" else "Retention period",
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                if (language == AppLanguage.Tajik) "Гуфтугӯҳо ва хотираҳои кӯҳна ба таври худкор пок мешаванд. 0 маънои бе муҳлатро дорад." else if (language == AppLanguage.Russian) "Старые диалоги и записи удаляются автоматически. 0 означает без ограничения срока." else "Older conversations and memories are automatically deleted. 0 means no automatic age-based deletion.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(30, 90, 365, 0).forEach { days ->
+                    FilterChip(
+                        selected = retentionDays == days,
+                        onClick = { onRetentionChange(days) },
+                        label = {
+                            Text(
+                                when (days) {
+                                    0 -> if (language == AppLanguage.Tajik) "Ҳамеша" else if (language == AppLanguage.Russian) "Всегда" else "Never"
+                                    365 -> if (language == AppLanguage.Tajik) "1 сол" else if (language == AppLanguage.Russian) "1 год" else "1 year"
+                                    else -> "$days"
+                                }
+                            )
+                        }
+                    )
                 }
             }
+        }
 
         }
         if (settingsPage == SettingsPage.ACCOUNT_ABOUT) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(copy.account, fontWeight = FontWeight.SemiBold)
-                Text(email, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = onSignOut, enabled = !isBusy) {
-                    Text(if (isBusy) copy.wait else copy.signOut)
-                }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(copy.account, fontWeight = FontWeight.SemiBold)
+            Text(email, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onSignOut, enabled = !isBusy) {
+                Text(if (isBusy) copy.wait else copy.signOut)
             }
-            Spacer(modifier = Modifier.padding(top = 8.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(copy.about, fontWeight = FontWeight.SemiBold)
-                Text("${ProductIdentity.NAME} · ${copy.version} ${ProductIdentity.VERSION_NAME}")
-            }
+        }
+        Spacer(modifier = Modifier.padding(top = 8.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(copy.about, fontWeight = FontWeight.SemiBold)
+            Text("${ProductIdentity.NAME} · ${copy.version} ${ProductIdentity.VERSION_NAME}")
+        }
 
         }
         if (settingsPage == SettingsPage.BACKUP_RESTORE) {
-            BackupRestorePanel(
-                language = language,
-                categories = backupCategories,
-                onToggleCategory = onToggleBackupCategory,
-                password = backupPassword,
-                onPasswordChange = onBackupPasswordChange,
-                conflictPolicy = backupConflictPolicy,
-                onConflictPolicyChange = onBackupConflictPolicyChange,
-                preview = backupPreview,
-                status = backupStatus,
-                error = backupError,
-                busy = backupBusy,
-                pluginManifests = pluginManifests,
-                pluginConsentStates = pluginConsentStates,
-                    onExportPlugin = onExportPlugin,
-                onCreateBackup = onCreateBackup,
-                onChooseBackup = onChooseBackup,
-                onConfirmRestore = onConfirmBackupRestore,
-                onDismissPreview = onDismissBackupPreview
-            )
+        BackupRestorePanel(
+            language = language,
+            categories = backupCategories,
+            onToggleCategory = onToggleBackupCategory,
+            password = backupPassword,
+            onPasswordChange = onBackupPasswordChange,
+            conflictPolicy = backupConflictPolicy,
+            onConflictPolicyChange = onBackupConflictPolicyChange,
+            preview = backupPreview,
+            status = backupStatus,
+            error = backupError,
+            busy = backupBusy,
+            pluginManifests = pluginManifests,
+            pluginConsentStates = pluginConsentStates,
+                onExportPlugin = onExportPlugin,
+            onCreateBackup = onCreateBackup,
+            onChooseBackup = onChooseBackup,
+            onConfirmRestore = onConfirmBackupRestore,
+            onDismissPreview = onDismissBackupPreview
+        )
         }
     }
 }
