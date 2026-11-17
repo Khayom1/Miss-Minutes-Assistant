@@ -160,13 +160,19 @@ internal fun PluginManagerPanel(
             ) {
                 auditEntries.take(20).forEach { entry ->
                     val outcome = when (entry.outcome) {
+                        "requested" -> text("requested", "запрошено", "дархост шуд")
                         "success" -> text("completed", "выполнено", "анҷом ёфт")
                         "failed" -> text("failed", "ошибка", "ноком")
                         "denied" -> text("denied", "отклонено", "рад шуд")
+                        "permission_denied" -> text("permission denied", "нет разрешения", "иҷозат нест")
+                        "capacity_exceeded" -> text("capacity limit", "лимит нагрузки", "ҳадди иқтидор")
+                        "oversized_output" -> text("output limit", "лимит результата", "ҳадди натиҷа")
+                        "timeout" -> text("timed out", "время истекло", "вақт гузашт")
+                        "cancelled" -> text("cancelled", "отменено", "бекор шуд")
                         "consent_granted" -> text("consent granted", "разрешение выдано", "розигӣ дода шуд")
                         "consent_revoked" -> text("consent revoked", "разрешение отозвано", "розигӣ бекор шуд")
                         "uninstalled" -> text("uninstalled", "удалён", "насб бекор шуд")
-                        else -> entry.outcome.replace('_', ' ')
+                        else -> text("other", "другое", "дигар")
                     }
                     Text(
                         "${entry.pluginId} · ${entry.actionId} · $outcome",
