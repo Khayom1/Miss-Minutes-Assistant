@@ -73,6 +73,9 @@ import com.khayom1.missminutes.agent.AgentTaskRuntime
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
+import com.khayom1.missminutes.ai.AiToolExecutionLoop
+import com.khayom1.missminutes.ai.AiToolExecutor
+import com.khayom1.missminutes.ai.AiToolExecutionResult
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
@@ -93,6 +96,8 @@ import com.khayom1.missminutes.plugins.FilePluginAuditLog
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
 import com.khayom1.missminutes.plugins.PluginRegistry
+import com.khayom1.missminutes.plugins.PluginToolSchemaFactory
+import com.khayom1.missminutes.plugins.AndroidPluginAccessChecker
 import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
@@ -161,7 +166,6 @@ private data class UiCopy(
     val version: String,
     val guestAccount: String,
     val apiKeyRequired: String,
-    val apiKeyInvalid: String,
     val account: String,
     val sending: String,
     val sendFailed: String,
@@ -189,7 +193,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Your personal assistant, ready when you are.",
         composerHint = "Message Miss Minutes",
         send = "Send",
-        gatewayNotice = "Online AI uses your personal DeepSeek API key, encrypted on this device and sent directly to DeepSeek over HTTPS. Your chats stay local.",
+        gatewayNotice = "Chat, history and memory stay on this device. AI replies require your optional DeepSeek API key and go directly to DeepSeek over HTTPS.",
         you = "You",
         dashboardTitle = "Your workspace",
         dashboardBody = "A clear view of assistant capabilities and their connection status.",
@@ -210,11 +214,10 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         about = "About",
         version = "Version",
         guestAccount = "Guest (local only)",
-        apiKeyRequired = "Add your DeepSeek API key in Settings to use online AI. Conversations remain on this device.",
-        apiKeyInvalid = "DeepSeek rejected this API key. Check it or replace it in Settings.",
+        apiKeyRequired = "Add your DeepSeek API key in Settings to use AI replies. Guest conversations remain on this device.",
         account = "Account",
         sending = "Thinking…",
-        sendFailed = "No response received. Check your internet connection or API key.",
+        sendFailed = "No response received. Check your connection and server configuration.",
         conversationTooLong = "This conversation is too long to send. Start a new conversation.",
         aiRateLimited = "The AI request limit was reached. Try again shortly.",
         speak = "Speak",
@@ -237,7 +240,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ваш персональный помощник всегда под рукой.",
         composerHint = "Сообщение Miss Minutes",
         send = "Отправить",
-        gatewayNotice = "Сетевой ИИ использует ваш личный API-ключ DeepSeek: он хранится на устройстве в зашифрованном виде и отправляется напрямую в DeepSeek по HTTPS. История чатов остаётся локальной.",
+        gatewayNotice = "Чаты, история и память хранятся на этом устройстве. Ответы ИИ требуют необязательный API-ключ DeepSeek и отправляются напрямую в DeepSeek по HTTPS.",
         you = "Вы",
         dashboardTitle = "Ваше пространство",
         dashboardBody = "Состояние возможностей помощника и подключённых сервисов.",
@@ -258,11 +261,10 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         about = "О приложении",
         version = "Версия",
         guestAccount = "Гость (только локально)",
-        apiKeyRequired = "Добавьте свой API-ключ DeepSeek в настройках для сетевого ИИ. Диалоги остаются на устройстве.",
-        apiKeyInvalid = "DeepSeek отклонил этот API-ключ. Проверьте его или замените в настройках.",
+        apiKeyRequired = "Добавьте свой API-ключ DeepSeek в настройках. Гостевые диалоги остаются на устройстве.",
         account = "Аккаунт",
         sending = "Думаю…",
-        sendFailed = "Ответ не получен. Проверьте подключение к интернету или API-ключ.",
+        sendFailed = "Ответ не получен. Проверьте подключение и ключ DeepSeek.",
         conversationTooLong = "Диалог слишком длинный. Начните новый диалог.",
         aiRateLimited = "Достигнут лимит запросов ИИ. Попробуйте немного позже.",
         speak = "Озвучить",
@@ -285,7 +287,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ёвари шахсии шумо ҳамеша омода аст.",
         composerHint = "Ба Miss Minutes паём нависед",
         send = "Фиристодан",
-        gatewayNotice = "AI-и онлайн калиди шахсии DeepSeek-и шуморо истифода мебарад: калид дар телефон рамзгузорӣ шуда, мустақиман тавассути HTTPS ба DeepSeek фиристода мешавад. Таърихи чат дар телефон мемонад.",
+        gatewayNotice = "Чат, таърих ва хотира дар ҳамин телефон нигоҳ дошта мешаванд. Барои ҷавобҳои AI калиди ихтиёрии DeepSeek лозим аст; дархост мустақиман тавассути HTTPS ба DeepSeek меравад.",
         you = "Шумо",
         dashboardTitle = "Муҳити кории шумо",
         dashboardBody = "Ҳолати имкониятҳо ва пайвасти хидматҳои ёвар.",
@@ -306,11 +308,10 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         about = "Дар бораи барнома",
         version = "Версия",
         guestAccount = "Меҳмон (танҳо маҳаллӣ)",
-        apiKeyRequired = "Барои истифодаи AI-и онлайн калиди DeepSeek-ро дар Танзимот илова кунед. Гуфтугӯҳо дар телефон мемонанд.",
-        apiKeyInvalid = "DeepSeek ин калиди API-ро рад кард. Онро санҷед ё дар Танзимот иваз кунед.",
+        apiKeyRequired = "Барои ҷавоби AI калиди шахсии DeepSeek-ро дар Танзимот илова кунед. Гуфтугӯҳои меҳмонӣ танҳо дар телефон мемонанд.",
         account = "Ҳисоб",
         sending = "Фикр карда истодаам…",
-        sendFailed = "Ҷавоб гирифта нашуд. Интернет ё калиди API-ро санҷед. ",
+        sendFailed = "Ҷавоб гирифта нашуд. Пайвастшавӣ ва калиди DeepSeek-ро санҷед.",
         conversationTooLong = "Гуфтугӯ хеле дароз аст. Гуфтугӯи нав оғоз кунед.",
         aiRateLimited = "Маҳдудияти дархостҳои AI расид. Каме баъд кӯшиш кунед.",
         speak = "Хондан",
@@ -356,7 +357,8 @@ fun MissMinutesApp(
         PluginRegistry(
             handlers = AndroidDeviceStatusPlugin.handlers(deviceToolEngine),
             consentStore = pluginConsentStore,
-            auditLog = FilePluginAuditLog(context)
+            auditLog = FilePluginAuditLog(context),
+            accessChecker = AndroidPluginAccessChecker(context)
         ).apply {
             install(AndroidDeviceStatusPlugin.manifest())
             pluginManifestStore.load().forEach { manifest -> runCatching { install(manifest) } }
@@ -367,7 +369,7 @@ fun MissMinutesApp(
             pluginRegistry.installedPlugins().associate { it.id to pluginConsentStore.isGranted(it.id) }
         )
     }
-    val agentOrchestrator = remember(context) { AgentTaskRuntime.get(context) }
+    val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
@@ -473,6 +475,7 @@ fun MissMinutesApp(
     var draft by rememberSaveable { mutableStateOf("") }
     var isRestoring by remember { mutableStateOf(true) }
     var conversationGeneration by remember { mutableStateOf(0L) }
+    var userEmail by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
@@ -877,6 +880,7 @@ fun MissMinutesApp(
     LaunchedEffect(conversationStore) {
         try {
             loadConversation(GUEST_OWNER_ID)
+            userEmail = copy.guestAccount
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -966,7 +970,10 @@ fun MissMinutesApp(
             )
 
             val request = try {
-                AiRequest(messages = requestMessages)
+                AiRequest(
+                    messages = requestMessages,
+                    tools = PluginToolSchemaFactory.toAiToolDefinitions(agentOrchestrator.availablePluginTools())
+                )
             } catch (_: IllegalArgumentException) {
                 chatError = copy.conversationTooLong
                 null
@@ -981,7 +988,7 @@ fun MissMinutesApp(
                 scope.launch {
                     var requestConversationId: String? = null
                     try {
-                        val ownerId = currentOwnerId ?: throw AiProviderException.LocalWorkspaceUnavailable()
+                        val ownerId = currentOwnerId ?: GUEST_OWNER_ID
                         val conversationId = activeConversationId ?: withContext(Dispatchers.IO) {
                             conversationStore.createConversation(ownerId)
                         }
@@ -1003,7 +1010,15 @@ fun MissMinutesApp(
                             conversationStore.listConversations(ownerId)
                         }
 
-                        val completion: AiCompletion = aiProvider.complete(request)
+                        val completion: AiCompletion = AiToolExecutionLoop(
+                            provider = aiProvider,
+                            executor = AiToolExecutor { call ->
+                                val result = withContext(Dispatchers.IO) {
+                                    agentOrchestrator.executePluginTool(call.name, call.arguments, userConfirmed = false)
+                                }
+                                AiToolExecutionResult(result.status.name + ": " + result.message)
+                            }
+                        ).complete(request)
                         if (requestGeneration != conversationGeneration) return@launch
                         val assistantMessageId = withContext(Dispatchers.IO) {
                             conversationStore.appendMessage(
@@ -1026,7 +1041,13 @@ fun MissMinutesApp(
                             chatError = copy.apiKeyRequired
                         }
                     } catch (_: AiProviderException.InvalidApiKey) {
-                        if (requestGeneration == conversationGeneration) chatError = copy.apiKeyInvalid
+                        if (requestGeneration == conversationGeneration) {
+                            chatError = when (language) {
+                                AppLanguage.Tajik -> "DeepSeek ин калиди API-ро рад кард. Онро дар Танзимот санҷед ё иваз кунед."
+                                AppLanguage.Russian -> "DeepSeek отклонил этот API-ключ. Проверьте его или замените в настройках."
+                                AppLanguage.English -> "DeepSeek rejected this API key. Check it or replace it in Settings."
+                            }
+                        }
                     } catch (_: AiProviderException.LocalWorkspaceUnavailable) {
                         if (requestGeneration == conversationGeneration) {
                             chatError = copy.sendFailed
@@ -1259,7 +1280,7 @@ fun MissMinutesApp(
                             )
                             AppScreen.Dashboard -> DashboardScreen(
                                 copy = copy,
-                                accountLabel = copy.guestAccount,
+                                accountLabel = userEmail,
                                 aiStatus = if (aiHasResponded) {
                                     copy.providerResponding
                                 } else {
@@ -1318,8 +1339,12 @@ fun MissMinutesApp(
                                 deviceGrants = deviceGrants,
                                 pluginConsent = androidPluginConsent,
                                 onPluginConsentChange = { granted ->
-                                    pluginConsentStore.setGranted(AndroidDeviceStatusPlugin.PLUGIN_ID, granted)
-                                    androidPluginConsent = granted
+                                    val updated = if (granted) pluginRegistry.connect(AndroidDeviceStatusPlugin.PLUGIN_ID)
+                                    else pluginRegistry.revokeConsent(AndroidDeviceStatusPlugin.PLUGIN_ID)
+                                    if (updated) {
+                                        androidPluginConsent = pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID)
+                                        pluginConsentSnapshot = pluginConsentSnapshot + (AndroidDeviceStatusPlugin.PLUGIN_ID to androidPluginConsent)
+                                    }
                                 },
                                 onRunPluginAction = { actionId ->
                                     pluginRegistry.execute(
@@ -1377,8 +1402,8 @@ fun MissMinutesApp(
                                 },
                                 pluginConsentStates = pluginConsentSnapshot,
                                 onDeclarativePluginConsentChange = { pluginId, granted ->
-                                    pluginConsentStore.setGranted(pluginId, granted)
-                                    pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to granted)
+                                    val updated = if (granted) pluginRegistry.connect(pluginId) else pluginRegistry.revokeConsent(pluginId)
+                                    if (updated) pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to pluginConsentStore.isGranted(pluginId))
                                 },
                                 onExportPlugin = exportSelectedPlugin,
                                 onCreateBackup = createEncryptedBackup,
@@ -2020,6 +2045,18 @@ private fun SettingsScreen(
                     language == AppLanguage.Tajik -> "Батарея: ${result.message}"
                     language == AppLanguage.Russian -> "Батарея: ${result.message}"
                     else -> "Battery: ${result.message}"
+                }
+                PluginCapability.CALENDAR_READ,
+                PluginCapability.CALENDAR_WRITE,
+                PluginCapability.CONTACTS_READ,
+                PluginCapability.LOCATION_APPROXIMATE,
+                PluginCapability.LOCATION_PRECISE,
+                PluginCapability.NOTIFICATION_READ,
+                PluginCapability.GITHUB_REPOSITORY_READ,
+                PluginCapability.GITHUB_REPOSITORY_WRITE -> when (language) {
+                    AppLanguage.Tajik -> "Амал иҷро шуд: ${result.message}"
+                    AppLanguage.Russian -> "Действие выполнено: ${result.message}"
+                    AppLanguage.English -> "Action completed: ${result.message}"
                 }
             }
         }
