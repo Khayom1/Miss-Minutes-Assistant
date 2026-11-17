@@ -81,6 +81,13 @@ import com.khayom1.missminutes.device.DeviceToolEngine
 import com.khayom1.missminutes.device.DeviceToolResult
 import com.khayom1.missminutes.device.FileDeviceToolAuditLog
 import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
+import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
+import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
+import com.khayom1.missminutes.plugins.FilePluginAuditLog
+import com.khayom1.missminutes.plugins.PluginExecutionRequest
+import com.khayom1.missminutes.plugins.PluginExecutionResult
+import com.khayom1.missminutes.plugins.PluginRegistry
+import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
 import com.khayom1.missminutes.memory.ConversationSummary
@@ -378,6 +385,17 @@ fun MissMinutesApp(
             host = AndroidDeviceToolHost(context),
             auditLog = FileDeviceToolAuditLog(context)
         )
+    }
+    val pluginConsentStore = remember(context) { AndroidPluginConsentStore(context) }
+    val pluginRegistry = remember(context, deviceToolEngine) {
+        PluginRegistry(
+            handlers = AndroidDeviceStatusPlugin.handlers(deviceToolEngine),
+            consentStore = pluginConsentStore,
+            auditLog = FilePluginAuditLog(context)
+        ).apply { install(AndroidDeviceStatusPlugin.manifest()) }
+    }
+    var androidPluginConsent by remember(context) {
+        mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
     var deviceGrants by remember(context) {
         mutableStateOf(DeviceToolCapability.entries.associateWith(deviceAuthorization::isGranted))
@@ -1166,6 +1184,19 @@ fun MissMinutesApp(
                                 retentionDays = retentionDays,
                                 memoryContextEnabled = memoryContextEnabled,
                                 deviceGrants = deviceGrants,
+                                pluginConsent = androidPluginConsent,
+                                onPluginConsentChange = { granted ->
+                                    pluginConsentStore.setGranted(AndroidDeviceStatusPlugin.PLUGIN_ID, granted)
+                                    androidPluginConsent = granted
+                                },
+                                onRunPluginAction = { actionId ->
+                                    pluginRegistry.execute(
+                                        PluginExecutionRequest(
+                                            pluginId = AndroidDeviceStatusPlugin.PLUGIN_ID,
+                                            actionId = actionId
+                                        )
+                                    )
+                                },
                                 onDeviceGrantChange = { capability, granted ->
                                     deviceAuthorization.setGranted(capability, granted)
                                     deviceGrants = deviceGrants + (capability to granted)
@@ -1629,6 +1660,9 @@ private fun SettingsScreen(
     retentionDays: Int,
     memoryContextEnabled: Boolean,
     deviceGrants: Map<DeviceToolCapability, Boolean>,
+    pluginConsent: Boolean,
+    onPluginConsentChange: (Boolean) -> Unit,
+    onRunPluginAction: (String) -> PluginExecutionResult,
     onDeviceGrantChange: (DeviceToolCapability, Boolean) -> Unit,
     onRunDeviceCommand: (DeviceToolCommand, Boolean) -> com.khayom1.missminutes.device.DeviceToolResult,
     onMemoryDraftChange: (String) -> Unit,
@@ -1785,6 +1819,13 @@ private fun SettingsScreen(
         var pendingDeviceCommand by remember { mutableStateOf<DeviceToolCommand?>(null) }
         var deviceToolMessage by remember { mutableStateOf<String?>(null) }
         var shareTextDraft by rememberSaveable { mutableStateOf("") }
+        fun pluginResultText(result: PluginExecutionResult): String {
+            val capability = when (result.capability) {
+                PluginCapability.DEVICE_INFORMATION -> DeviceToolCapability.DEVICE_INFO
+                PluginCapability.BATTERY_STATUS -> DeviceToolCapability.BATTERY_STATUS
+            }
+            return deviceResultText(DeviceToolResult(result.success, result.message, capability))
+        }
         fun deviceResultText(result: DeviceToolResult): String {
             if (!result.success) {
                 return when (language) {
@@ -1844,6 +1885,36 @@ private fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Плагини ҳолати Android"
+                            AppLanguage.Russian -> "Плагин состояния Android"
+                            AppLanguage.English -> "Android status plugin"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Розигии алоҳидаи плагин. Иҷозатҳои дастгоҳ низ ҳатман лозиманд."
+                            AppLanguage.Russian -> "Отдельное согласие на плагин. Разрешения устройства также обязательны."
+                            AppLanguage.English -> "Separate plugin consent. Device capability grants are also required."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Switch(
+                    checked = pluginConsent,
+                    onCheckedChange = onPluginConsentChange,
+                    modifier = Modifier.testTag("plugin_consent_android_device_status")
+                )
+            }
             DeviceToolCapability.entries.forEach { capability ->
                 val label = when (capability) {
                     DeviceToolCapability.DEVICE_INFO -> when (language) {
@@ -1886,17 +1957,17 @@ private fun SettingsScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    enabled = deviceGrants[DeviceToolCapability.DEVICE_INFO] == true,
+                    enabled = pluginConsent && deviceGrants[DeviceToolCapability.DEVICE_INFO] == true,
                     onClick = {
-                        deviceToolMessage = deviceResultText(onRunDeviceCommand(DeviceToolCommand.ReadDeviceInfo, false))
+                        deviceToolMessage = pluginResultText(onRunPluginAction("device_info"))
                     }
                 ) {
                     Text(if (language == AppLanguage.Tajik) "Маълумот" else if (language == AppLanguage.Russian) "Устройство" else "Device info")
                 }
                 Button(
-                    enabled = deviceGrants[DeviceToolCapability.BATTERY_STATUS] == true,
+                    enabled = pluginConsent && deviceGrants[DeviceToolCapability.BATTERY_STATUS] == true,
                     onClick = {
-                        deviceToolMessage = deviceResultText(onRunDeviceCommand(DeviceToolCommand.ReadBatteryStatus, false))
+                        deviceToolMessage = pluginResultText(onRunPluginAction("battery_status"))
                     }
                 ) {
                     Text(if (language == AppLanguage.Tajik) "Батарея" else if (language == AppLanguage.Russian) "Батарея" else "Battery")
