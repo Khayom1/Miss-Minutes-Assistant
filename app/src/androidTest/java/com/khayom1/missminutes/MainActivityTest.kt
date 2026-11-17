@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
@@ -23,6 +24,7 @@ import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.SessionStore
 import com.khayom1.missminutes.ai.SupabaseAuthRepository
 import com.khayom1.missminutes.ai.SupabaseAuthSession
+import com.khayom1.missminutes.voice.WakeWordServiceState
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -231,8 +233,15 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        WakeWordServiceState.setEnabled(context, true)
         composeRule.onNodeWithText("Settings").performClick()
         composeRule.onNodeWithText("Sign out").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            !WakeWordServiceState.isEnabled(context) &&
+                composeRule.onAllNodesWithText("Sign in to Miss Minutes")
+                    .fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Sign in to Miss Minutes")
                 .fetchSemanticsNodes().isNotEmpty()
@@ -279,6 +288,17 @@ class MainActivityTest {
         composeRule.onNodeWithText("Remove key").performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) { apiKeyStore.key == null }
         assertEquals(null, apiKeyStore.key)
+    }
+
+    @Test
+    fun settingsShowsMicrophoneDisclosureBeforeListeningIsEnabled() {
+        signIn()
+        composeRule.onNodeWithText("Settings").performClick()
+
+        composeRule.onNodeWithTag("wake_phrase_disclosure").assertIsDisplayed()
+        composeRule.onNodeWithText("Offline wake phrase").assertIsDisplayed()
+        composeRule.onNodeWithText("Enable microphone listening").assertIsDisplayed()
+        composeRule.onNodeWithTag("wake_phrase_toggle").assertIsDisplayed()
     }
 
     @Test
