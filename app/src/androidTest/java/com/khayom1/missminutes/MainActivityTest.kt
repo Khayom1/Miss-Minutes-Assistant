@@ -367,4 +367,4 @@ class MainActivityTest {
         composeRule.onAllNodesWithText("Танзимоти барнома").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Забон").assertIsDisplayed()
     }
-
+}
