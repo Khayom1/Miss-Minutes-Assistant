@@ -30,6 +30,18 @@ class PluginToolCallDispatcherTest {
                         type = PluginValueType.STRING,
                         maxLength = 8,
                         allowedValues = setOf("en", "ru", "tg")
+                    ),
+                    "count" to PluginFieldSpec(
+                        name = "count",
+                        type = PluginValueType.INTEGER,
+                        required = false,
+                        minimum = 0,
+                        maximum = 100
+                    ),
+                    "enabled" to PluginFieldSpec(
+                        name = "enabled",
+                        type = PluginValueType.BOOLEAN,
+                        required = false
                     )
                 ),
                 requiresConfirmation = requiresConfirmation
@@ -46,7 +58,10 @@ class PluginToolCallDispatcherTest {
                 override val capability = PluginCapability.DEVICE_INFORMATION
                 override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                     calls++
-                    return PluginActionOutput(true, (arguments["locale"] as PluginValue.Text).value)
+                    return PluginActionOutput(
+                        true,
+                        (arguments["locale"] as? PluginValue.Text)?.value ?: "typed arguments accepted"
+                    )
                 }
             }),
             consentStore = consent,
@@ -66,6 +81,14 @@ class PluginToolCallDispatcherTest {
         assertTrue(result.success)
         assertEquals("tg", result.message)
         assertEquals(1, calls())
+
+        val typedNumbersAndBooleans = dispatcher.execute(
+            name,
+            """{"count":7,"enabled":true}"""
+        )
+        assertTrue(typedNumbersAndBooleans.success)
+        assertEquals("typed arguments accepted", typedNumbersAndBooleans.message)
+        assertEquals(2, calls())
     }
 
     @Test
@@ -79,6 +102,14 @@ class PluginToolCallDispatcherTest {
         assertEquals(
             PluginExecutionStatus.INVALID_ARGUMENTS,
             dispatcher.execute(name, """{"locale":7}""").status
+        )
+        assertEquals(
+            PluginExecutionStatus.INVALID_ARGUMENTS,
+            dispatcher.execute(name, """{"count":"7"}""").status
+        )
+        assertEquals(
+            PluginExecutionStatus.INVALID_ARGUMENTS,
+            dispatcher.execute(name, """{"enabled":"true"}""").status
         )
         assertEquals(
             PluginExecutionStatus.INVALID_ARGUMENTS,
