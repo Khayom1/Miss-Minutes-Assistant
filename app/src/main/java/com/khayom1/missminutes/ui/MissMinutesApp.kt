@@ -78,6 +78,7 @@ import com.khayom1.missminutes.device.AndroidDeviceToolHost
 import com.khayom1.missminutes.device.DeviceToolCapability
 import com.khayom1.missminutes.device.DeviceToolCommand
 import com.khayom1.missminutes.device.DeviceToolEngine
+import com.khayom1.missminutes.device.DeviceToolResult
 import com.khayom1.missminutes.device.FileDeviceToolAuditLog
 import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
@@ -1784,6 +1785,47 @@ private fun SettingsScreen(
         var pendingDeviceCommand by remember { mutableStateOf<DeviceToolCommand?>(null) }
         var deviceToolMessage by remember { mutableStateOf<String?>(null) }
         var shareTextDraft by rememberSaveable { mutableStateOf("") }
+        fun deviceResultText(result: DeviceToolResult): String {
+            if (!result.success) {
+                return when (language) {
+                    AppLanguage.Tajik -> "Амал иҷозат дода нашуд ё иҷро нагардид."
+                    AppLanguage.Russian -> "Действие не разрешено или не выполнено."
+                    AppLanguage.English -> "The action was denied or could not be completed."
+                }
+            }
+            return when (result.capability) {
+                DeviceToolCapability.DEVICE_INFO -> when (language) {
+                    AppLanguage.Tajik -> "Дастгоҳ: ${result.message}"
+                    AppLanguage.Russian -> "Устройство: ${result.message}"
+                    AppLanguage.English -> "Device: ${result.message}"
+                }
+                DeviceToolCapability.BATTERY_STATUS -> when {
+                    result.message == "unavailable" -> when (language) {
+                        AppLanguage.Tajik -> "Сатҳи батарея дастрас нест."
+                        AppLanguage.Russian -> "Уровень батареи недоступен."
+                        AppLanguage.English -> "Battery level is unavailable."
+                    }
+                    language == AppLanguage.Tajik -> "Батарея: ${result.message}"
+                    language == AppLanguage.Russian -> "Батарея: ${result.message}"
+                    else -> "Battery: ${result.message}"
+                }
+                DeviceToolCapability.OPEN_WIFI_SETTINGS -> when (language) {
+                    AppLanguage.Tajik -> "Танзимоти Wi-Fi кушода шуд."
+                    AppLanguage.Russian -> "Настройки Wi-Fi открыты."
+                    AppLanguage.English -> "Wi-Fi settings opened."
+                }
+                DeviceToolCapability.OPEN_APP_SETTINGS -> when (language) {
+                    AppLanguage.Tajik -> "Танзимоти барнома кушода шуд."
+                    AppLanguage.Russian -> "Настройки приложения открыты."
+                    AppLanguage.English -> "App settings opened."
+                }
+                DeviceToolCapability.SHARE_TEXT -> when (language) {
+                    AppLanguage.Tajik -> "Менюи мубодила кушода шуд."
+                    AppLanguage.Russian -> "Меню отправки открыто."
+                    AppLanguage.English -> "Android share sheet opened."
+                }
+            }
+        }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 when (language) {
@@ -1846,7 +1888,7 @@ private fun SettingsScreen(
                 Button(
                     enabled = deviceGrants[DeviceToolCapability.DEVICE_INFO] == true,
                     onClick = {
-                        deviceToolMessage = onRunDeviceCommand(DeviceToolCommand.ReadDeviceInfo, false).message
+                        deviceToolMessage = deviceResultText(onRunDeviceCommand(DeviceToolCommand.ReadDeviceInfo, false))
                     }
                 ) {
                     Text(if (language == AppLanguage.Tajik) "Маълумот" else if (language == AppLanguage.Russian) "Устройство" else "Device info")
@@ -1854,7 +1896,7 @@ private fun SettingsScreen(
                 Button(
                     enabled = deviceGrants[DeviceToolCapability.BATTERY_STATUS] == true,
                     onClick = {
-                        deviceToolMessage = onRunDeviceCommand(DeviceToolCommand.ReadBatteryStatus, false).message
+                        deviceToolMessage = deviceResultText(onRunDeviceCommand(DeviceToolCommand.ReadBatteryStatus, false))
                     }
                 ) {
                     Text(if (language == AppLanguage.Tajik) "Батарея" else if (language == AppLanguage.Russian) "Батарея" else "Battery")
@@ -1919,7 +1961,7 @@ private fun SettingsScreen(
                         TextButton(onClick = {
                             val command = pendingDeviceCommand
                             pendingDeviceCommand = null
-                            if (command != null) deviceToolMessage = onRunDeviceCommand(command, true).message
+                            if (command != null) deviceToolMessage = deviceResultText(onRunDeviceCommand(command, true))
                         }) {
                             Text(if (language == AppLanguage.Tajik) "Иҷозат" else if (language == AppLanguage.Russian) "Разрешить" else "Allow")
                         }
