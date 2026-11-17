@@ -12,8 +12,8 @@ class AndroidAppSettingsStore(context: Context) {
     data class Appearance(val language: String, val darkMode: Boolean)
 
     fun loadAppearance(): Appearance {
-        val language = preferences.getString(KEY_LANGUAGE, "English")
-            ?.takeIf { it in ALLOWED_LANGUAGES } ?: "English"
+        val language = preferences.getString(KEY_LANGUAGE, "en")
+            ?.takeIf { it in ALLOWED_LANGUAGES } ?: "en"
         return Appearance(language, preferences.getBoolean(KEY_DARK_MODE, false))
     }
 
@@ -39,6 +39,6 @@ class AndroidAppSettingsStore(context: Context) {
         private const val PREFERENCES_NAME = "app_preferences"
         private const val KEY_LANGUAGE = "language"
         private const val KEY_DARK_MODE = "dark_mode"
-        private val ALLOWED_LANGUAGES = setOf("English", "Russian", "Tajik")
+        private val ALLOWED_LANGUAGES = setOf("en", "ru", "tg")
     }
 }
