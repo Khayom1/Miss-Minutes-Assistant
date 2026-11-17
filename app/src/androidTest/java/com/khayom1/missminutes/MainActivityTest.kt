@@ -193,6 +193,16 @@ class MainActivityTest {
     }
 
     @Test
+    fun chatExposesUserInitiatedOfflineDictationControl() {
+        signIn()
+        composeRule.onNodeWithTag("speech_input").assertIsDisplayed()
+        composeRule.onNodeWithText("Dictate").performClick()
+        composeRule.onNodeWithText(
+            "On-device speech recognition is unavailable or could not understand the speech."
+        ).assertIsDisplayed()
+    }
+
+    @Test
     fun expiredSessionClearsPreviousAccountConversationBeforeReauthentication() {
         signIn()
         aiProvider.nextError = AiProviderException.AuthenticationRequired()
