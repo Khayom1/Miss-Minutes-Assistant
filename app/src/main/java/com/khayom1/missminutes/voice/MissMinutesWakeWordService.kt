@@ -22,7 +22,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.MainActivity
-import com.khayom1.missminutes.R
 import java.util.Locale
 
 /**
@@ -238,7 +237,7 @@ class MissMinutesWakeWordService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("Miss Minutes is listening")
             .setContentText("Offline wake phrase: “Miss Minutes”")
             .setContentIntent(openApp)
