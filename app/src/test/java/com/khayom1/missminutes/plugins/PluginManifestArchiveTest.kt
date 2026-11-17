@@ -79,6 +79,23 @@ class PluginManifestArchiveTest {
     }
 
     @Test
+    fun rejectsStringEncodedConfirmationAndFieldPolicyBooleans() {
+        val payload = PluginManifestArchive.encode(listOf(manifest))
+        val invalidConfirmation = kotlinx.serialization.json.Json.parseToJsonElement(
+            payload.toString().replace("\"requiresConfirmation\":true", "\"requiresConfirmation\":\"false\"")
+        ).jsonObject
+        assertThrows(IllegalArgumentException::class.java) {
+            PluginManifestArchive.decode(invalidConfirmation)
+        }
+        val invalidRequired = kotlinx.serialization.json.Json.parseToJsonElement(
+            payload.toString().replace("\"required\":true", "\"required\":\"false\"")
+        ).jsonObject
+        assertThrows(IllegalArgumentException::class.java) {
+            PluginManifestArchive.decode(invalidRequired)
+        }
+    }
+
+    @Test
     fun importedManifestStillRequiresRegistryConsentAndCompiledHandler() {
         var executed = false
         val restored = PluginManifestArchive.decode(PluginManifestArchive.encode(listOf(manifest))).single()
