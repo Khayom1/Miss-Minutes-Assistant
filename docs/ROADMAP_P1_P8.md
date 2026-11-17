@@ -69,7 +69,7 @@ P2 acceptance:
 - Conflict handling, offline-first behavior and encryption-at-rest review.
 - No private conversation content in analytics or diagnostic logs.
 
-## P5 — Android-native capabilities (not started)
+## P5 — Android-native capabilities (partial; final acceptance pending)
 
 - Only documented Android APIs and explicit runtime permissions.
 - User-visible capability manifest, permission rationale and confirmation for sensitive actions.

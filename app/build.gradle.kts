@@ -49,6 +49,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.12.0")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
@@ -64,5 +65,6 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.work:work-testing:2.10.5")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

@@ -31,6 +31,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -63,6 +64,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.ProductIdentity
+import com.khayom1.missminutes.agent.AgentOrchestrator
+import com.khayom1.missminutes.agent.AgentTaskRuntime
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
@@ -108,7 +111,7 @@ private enum class AppScreen(val symbol: String) {
     Settings("⚙")
 }
 
-private enum class AppLanguage(val nativeName: String) {
+internal enum class AppLanguage(val nativeName: String) {
     English("English"),
     Russian("Русский"),
     Tajik("Тоҷикӣ")
@@ -394,6 +397,7 @@ fun MissMinutesApp(
             auditLog = FilePluginAuditLog(context)
         ).apply { install(AndroidDeviceStatusPlugin.manifest()) }
     }
+    val agentOrchestrator = remember(context) { AgentTaskRuntime.get(context) }
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
@@ -1197,6 +1201,10 @@ fun MissMinutesApp(
                                         )
                                     )
                                 },
+                                agentOrchestrator = agentOrchestrator,
+                                agentTaskEnabled = androidPluginConsent &&
+                                    deviceGrants[DeviceToolCapability.DEVICE_INFO] == true &&
+                                    deviceGrants[DeviceToolCapability.BATTERY_STATUS] == true,
                                 onDeviceGrantChange = { capability, granted ->
                                     deviceAuthorization.setGranted(capability, granted)
                                     deviceGrants = deviceGrants + (capability to granted)
@@ -1663,6 +1671,8 @@ private fun SettingsScreen(
     pluginConsent: Boolean,
     onPluginConsentChange: (Boolean) -> Unit,
     onRunPluginAction: (String) -> PluginExecutionResult,
+    agentOrchestrator: AgentOrchestrator,
+    agentTaskEnabled: Boolean,
     onDeviceGrantChange: (DeviceToolCapability, Boolean) -> Unit,
     onRunDeviceCommand: (DeviceToolCommand, Boolean) -> com.khayom1.missminutes.device.DeviceToolResult,
     onMemoryDraftChange: (String) -> Unit,
@@ -2074,6 +2084,26 @@ private fun SettingsScreen(
                     }
                 )
             }
+        }
+        var showAgentTaskPanel by remember { mutableStateOf(false) }
+        OutlinedButton(
+            onClick = { showAgentTaskPanel = !showAgentTaskPanel },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> if (showAgentTaskPanel) "Пӯшидани вазифаҳои AI" else "Вазифаҳои AI"
+                    AppLanguage.Russian -> if (showAgentTaskPanel) "Скрыть задачи ИИ" else "Задачи ИИ"
+                    AppLanguage.English -> if (showAgentTaskPanel) "Hide AI tasks" else "AI tasks"
+                }
+            )
+        }
+        if (showAgentTaskPanel) {
+            AgentTaskPanel(
+                orchestrator = agentOrchestrator,
+                language = language,
+                enabled = agentTaskEnabled
+            )
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
