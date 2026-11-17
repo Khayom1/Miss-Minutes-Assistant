@@ -77,6 +77,7 @@ import com.khayom1.missminutes.ai.SupabaseAuthException
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
 import com.khayom1.missminutes.memory.ConversationSummary
+import com.khayom1.missminutes.memory.ConversationLimitReachedException
 import com.khayom1.missminutes.memory.LocalConversationStore
 import com.khayom1.missminutes.memory.MemoryItem
 import kotlinx.coroutines.CancellationException
@@ -853,6 +854,16 @@ fun MissMinutesApp(
                             // SessionManager always clears local tokens in its finally block.
                         } finally {
                             authBusy = false
+                        }
+                    } catch (_: ConversationLimitReachedException) {
+                        if (requestGeneration == sessionGeneration &&
+                            activeConversationId == requestConversationId
+                        ) {
+                            chatError = when (language) {
+                                AppLanguage.English -> "This conversation reached its 500-message limit. Start a new conversation to continue."
+                                AppLanguage.Russian -> "В диалоге достигнут лимит 500 сообщений. Создайте новый диалог."
+                                AppLanguage.Tajik -> "Ҳадди 500 паём дар ин гуфтугӯ пур шуд. Барои идома гуфтугӯи нав созед."
+                            }
                         }
                     } catch (_: AiProviderException.RateLimited) {
                         if (requestGeneration == sessionGeneration &&
