@@ -51,12 +51,17 @@ object PluginManifestArchive {
             val parsedActions = actions.map { rawAction ->
                 val action = rawAction.jsonObject
                 require(action.keys == setOf("id", "capability", "requiresConfirmation", "arguments"))
-                val argumentsObject = action["arguments"]?.jsonObject ?: JsonObject(emptyMap())
+                val argumentsObject = action["arguments"]?.jsonObject
+                    ?: throw IllegalArgumentException("Plugin action arguments are missing.")
                 require(argumentsObject.size <= 8)
                 val arguments = argumentsObject.mapValues { (key, rawField) ->
                     val field = rawField.jsonObject
+                    require(field.keys.all {
+                        it in setOf("name", "type", "required", "maxLength", "minimum", "maximum", "allowedValues")
+                    })
+                    require(field.keys.containsAll(setOf("name", "type", "required", "maxLength", "allowedValues")))
                     val allowed = field["allowedValues"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet() ?: emptySet()
-                    require(allowed.size <= 32)
+                    require(allowed.size <= 32 && field["allowedValues"]?.jsonArray?.size == allowed.size)
                     PluginFieldSpec(
                         name = field.requiredString("name"),
                         type = enumValue<PluginValueType>(field.requiredString("type")),
@@ -74,18 +79,27 @@ object PluginManifestArchive {
                     requiresConfirmation = action["requiresConfirmation"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
                 )
             }
-            PluginManifest(
+            val rawCapabilities = item["capabilities"]?.jsonArray
+                ?: throw IllegalArgumentException("Plugin capabilities are missing.")
+            val capabilities = rawCapabilities.map {
+                enumValue<PluginCapability>(it.jsonPrimitive.content)
+            }.toSet()
+            require(capabilities.isNotEmpty() && capabilities.size == rawCapabilities.size)
+            val manifest = PluginManifest(
                 id = item.requiredString("id"),
                 version = item.requiredString("version"),
                 displayName = item.requiredString("displayName"),
                 description = item.requiredString("description"),
-                capabilities = item["capabilities"]?.jsonArray?.map {
-                    enumValue<PluginCapability>(it.jsonPrimitive.content)
-                }?.toSet() ?: throw IllegalArgumentException("Plugin capabilities are missing."),
+                capabilities = capabilities,
                 actions = parsedActions,
-                maxCallsPerMinute = item["maxCallsPerMinute"]?.jsonPrimitive?.content?.toIntOrNull() ?: 6,
-                maxExecutionMillis = item["maxExecutionMillis"]?.jsonPrimitive?.content?.toLongOrNull() ?: 1_500L
+                maxCallsPerMinute = item["maxCallsPerMinute"]?.jsonPrimitive?.content?.toIntOrNull()
+                    ?: throw IllegalArgumentException("Plugin call limit is invalid."),
+                maxExecutionMillis = item["maxExecutionMillis"]?.jsonPrimitive?.content?.toLongOrNull()
+                    ?: throw IllegalArgumentException("Plugin execution limit is invalid.")
             )
+            require(manifest.capabilities == manifest.actions.map { it.capability }.toSet())
+            require(manifest.maxCallsPerMinute in 1..12 && manifest.maxExecutionMillis in 1L..5_000L)
+            manifest
         }
         require(manifests.map { it.id }.distinct().size == manifests.size)
         return manifests
