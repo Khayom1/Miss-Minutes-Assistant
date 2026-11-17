@@ -128,7 +128,7 @@ class PluginRegistryTest {
             handlers = listOf(handler),
             consentStore = PluginConsentStore { true },
             auditLog = PluginAuditLog {},
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
         )
         registry.install(numericManifest)
         val invalidNumber = registry.execute(
@@ -159,7 +159,7 @@ class PluginRegistryTest {
             handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
             consentStore = PluginConsentStore { true },
             auditLog = PluginAuditLog {},
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
         )
         val confirmedManifest = manifest.copy(
             actions = manifest.actions.map { it.copy(requiresConfirmation = true) }
@@ -187,7 +187,7 @@ class PluginRegistryTest {
             handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
             consentStore = PluginConsentStore { true },
             auditLog = PluginAuditLog {},
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
             clockMillis = { now },
             globalCallsPerMinute = 1
         )
@@ -205,7 +205,7 @@ class PluginRegistryTest {
             handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
             consentStore = PluginConsentStore { true },
             auditLog = PluginAuditLog { throw IllegalStateException("log unavailable") },
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
         )
         blocked.install(manifest)
         assertFalse(blocked.execute(request()).success)
@@ -222,7 +222,7 @@ class PluginRegistryTest {
             handlers = listOf(handler { Thread.sleep(20); PluginActionOutput(true, "late") }),
             consentStore = PluginConsentStore { true },
             auditLog = PluginAuditLog {},
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
         )
         slow.install(manifest.copy(maxExecutionMillis = 1))
         assertFalse(slow.execute(PluginExecutionRequest("test_plugin", "read_info", mapOf("locale" to PluginValue.Text("en")))).success)
@@ -243,7 +243,7 @@ class PluginRegistryTest {
             handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
             consentStore = consent,
             auditLog = PluginAuditLog { events += it },
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
         )
         registry.install(manifest)
         assertTrue(registry.execute(
@@ -273,7 +273,7 @@ class PluginRegistryTest {
             handlers = listOf(handler { PluginActionOutput(true, "ok") }),
             consentStore = consent,
             auditLog = PluginAuditLog { events += it },
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
         )
         registry.install(manifest)
         assertTrue(registry.uninstall("test_plugin"))
@@ -292,7 +292,7 @@ class PluginRegistryTest {
             handlers = listOf(handler { PluginActionOutput(true, "ok") }),
             consentStore = PluginConsentStore { true },
             auditLog = PluginAuditLog {},
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
         )
         registry.install(manifest)
         assertFalse(registry.uninstall("test_plugin"))
@@ -312,7 +312,7 @@ class PluginRegistryTest {
             handlers = listOf(handler { PluginActionOutput(true, "ok") }),
             consentStore = consent,
             auditLog = PluginAuditLog { events += it },
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
         )
         registry.install(manifest)
         assertFalse(registry.isConnected("test_plugin"))
@@ -366,7 +366,7 @@ class PluginRegistryTest {
         handlers = listOf(handler(action)),
         consentStore = PluginConsentStore { consented },
         auditLog = PluginAuditLog {},
-            accessChecker = testAccessChecker
+            accessChecker = testAccessChecker,
     )
 
     private class AndroidLikeConsentProbe(private val store: PluginConsentStore) { fun isGranted(id: String) = store.isGranted(id) }
