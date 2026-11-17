@@ -53,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -60,6 +62,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -96,6 +99,7 @@ import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
 import com.khayom1.missminutes.plugins.PluginRegistry
 import com.khayom1.missminutes.plugins.PluginCapability
+import com.khayom1.missminutes.plugins.PluginAuditEntry
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
 import com.khayom1.missminutes.memory.ConversationSummary
@@ -118,6 +122,17 @@ private enum class AppScreen(val symbol: String) {
     Dashboard("▦"),
     History("◷"),
     Settings("⚙")
+}
+
+private enum class SettingsPage(val testTag: String) {
+    HOME(""),
+    GENERAL("settings_page_general"),
+    AI_VOICE("settings_page_ai_voice"),
+    FLOATING_ASSISTANT("settings_page_floating_assistant"),
+    PLUGINS_DEVICE("settings_page_plugins_device"),
+    PRIVACY_MEMORY("settings_page_privacy_memory"),
+    BACKUP_RESTORE("settings_page_backup_restore"),
+    ACCOUNT_ABOUT("settings_page_account_about")
 }
 
 internal enum class AppLanguage(val nativeName: String) {
@@ -415,11 +430,12 @@ fun MissMinutesApp(
     }
     val pluginConsentStore = remember(context) { AndroidPluginConsentStore(context) }
     val pluginManifestStore = remember(context) { AndroidPluginManifestStore(context) }
-    val pluginRegistry = remember(context, deviceToolEngine, pluginManifestStore) {
+    val pluginAuditLog = remember(context) { FilePluginAuditLog(context) }
+    val pluginRegistry = remember(context, deviceToolEngine, pluginManifestStore, pluginAuditLog) {
         PluginRegistry(
             handlers = AndroidDeviceStatusPlugin.handlers(deviceToolEngine),
             consentStore = pluginConsentStore,
-            auditLog = FilePluginAuditLog(context)
+            auditLog = pluginAuditLog
         ).apply {
             install(AndroidDeviceStatusPlugin.manifest())
             pluginManifestStore.load().forEach { manifest -> runCatching { install(manifest) } }
@@ -429,6 +445,9 @@ fun MissMinutesApp(
         mutableStateOf(
             pluginRegistry.installedPlugins().associate { it.id to pluginConsentStore.isGranted(it.id) }
         )
+    }
+    var pluginAuditEntries by remember(pluginAuditLog) {
+        mutableStateOf(pluginAuditLog.readRecent())
     }
     val agentOrchestrator = remember(context) { AgentTaskRuntime.get(context) }
     var androidPluginConsent by remember(context) {
