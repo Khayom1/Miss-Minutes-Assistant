@@ -153,6 +153,7 @@ private data class UiCopy(
     val voiceFailed: String,
     val voiceNeedsSetup: String,
     val dictate: String,
+    val stopListening: String,
     val speechListening: String,
     val speechInputUnavailable: String,
     val microphonePermissionRequired: String
@@ -214,6 +215,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         voiceFailed = "Voice playback failed. Check TTS configuration.",
         voiceNeedsSetup = "On-device voice",
         dictate = "Dictate",
+        stopListening = "Stop",
         speechListening = "Listening…",
         speechInputUnavailable = "On-device speech recognition is unavailable or could not understand the speech.",
         microphonePermissionRequired = "Microphone permission is required for voice input."
@@ -273,6 +275,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         voiceFailed = "Не удалось воспроизвести голос. Проверьте настройки TTS.",
         voiceNeedsSetup = "Системный голос устройства",
         dictate = "Диктовать",
+        stopListening = "Остановить",
         speechListening = "Слушаю…",
         speechInputUnavailable = "Офлайн-распознавание речи недоступно или не смогло распознать речь.",
         microphonePermissionRequired = "Для голосового ввода нужен доступ к микрофону."
@@ -332,6 +335,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         voiceFailed = "Пахши овоз ноком шуд. Танзимоти TTS-ро санҷед.",
         voiceNeedsSetup = "Овози дохилии телефон",
         dictate = "Бо овоз навиштан",
+        stopListening = "Қатъ кардан",
         speechListening = "Гӯш карда истодаам…",
         speechInputUnavailable = "Шинохти офлайнии нутқ дастрас нест ё суханро нафаҳмид.",
         microphonePermissionRequired = "Барои воридкунии овоз иҷозати микрофон лозим аст."
@@ -437,7 +441,11 @@ fun MissMinutesApp(
         }
     }
     val requestSpeechInput: () -> Unit = {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+        if (speechListening) {
+            speechInputProvider.stop()
+            speechListening = false
+            speechError = null
+        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) startSpeechInput() else speechPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
@@ -1075,10 +1083,10 @@ private fun ChatScreen(
             )
             TextButton(
                 onClick = onSpeechInput,
-                enabled = !isSending && !speechListening,
+                enabled = !isSending,
                 modifier = Modifier.testTag("speech_input")
             ) {
-                Text(if (speechListening) copy.speechListening else copy.dictate)
+                Text(if (speechListening) copy.stopListening else copy.dictate)
             }
             Button(
                 onClick = onSend,
