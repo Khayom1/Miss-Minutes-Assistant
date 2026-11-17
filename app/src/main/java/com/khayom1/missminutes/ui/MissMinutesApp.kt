@@ -839,9 +839,10 @@ fun MissMinutesApp(
                         }
                         pluginManifestStore.replace(pluginRegistry.installedPlugins())
                         incoming.conversationExportJson?.let { json ->
-                            val effectivePolicy = if (
-                                incoming.singleConversation && backupConflictPolicy == RestoreConflictPolicy.REPLACE
-                            ) RestoreConflictPolicy.MERGE else backupConflictPolicy
+                            val effectivePolicy = BackupPayloadAdapters.safeConflictPolicy(
+                                incoming.singleConversation,
+                                backupConflictPolicy
+                            )
                             conversationStore.restoreAll(owner, json, effectivePolicy)
                         }
                         incoming.settings?.let { settings ->
