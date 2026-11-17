@@ -484,6 +484,7 @@ fun MissMinutesApp(
     var conversationSummaries by remember { mutableStateOf<List<ConversationSummary>>(emptyList()) }
     var memoryItems by remember { mutableStateOf<List<MemoryItem>>(emptyList()) }
     var retentionDays by remember { mutableStateOf(LocalConversationStore.DEFAULT_RETENTION_DAYS) }
+    var memoryContextEnabled by remember { mutableStateOf(false) }
     var memoryDraft by rememberSaveable { mutableStateOf("") }
     var memoryMessage by remember { mutableStateOf<String?>(null) }
     var exportPayload by remember { mutableStateOf<String?>(null) }
@@ -502,7 +503,8 @@ fun MissMinutesApp(
             val storedMessages = conversationStore.getMessages(ownerId, selectedId)
             val storedMemory = conversationStore.listMemory(ownerId)
             val days = conversationStore.getRetentionDays(ownerId)
-            Triple(selectedId, latest, Pair(storedMessages, Pair(storedMemory, days)))
+            val useMemoryContext = conversationStore.isMemoryContextEnabled(ownerId)
+            Triple(selectedId, latest, Triple(storedMessages, storedMemory, Pair(days, useMemoryContext)))
         }
         currentOwnerId = ownerId
         activeConversationId = snapshot.first
@@ -517,8 +519,9 @@ fun MissMinutesApp(
                 )
             )
         }
-        memoryItems = snapshot.third.second.first
-        retentionDays = snapshot.third.second.second
+        memoryItems = snapshot.third.second
+        retentionDays = snapshot.third.third.first
+        memoryContextEnabled = snapshot.third.third.second
         aiHasResponded = messages.any { !it.isUser }
     }
 
@@ -741,19 +744,17 @@ fun MissMinutesApp(
     val submitMessage: () -> Unit = {
         val value = draft.trim()
         if (value.isNotEmpty() && value.length <= 8_000 && !isSending) {
-            val requestMessages = messages.takeLast(19).map { message ->
-                AiMessage(
-                    role = if (message.isUser) AiRole.USER else AiRole.ASSISTANT,
-                    content = message.text
-                )
-            }.toMutableList()
-            requestMessages.add(AiMessage(AiRole.USER, value))
-            while (
-                requestMessages.size > 1 &&
-                requestMessages.sumOf { it.content.length } > 16_000
-            ) {
-                requestMessages.removeAt(0)
-            }
+            val requestMessages = buildAiContextMessages(
+                history = messages.map { message ->
+                    AiMessage(
+                        role = if (message.isUser) AiRole.USER else AiRole.ASSISTANT,
+                        content = message.text
+                    )
+                },
+                currentUserMessage = value,
+                savedMemory = memoryItems.map { it.content },
+                includeSavedMemory = memoryContextEnabled
+            )
 
             val request = try {
                 AiRequest(messages = requestMessages)
@@ -1094,10 +1095,21 @@ fun MissMinutesApp(
                                 memoryDraft = memoryDraft,
                                 memoryMessage = memoryMessage,
                                 retentionDays = retentionDays,
+                                memoryContextEnabled = memoryContextEnabled,
                                 onMemoryDraftChange = { memoryDraft = it.take(LocalConversationStore.MAX_MEMORY_CHARS) },
                                 onAddMemory = addMemory,
                                 onDeleteMemory = deleteMemory,
                                 onRetentionChange = changeRetention,
+                                onMemoryContextChange = { enabled ->
+                                    currentOwnerId?.let { owner ->
+                                        scope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                conversationStore.setMemoryContextEnabled(owner, enabled)
+                                            }
+                                            memoryContextEnabled = enabled
+                                        }
+                                    }
+                                },
                                 onSignOut = signOut
                             )
                         }
@@ -1520,10 +1532,12 @@ private fun SettingsScreen(
     memoryDraft: String,
     memoryMessage: String?,
     retentionDays: Int,
+    memoryContextEnabled: Boolean,
     onMemoryDraftChange: (String) -> Unit,
     onAddMemory: () -> Unit,
     onDeleteMemory: (String) -> Unit,
     onRetentionChange: (Int) -> Unit,
+    onMemoryContextChange: (Boolean) -> Unit,
     onSignOut: () -> Unit
 ) {
     Column(
@@ -1684,6 +1698,34 @@ private fun SettingsScreen(
                     AppLanguage.English -> "Only items you explicitly save are stored. Content is encrypted with Android Keystore and is not synced to a server."
                     AppLanguage.Russian -> "Сохраняются только добавленные вами записи. Данные шифруются Android Keystore и не синхронизируются с сервером."
                     AppLanguage.Tajik -> "Танҳо маълумоте нигоҳ дошта мешавад, ки худатон илова мекунед. Он бо Android Keystore рамзгузорӣ шуда, ба сервер ҳамоҳанг намешавад."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    when (language) {
+                        AppLanguage.English -> "Include saved memory in AI requests"
+                        AppLanguage.Russian -> "Добавлять сохранённую память в запросы ИИ"
+                        AppLanguage.Tajik -> "Илова кардани хотира ба дархостҳои AI"
+                    },
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Switch(
+                    checked = memoryContextEnabled,
+                    onCheckedChange = onMemoryContextChange,
+                    modifier = Modifier.testTag("memory_context_toggle")
+                )
+            }
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Off by default. When enabled, saved notes are sent to DeepSeek with your next message."
+                    AppLanguage.Russian -> "По умолчанию выключено. При включении сохранённые заметки отправляются в DeepSeek вместе со следующим сообщением."
+                    AppLanguage.Tajik -> "Бо нобаёнӣ хомӯш аст. Ҳангоми фаъол кардан, хотира бо паёми навбатӣ ба DeepSeek фиристода мешавад."
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
