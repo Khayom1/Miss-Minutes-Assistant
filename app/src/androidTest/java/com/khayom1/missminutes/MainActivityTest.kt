@@ -203,7 +203,7 @@ class MainActivityTest {
         composeRule.onNodeWithTag("auth_continue_guest").performClick()
         waitForChatScreen()
 
-        aiProvider.nextError = AiProviderException.AuthenticationRequired()
+        aiProvider.nextError = AiProviderException.MissingApiKey()
         composeRule.onNodeWithTag("chat_input").performTextInput("Check guest credentials")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
