@@ -99,7 +99,7 @@ Deno.test("normalizes provider errors", async () => {
 });
 Deno.test("rejects oversized request bodies", async () => {
   const handler = createHandler({env:env(),fetcher:fakeFetcher()});
-  equal((await handler(request(" ".repeat(12001)))).status,413,"status");
+  equal((await handler(request(" ".repeat(16001)))).status,413,"status");
 });
 Deno.test("handles CORS preflight without calling services", async () => {
   const handler = createHandler({env:env(),fetcher:async()=>{throw new Error("unexpected fetch");}});
