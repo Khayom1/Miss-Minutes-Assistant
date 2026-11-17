@@ -436,7 +436,7 @@ fun MissMinutesApp(
             pluginRegistry.installedPlugins().associate { it.id to pluginConsentStore.isGranted(it.id) }
         )
     }
-    val agentOrchestrator = remember(context) { AgentTaskRuntime.get(context) }
+    val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
