@@ -382,4 +382,23 @@ class MainActivityTest {
         composeRule.onAllNodesWithText("Танзимоти барнома").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Забон").assertIsDisplayed()
     }
+
+    @Test
+    fun connectedPluginToolsAreAutomaticallyInjectedIntoModelRequests() {
+        assertChatReady()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("plugin_consent_android_device_status")
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithText("Chat").performClick()
+        composeRule.onNodeWithTag("chat_input").performTextInput("What device tools are available?")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            aiProvider.lastRequest != null
+        }
+
+        val tools = aiProvider.lastRequest?.tools.orEmpty()
+        assertTrue("Connected tools should be discovered without a per-turn toggle.", tools.isNotEmpty())
+        assertTrue(tools.all { it.name.startsWith("plugin_") })
+    }
 }
