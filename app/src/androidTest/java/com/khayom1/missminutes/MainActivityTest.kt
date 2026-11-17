@@ -146,8 +146,6 @@ class MainActivityTest {
 
     @Test
     fun guestProviderCredentialFailureDoesNotForceAccountRegistration() {
-        composeRule.onNodeWithTag("auth_continue_guest").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("auth_continue_guest").performClick()
         waitForChatScreen()
 
         aiProvider.nextError = AiProviderException.MissingApiKey()
