@@ -214,7 +214,7 @@ class MissMinutesWakeWordService : Service() {
         releaseRecognizer()
         publishState(false, serviceCopy.wakeHeard)
         stopForeground(STOP_FOREGROUND_REMOVE)
-        postStatusNotification("Miss Minutes heard. Tap to open the assistant.")
+        postStatusNotification(serviceCopy.wakeHeard)
         stopSelf()
     }
 
@@ -225,7 +225,7 @@ class MissMinutesWakeWordService : Service() {
         releaseRecognizer()
         publishState(false, serviceCopy.stoppedWithError)
         stopForeground(STOP_FOREGROUND_REMOVE)
-        postStatusNotification("Wake phrase listening stopped. Check on-device speech recognition and permissions.")
+        postStatusNotification(serviceCopy.stoppedWithError)
         stopSelf()
     }
 
