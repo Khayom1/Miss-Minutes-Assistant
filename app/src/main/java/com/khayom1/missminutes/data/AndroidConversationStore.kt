@@ -33,6 +33,14 @@ data class StoredMessage(
     val createdAtEpochMillis: Long
 )
 
+data class StoredMemory(
+    val id: String,
+    val key: String,
+    val value: String,
+    val createdAtEpochMillis: Long,
+    val updatedAtEpochMillis: Long
+)
+
 /**
  * Offline-first conversation history. All user-authored and assistant message
  * text plus conversation titles are encrypted with AES-256-GCM before SQLite.
@@ -191,6 +199,85 @@ class AndroidConversationStore(
     }
 
     @Synchronized
+    fun saveMemory(ownerId: String, key: String, value: String): StoredMemory {
+        require(ownerId.isNotBlank())
+        val normalizedKey = key.trim()
+        require(normalizedKey.isNotEmpty() && normalizedKey.length <= MAX_MEMORY_KEY_CHARS)
+        require(value.isNotBlank() && value.length <= MAX_MEMORY_VALUE_CHARS)
+        val db = helper.writableDatabase
+        val existingId = db.query(
+            TABLE_MEMORIES, arrayOf(COL_ID),
+            "$COL_OWNER = ?", arrayOf(ownerId), null, null, null
+        ).use { cursor ->
+            var found: String? = null
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(0)
+                val keyCipher = db.query(
+                    TABLE_MEMORIES, arrayOf(COL_MEMORY_KEY), "$COL_ID = ?",
+                    arrayOf(id), null, null, null, "1"
+                ).use { inner -> if (inner.moveToFirst()) inner.getBlob(0) else byteArrayOf() }
+                val storedKey = decrypt(keyCipher, aad(ownerId, id, MEMORY_KEY_FIELD))
+                if (storedKey.equals(normalizedKey, ignoreCase = true)) {
+                    found = id
+                    break
+                }
+            }
+            found
+        }
+        val now = clock()
+        val id = existingId ?: UUID.randomUUID().toString()
+        val values = ContentValues().apply {
+            put(COL_ID, id)
+            put(COL_OWNER, ownerId)
+            put(COL_MEMORY_KEY, encrypt(normalizedKey, aad(ownerId, id, MEMORY_KEY_FIELD)))
+            put(COL_MEMORY_VALUE, encrypt(value.trim(), aad(ownerId, id, MEMORY_VALUE_FIELD)))
+            if (existingId == null) put(COL_CREATED, now)
+            put(COL_UPDATED, now)
+        }
+        db.insertWithOnConflict(TABLE_MEMORIES, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        val created = db.query(
+            TABLE_MEMORIES, arrayOf(COL_CREATED), "$COL_ID = ?", arrayOf(id),
+            null, null, null, "1"
+        ).use { if (it.moveToFirst()) it.getLong(0) else now }
+        return StoredMemory(id, normalizedKey, value.trim(), created, now)
+    }
+
+    @Synchronized
+    fun listMemories(ownerId: String): List<StoredMemory> {
+        require(ownerId.isNotBlank())
+        return helper.readableDatabase.query(
+            TABLE_MEMORIES,
+            arrayOf(COL_ID, COL_MEMORY_KEY, COL_MEMORY_VALUE, COL_CREATED, COL_UPDATED),
+            "$COL_OWNER = ?", arrayOf(ownerId), null, null, "$COL_UPDATED DESC"
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val id = cursor.getString(0)
+                    add(
+                        StoredMemory(
+                            id = id,
+                            key = decrypt(cursor.getBlob(1), aad(ownerId, id, MEMORY_KEY_FIELD)),
+                            value = decrypt(cursor.getBlob(2), aad(ownerId, id, MEMORY_VALUE_FIELD)),
+                            createdAtEpochMillis = cursor.getLong(3),
+                            updatedAtEpochMillis = cursor.getLong(4)
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    @Synchronized
+    fun deleteMemory(ownerId: String, memoryId: String): Boolean =
+        helper.writableDatabase.delete(
+            TABLE_MEMORIES, "$COL_ID = ? AND $COL_OWNER = ?", arrayOf(memoryId, ownerId)
+        ) > 0
+
+    @Synchronized
+    fun clearMemories(ownerId: String): Int =
+        helper.writableDatabase.delete(TABLE_MEMORIES, "$COL_OWNER = ?", arrayOf(ownerId))
+
+    @Synchronized
     fun setArchived(ownerId: String, conversationId: String, archived: Boolean) {
         val values = ContentValues().apply { put(COL_ARCHIVED, if (archived) 1 else 0) }
         helper.writableDatabase.update(
@@ -251,6 +338,11 @@ class AndroidConversationStore(
             .put("schema_version", DATABASE_VERSION)
             .put("exported_at", clock())
             .put("conversations", conversations)
+            .put("memories", JSONArray().also { array ->
+                listMemories(ownerId).forEach { memory ->
+                    array.put(JSONObject().put("key", memory.key).put("value", memory.value))
+                }
+            })
             .toString()
     }
 
@@ -288,6 +380,7 @@ class AndroidConversationStore(
             db.execSQL("ALTER TABLE $TABLE_CONVERSATIONS ADD COLUMN $COL_ARCHIVED INTEGER NOT NULL DEFAULT 0")
             db.execSQL("CREATE INDEX conversations_owner_updated ON $TABLE_CONVERSATIONS($COL_OWNER, $COL_UPDATED DESC)")
             db.execSQL("CREATE INDEX messages_conversation_created ON $TABLE_MESSAGES($COL_CONVERSATION_ID, $COL_CREATED)")
+            createV3(db)
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -302,7 +395,24 @@ class AndroidConversationStore(
                 db.execSQL("CREATE INDEX messages_conversation_created ON $TABLE_MESSAGES($COL_CONVERSATION_ID, $COL_CREATED)")
                 version = 2
             }
+            if (version < 3) {
+                createV3(db)
+                version = 3
+            }
             check(version == newVersion) { "Unsupported conversation database migration." }
+        }
+
+        private fun createV3(db: SQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE $TABLE_MEMORIES (" +
+                    "$COL_ID TEXT PRIMARY KEY NOT NULL, " +
+                    "$COL_OWNER TEXT NOT NULL, " +
+                    "$COL_MEMORY_KEY BLOB NOT NULL, " +
+                    "$COL_MEMORY_VALUE BLOB NOT NULL, " +
+                    "$COL_CREATED INTEGER NOT NULL, " +
+                    "$COL_UPDATED INTEGER NOT NULL)"
+            )
+            db.execSQL("CREATE INDEX memories_owner_updated ON $TABLE_MEMORIES($COL_OWNER, $COL_UPDATED DESC)")
         }
 
         private fun createV1(db: SQLiteDatabase) {
@@ -327,11 +437,13 @@ class AndroidConversationStore(
 
     companion object {
         const val DATABASE_NAME = "miss_minutes_conversations.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
         const val EXPORT_FORMAT = "miss-minutes-conversations"
         const val DEFAULT_TITLE = "New conversation"
         const val MAX_MESSAGE_CHARS = 16_000
         const val MAX_TITLE_CHARS = 72
+        const val MAX_MEMORY_KEY_CHARS = 80
+        const val MAX_MEMORY_VALUE_CHARS = 2_000
         private const val MAX_MESSAGE_CHARS_UNUSED = 16_000
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val KEY_ALIAS = "miss_minutes_conversation_aes_v1"
@@ -341,10 +453,13 @@ class AndroidConversationStore(
         private const val TAG_BYTES = TAG_BITS / 8
         private const val TITLE_FIELD = "title"
         private const val MESSAGE_FIELD = "message"
+        private const val MEMORY_KEY_FIELD = "memory-key"
+        private const val MEMORY_VALUE_FIELD = "memory-value"
         private const val AAD_PREFIX = "com.khayom1.missminutes.conversation.v1"
 
         private const val TABLE_CONVERSATIONS = "conversations"
         private const val TABLE_MESSAGES = "messages"
+        private const val TABLE_MEMORIES = "memories"
         private const val COL_ID = "id"
         private const val COL_OWNER = "owner_id"
         private const val COL_TITLE = "title_cipher"
@@ -354,6 +469,8 @@ class AndroidConversationStore(
         private const val COL_CONVERSATION_ID = "conversation_id"
         private const val COL_ROLE = "role"
         private const val COL_CONTENT = "content_cipher"
+        private const val COL_MEMORY_KEY = "key_cipher"
+        private const val COL_MEMORY_VALUE = "value_cipher"
 
         private fun getOrCreateKey(): SecretKey {
             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
