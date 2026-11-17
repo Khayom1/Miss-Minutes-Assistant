@@ -4,10 +4,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.khayom1.missminutes.ai.AndroidSessionStore
+import com.khayom1.missminutes.ai.AndroidDeepSeekApiKeyStore
+import com.khayom1.missminutes.ai.DeepSeekApiKeySource
+import com.khayom1.missminutes.ai.DirectDeepSeekProvider
 import com.khayom1.missminutes.ai.DefaultSupabaseAuthRepository
 import com.khayom1.missminutes.ai.OkHttpAiHttpTransport
 import com.khayom1.missminutes.ai.SessionManager
-import com.khayom1.missminutes.ai.SupabaseDeepSeekProvider
 import com.khayom1.missminutes.ui.MissMinutesApp
 
 class MainActivity : ComponentActivity() {
@@ -23,17 +25,17 @@ class MainActivity : ComponentActivity() {
             ),
             store = AndroidSessionStore(applicationContext)
         )
-        val aiProvider = SupabaseDeepSeekProvider(
-            functionUrl = "${BuildConfig.SUPABASE_URL.trimEnd('/')}/functions/v1/miss-minutes-ai",
-            publishableKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY,
-            accessTokenSource = sessionManager,
+        val apiKeyStore = AndroidDeepSeekApiKeyStore(applicationContext)
+        val aiProvider = DirectDeepSeekProvider(
+            keySource = DeepSeekApiKeySource { apiKeyStore.load() },
             transport = transport
         )
 
         setContent {
             MissMinutesApp(
                 sessionManager = sessionManager,
-                aiProvider = aiProvider
+                aiProvider = aiProvider,
+                apiKeyStore = apiKeyStore
             )
         }
     }
