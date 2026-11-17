@@ -1445,6 +1445,7 @@ private fun HistoryScreen(
                 FilterChip(
                     selected = retentionDays == days,
                     onClick = { onRetentionChange(days) },
+                    modifier = Modifier.testTag("retention_$days"),
                     label = { Text(label) }
                 )
             }
@@ -1484,14 +1485,14 @@ private fun HistoryScreen(
         OutlinedTextField(
             value = memoryKey,
             onValueChange = { memoryKey = it.take(80) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("history_memory_key"),
             label = { Text(actions.memoryKey) },
             singleLine = true
         )
         OutlinedTextField(
             value = memoryValue,
             onValueChange = { memoryValue = it.take(2_000) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("history_memory_value"),
             label = { Text(actions.memoryValue) },
             maxLines = 3
         )
@@ -1501,7 +1502,8 @@ private fun HistoryScreen(
                 memoryKey = ""
                 memoryValue = ""
             },
-            enabled = memoryKey.isNotBlank() && memoryValue.isNotBlank()
+            enabled = memoryKey.isNotBlank() && memoryValue.isNotBlank(),
+            modifier = Modifier.testTag("history_save_memory")
         ) { Text(actions.saveMemory) }
         if (memories.isEmpty()) {
             Text(actions.noMemories, color = MaterialTheme.colorScheme.onSurfaceVariant)
