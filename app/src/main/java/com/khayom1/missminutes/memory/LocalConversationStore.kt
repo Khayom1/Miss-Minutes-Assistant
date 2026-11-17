@@ -47,6 +47,7 @@ class LocalConversationStore(
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)
+        db.execSQL("PRAGMA secure_delete = ON")
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -413,6 +414,18 @@ class LocalConversationStore(
     @Synchronized
     fun exportAll(ownerId: String): String {
         validateOwner(ownerId)
+        val estimatedBytes = readableDatabase.rawQuery(
+            """
+            SELECT
+                COALESCE((SELECT SUM(LENGTH(title_ciphertext)) FROM conversations WHERE owner_id = ?), 0) +
+                COALESCE((SELECT SUM(LENGTH(content_ciphertext)) FROM messages WHERE owner_id = ?), 0) +
+                COALESCE((SELECT SUM(LENGTH(content_ciphertext)) FROM memory_items WHERE owner_id = ?), 0)
+            """.trimIndent(),
+            arrayOf(ownerId, ownerId, ownerId)
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+        check(estimatedBytes <= MAX_EXPORT_BYTES) {
+            "Local export exceeds the 2 MB safety limit. Delete older records and retry."
+        }
         val conversationJson = buildJsonArray {
             listConversations(ownerId).forEach { conversation ->
                 add(buildJsonObject {
@@ -443,13 +456,17 @@ class LocalConversationStore(
                 })
             }
         }
-        return buildJsonObject {
+        val export = buildJsonObject {
             put("schemaVersion", DATABASE_VERSION)
             put("exportedAt", System.currentTimeMillis())
             put("retentionDays", getRetentionDays(ownerId))
             put("conversations", conversationJson)
             put("memory", memoryJson)
         }.toString()
+        check(export.toByteArray(Charsets.UTF_8).size <= MAX_EXPORT_BYTES) {
+            "Local export exceeds the 2 MB safety limit. Delete older records and retry."
+        }
+        return export
     }
 
     private fun validateOwner(ownerId: String) {
@@ -464,6 +481,7 @@ class LocalConversationStore(
         const val ROLE_ASSISTANT = "assistant"
         const val MAX_MESSAGE_CHARS = 8_000
         const val MAX_MEMORY_CHARS = 2_000
+        const val MAX_EXPORT_BYTES = 2_000_000
         const val MAX_TITLE_CHARS = 96
         const val MAX_CONVERSATIONS = 1_000
         const val MAX_MESSAGES_PER_CONVERSATION = 500
