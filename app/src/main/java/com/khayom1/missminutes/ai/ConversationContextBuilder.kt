@@ -32,7 +32,7 @@ fun buildAiContextMessages(
     result += AiMessage(AiRole.USER, currentUserMessage)
 
     while (
-        result.size > if (memoryText != null) 2 else 1 &&
+        result.size > (if (memoryText != null) 2 else 1) &&
         result.sumOf { it.content.length } > 16_000
     ) {
         result.removeAt(if (memoryText != null) 1 else 0)
