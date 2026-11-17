@@ -1614,7 +1614,15 @@ fun MissMinutesApp(
                                 backupStatus = backupStatus,
                                 backupError = backupError,
                                 backupBusy = backupBusy,
-                                pluginManifests = pluginRegistry.installedPlugins(),
+                                pluginManifests = pluginRegistry.installedPlugins().filter {
+                                    it.id != AndroidDeviceStatusPlugin.PLUGIN_ID
+                                },
+                                pluginConsentStates = pluginRegistry.installedPlugins().associate {
+                                    it.id to pluginConsentStore.isGranted(it.id)
+                                },
+                                onPluginConsentChange = { pluginId, granted ->
+                                    pluginConsentStore.setGranted(pluginId, granted)
+                                },
                                 onExportPlugin = exportSelectedPlugin,
                                 onCreateBackup = createEncryptedBackup,
                                 onChooseBackup = {
@@ -2102,6 +2110,8 @@ private fun SettingsScreen(
     backupError: String?,
     backupBusy: Boolean,
     pluginManifests: List<com.khayom1.missminutes.plugins.PluginManifest>,
+    pluginConsentStates: Map<String, Boolean>,
+    onPluginConsentChange: (String, Boolean) -> Unit,
     onExportPlugin: (String) -> Unit,
     onCreateBackup: () -> Unit,
     onChooseBackup: () -> Unit,
@@ -2655,6 +2665,8 @@ private fun SettingsScreen(
             error = backupError,
             busy = backupBusy,
             pluginManifests = pluginManifests,
+            pluginConsentStates = pluginConsentStates,
+            onPluginConsentChange = onPluginConsentChange,
             onExportPlugin = onExportPlugin,
             onCreateBackup = onCreateBackup,
             onChooseBackup = onChooseBackup,
