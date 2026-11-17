@@ -322,6 +322,7 @@ fun MissMinutesApp(
     ttsProvider: TtsProvider
 ) {
     val scope = rememberCoroutineScope()
+    var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
     val language = AppLanguage.valueOf(selectedLanguageName)
     val context = LocalContext.current
     var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
@@ -400,7 +401,6 @@ fun MissMinutesApp(
         }
     }
     var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
-    var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
     var darkTheme by rememberSaveable { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     var authEmail by rememberSaveable { mutableStateOf("") }
