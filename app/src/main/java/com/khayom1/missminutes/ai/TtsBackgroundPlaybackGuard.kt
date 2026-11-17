@@ -2,6 +2,7 @@ package com.khayom1.missminutes.ai
 
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 
 /**
  * Prevents system TTS from continuing as background audio without a dedicated
@@ -16,7 +17,7 @@ internal class TtsBackgroundPlaybackGuard(
         onStopped()
     }
 
-    override fun onStateChanged(source: Lifecycle, event: Lifecycle.Event) {
+    override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
         if (event == Lifecycle.Event.ON_STOP) onBackgrounded()
     }
 }
