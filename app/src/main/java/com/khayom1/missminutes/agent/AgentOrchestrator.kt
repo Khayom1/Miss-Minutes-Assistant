@@ -2,6 +2,7 @@ package com.khayom1.missminutes.agent
 
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
+import com.khayom1.missminutes.plugins.PluginToolDescriptor
 
 /** A single, explicitly allowlisted plugin invocation in an inspectable task graph. */
 data class AgentAction(
@@ -131,6 +132,10 @@ class AgentOrchestrator(
         check(store.create(state)) { "Task id already exists." }
         return state
     }
+
+    /** The connected plugin catalog is reused for every request; no per-message plugin picker is needed. */
+    fun availablePluginTools(): List<PluginToolDescriptor> =
+        (executor as? AgentActionCatalogProvider)?.availableTools().orEmpty()
 
     @Synchronized
     fun state(taskId: String): AgentTaskState? = store.load(taskId)
