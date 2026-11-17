@@ -64,6 +64,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.ProductIdentity
+import com.khayom1.missminutes.backup.AndroidAppSettingsStore
 import com.khayom1.missminutes.agent.AgentOrchestrator
 import com.khayom1.missminutes.agent.AgentTaskRuntime
 import com.khayom1.missminutes.ai.AiCompletion
@@ -86,6 +87,7 @@ import com.khayom1.missminutes.device.FileDeviceToolAuditLog
 import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
+import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.FilePluginAuditLog
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
@@ -392,9 +394,12 @@ fun MissMinutesApp(
     conversationStore: LocalConversationStore
 ) {
     val scope = rememberCoroutineScope()
-    var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
-    val language = AppLanguage.valueOf(selectedLanguageName)
     val context = LocalContext.current
+    val appSettingsStore = remember(context) { AndroidAppSettingsStore(context) }
+    var selectedLanguageName by remember(context) {
+        mutableStateOf(appSettingsStore.loadAppearance().language)
+    }
+    val language = AppLanguage.valueOf(selectedLanguageName)
     val deviceAuthorization = remember(context) { SharedPreferencesDeviceToolAuthorization(context) }
     val deviceToolEngine = remember(context) {
         DeviceToolEngine(
@@ -404,12 +409,16 @@ fun MissMinutesApp(
         )
     }
     val pluginConsentStore = remember(context) { AndroidPluginConsentStore(context) }
-    val pluginRegistry = remember(context, deviceToolEngine) {
+    val pluginManifestStore = remember(context) { AndroidPluginManifestStore(context) }
+    val pluginRegistry = remember(context, deviceToolEngine, pluginManifestStore) {
         PluginRegistry(
             handlers = AndroidDeviceStatusPlugin.handlers(deviceToolEngine),
             consentStore = pluginConsentStore,
             auditLog = FilePluginAuditLog(context)
-        ).apply { install(AndroidDeviceStatusPlugin.manifest()) }
+        ).apply {
+            install(AndroidDeviceStatusPlugin.manifest())
+            pluginManifestStore.load().forEach(::install)
+        }
     }
     val agentOrchestrator = remember(context) { AgentTaskRuntime.get(context) }
     var androidPluginConsent by remember(context) {
@@ -511,7 +520,9 @@ fun MissMinutesApp(
         }
     }
     var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
-    var darkTheme by rememberSaveable { mutableStateOf(false) }
+    var darkTheme by remember(context) {
+        mutableStateOf(appSettingsStore.loadAppearance().darkMode)
+    }
     var draft by rememberSaveable { mutableStateOf("") }
     var authEmail by rememberSaveable { mutableStateOf("") }
     var authPassword by remember { mutableStateOf("") }
@@ -1233,8 +1244,14 @@ fun MissMinutesApp(
                                 wakeMessage = wakeMessage,
                                 onEnableWakeListening = enableWakeListening,
                                 onDisableWakeListening = disableWakeListening,
-                                onLanguageChange = { selectedLanguageName = it.name },
-                                onDarkThemeChange = { darkTheme = it },
+                                onLanguageChange = {
+                                    selectedLanguageName = it.name
+                                    appSettingsStore.saveAppearance(it.name, darkTheme)
+                                },
+                                onDarkThemeChange = {
+                                    darkTheme = it
+                                    appSettingsStore.saveAppearance(language.name, it)
+                                },
                                 memoryItems = memoryItems,
                                 memoryDraft = memoryDraft,
                                 memoryMessage = memoryMessage,
