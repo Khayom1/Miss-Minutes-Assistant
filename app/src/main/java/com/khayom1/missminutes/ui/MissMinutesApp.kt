@@ -491,6 +491,14 @@ fun MissMinutesApp(
                         messages.add(ChatMessage(nextMessageId, completion.content, false))
                         if (messages.size > 100) messages.removeAt(0)
                         aiHasResponded = true
+                    } catch (_: AiProviderException.MissingApiKey) {
+                        if (requestGeneration == sessionGeneration) {
+                            chatError = when (language) {
+                                AppLanguage.English -> "Add your DeepSeek API key in Settings to start chatting."
+                                AppLanguage.Russian -> "Добавьте ключ DeepSeek в настройках, чтобы начать чат."
+                                AppLanguage.Tajik -> "Барои оғоз кардани чат калиди DeepSeek-ро дар Танзимот ворид кунед."
+                            }
+                        }
                     } catch (_: AiProviderException.AuthenticationRequired) {
                         if (requestGeneration != sessionGeneration) return@launch
                         sessionGeneration += 1
