@@ -108,20 +108,26 @@ object BackupPayloadAdapters {
     }
 
     private fun validateConversationPayload(payload: JsonObject) {
-        require(payload.keys == setOf(
+        val allowedRootFields = setOf(
             "schemaVersion", "exportedAt", "retentionDays", "conversations", "memory"
-        )) { "Conversation backup contains unknown or missing fields." }
+        )
+        require(
+            payload.keys.containsAll(setOf("schemaVersion", "conversations")) &&
+                payload.keys.all { it in allowedRootFields }
+        ) { "Conversation backup contains unknown or missing fields." }
         val version = payload["schemaVersion"]?.jsonPrimitive?.content?.toIntOrNull()
             ?: throw IllegalArgumentException("Conversation backup schema is invalid.")
         require(version in 1..2) { "Unsupported conversation backup version." }
-        require(payload["exportedAt"]?.jsonPrimitive?.content?.toLongOrNull() != null)
-        val retentionDays = payload["retentionDays"]?.jsonPrimitive?.content?.toIntOrNull()
-            ?: throw IllegalArgumentException("Conversation retention setting is invalid.")
+        payload["exportedAt"]?.let {
+            require(it.jsonPrimitive.content.toLongOrNull() != null) {
+                "Conversation export timestamp is invalid."
+            }
+        }
+        val retentionDays = payload["retentionDays"]?.jsonPrimitive?.content?.toIntOrNull() ?: 90
         require(retentionDays in setOf(0, 30, 90, 365))
         val conversations = payload["conversations"]?.jsonArray
             ?: throw IllegalArgumentException("Conversation list is missing.")
-        val memories = payload["memory"]?.jsonArray
-            ?: throw IllegalArgumentException("Memory list is missing.")
+        val memories = payload["memory"]?.jsonArray ?: kotlinx.serialization.json.JsonArray(emptyList())
         require(conversations.size <= 200 && memories.size <= 500)
         conversations.forEach { rawConversation ->
             val conversation = rawConversation.jsonObject
