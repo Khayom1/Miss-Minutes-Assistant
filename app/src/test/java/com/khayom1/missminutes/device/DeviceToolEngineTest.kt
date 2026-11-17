@@ -83,6 +83,22 @@ class DeviceToolEngineTest {
     }
 
     @Test
+    fun actionIsBlockedWhenAuditLogCannotRecordRequest() {
+        var executions = 0
+        val engine = DeviceToolEngine(
+            authorization = DeviceToolAuthorization { true },
+            host = DeviceToolHost { executions++; "ok" },
+            auditLog = DeviceToolAuditLog { throw IllegalStateException("disk unavailable") }
+        )
+
+        val result = engine.execute(DeviceToolRequest(DeviceToolCommand.ReadDeviceInfo))
+
+        assertFalse(result.success)
+        assertTrue(result.message.contains("Audit logging is unavailable"))
+        assertEquals(0, executions)
+    }
+
+    @Test
     fun slowHostIsReportedAsOverBudget() {
         val engine = DeviceToolEngine(
             authorization = DeviceToolAuthorization { true },
