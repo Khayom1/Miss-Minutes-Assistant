@@ -1783,6 +1783,7 @@ private fun SettingsScreen(
         }
         var pendingDeviceCommand by remember { mutableStateOf<DeviceToolCommand?>(null) }
         var deviceToolMessage by remember { mutableStateOf<String?>(null) }
+        var shareTextDraft by rememberSaveable { mutableStateOf("") }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 when (language) {
@@ -1873,6 +1874,26 @@ private fun SettingsScreen(
                     Text(if (language == AppLanguage.Tajik) "Танзимоти барнома" else if (language == AppLanguage.Russian) "Настройки приложения" else "App settings")
                 }
             }
+            OutlinedTextField(
+                value = shareTextDraft,
+                onValueChange = { shareTextDraft = it.take(1_000) },
+                enabled = deviceGrants[DeviceToolCapability.SHARE_TEXT] == true,
+                modifier = Modifier.fillMaxWidth().testTag("device_share_text"),
+                label = {
+                    Text(
+                        if (language == AppLanguage.Tajik) "Матни мубодилашаванда"
+                        else if (language == AppLanguage.Russian) "Текст для отправки"
+                        else "Text to share"
+                    )
+                },
+                maxLines = 3
+            )
+            TextButton(
+                enabled = deviceGrants[DeviceToolCapability.SHARE_TEXT] == true && shareTextDraft.isNotBlank(),
+                onClick = { pendingDeviceCommand = DeviceToolCommand.ShareText(shareTextDraft) }
+            ) {
+                Text(if (language == AppLanguage.Tajik) "Мубодила" else if (language == AppLanguage.Russian) "Поделиться" else "Share text")
+            }
             if (deviceToolMessage != null) {
                 Text(deviceToolMessage!!, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
@@ -1888,9 +1909,10 @@ private fun SettingsScreen(
                     },
                     text = {
                         Text(
-                            if (language == AppLanguage.Tajik) "Miss Minutes танзимоти Android-ро мекушояд. Иҷозат медиҳед?"
-                            else if (language == AppLanguage.Russian) "Miss Minutes откроет системные настройки Android. Разрешить?"
-                            else "Miss Minutes will open Android system settings. Continue?"
+                            when (pendingDeviceCommand) {
+                                is DeviceToolCommand.ShareText -> if (language == AppLanguage.Tajik) "Матни интихобшуда ба менюи мубодилаи Android дода мешавад. Давом диҳем?" else if (language == AppLanguage.Russian) "Выбранный текст будет передан в системное меню отправки Android. Продолжить?" else "The selected text will be passed to Android's share sheet. Continue?"
+                                else -> if (language == AppLanguage.Tajik) "Miss Minutes танзимоти Android-ро мекушояд. Иҷозат медиҳед?" else if (language == AppLanguage.Russian) "Miss Minutes откроет системные настройки Android. Разрешить?" else "Miss Minutes will open Android system settings. Continue?"
+                            }
                         )
                     },
                     confirmButton = {
