@@ -76,6 +76,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.khayom1.missminutes.ai.SpeechInputProvider
+import java.util.Locale
 
 private enum class AppScreen(val symbol: String) {
     Chat("✦"),
@@ -149,7 +151,11 @@ private data class UiCopy(
     val stopSpeaking: String,
     val voicePreparing: String,
     val voiceFailed: String,
-    val voiceNeedsSetup: String
+    val voiceNeedsSetup: String,
+    val dictate: String,
+    val speechListening: String,
+    val speechInputUnavailable: String,
+    val microphonePermissionRequired: String
 )
 
 private fun copyFor(language: AppLanguage): UiCopy = when (language) {
@@ -206,7 +212,11 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         stopSpeaking = "Stop voice",
         voicePreparing = "Speaking with the device voice…",
         voiceFailed = "Voice playback failed. Check TTS configuration.",
-        voiceNeedsSetup = "On-device voice"
+        voiceNeedsSetup = "On-device voice",
+        dictate = "Dictate",
+        speechListening = "Listening…",
+        speechInputUnavailable = "On-device speech recognition is unavailable or could not understand the speech.",
+        microphonePermissionRequired = "Microphone permission is required for voice input."
     )
     AppLanguage.Russian -> UiCopy(
         chat = "Чат",
@@ -261,7 +271,11 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         stopSpeaking = "Остановить",
         voicePreparing = "Озвучивание системным голосом…",
         voiceFailed = "Не удалось воспроизвести голос. Проверьте настройки TTS.",
-        voiceNeedsSetup = "Системный голос устройства"
+        voiceNeedsSetup = "Системный голос устройства",
+        dictate = "Диктовать",
+        speechListening = "Слушаю…",
+        speechInputUnavailable = "Офлайн-распознавание речи недоступно или не смогло распознать речь.",
+        microphonePermissionRequired = "Для голосового ввода нужен доступ к микрофону."
     )
     AppLanguage.Tajik -> UiCopy(
         chat = "Чат",
@@ -316,7 +330,11 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         stopSpeaking = "Истодан",
         voicePreparing = "Бо овози худи телефон хонда мешавад…",
         voiceFailed = "Пахши овоз ноком шуд. Танзимоти TTS-ро санҷед.",
-        voiceNeedsSetup = "Овози дохилии телефон"
+        voiceNeedsSetup = "Овози дохилии телефон",
+        dictate = "Бо овоз навиштан",
+        speechListening = "Гӯш карда истодаам…",
+        speechInputUnavailable = "Шинохти офлайнии нутқ дастрас нест ё суханро нафаҳмид.",
+        microphonePermissionRequired = "Барои воридкунии овоз иҷозати микрофон лозим аст."
     )
 }
 
@@ -326,7 +344,8 @@ fun MissMinutesApp(
     sessionManager: SessionManager,
     aiProvider: AiProvider,
     ttsProvider: TtsProvider,
-    apiKeyStore: DeepSeekApiKeyStore
+    apiKeyStore: DeepSeekApiKeyStore,
+    speechInputProvider: SpeechInputProvider
 ) {
     val scope = rememberCoroutineScope()
     var selectedLanguageName by rememberSaveable { mutableStateOf(AppLanguage.English.name) }
@@ -388,6 +407,40 @@ fun MissMinutesApp(
             }
         }
     }
+    val speechLocale = when (language) {
+        AppLanguage.English -> Locale.US
+        AppLanguage.Russian -> Locale("ru", "RU")
+        AppLanguage.Tajik -> Locale("tg", "TJ")
+    }
+    val startSpeechInput: () -> Unit = {
+        speechError = null
+        speechListening = true
+        speechInputProvider.start(
+            locale = speechLocale,
+            onResult = { transcript ->
+                speechListening = false
+                val separator = if (draft.isBlank()) "" else " "
+                draft = (draft + separator + transcript).take(8_000)
+            },
+            onError = {
+                speechListening = false
+                speechError = copyFor(language).speechInputUnavailable
+            }
+        )
+    }
+    val speechPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startSpeechInput() else {
+            speechListening = false
+            speechError = copyFor(language).microphonePermissionRequired
+        }
+    }
+    val requestSpeechInput: () -> Unit = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) startSpeechInput() else speechPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
     val wakePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
@@ -443,6 +496,8 @@ fun MissMinutesApp(
     var aiHasResponded by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<Long?>(null) }
     var voiceError by remember { mutableStateOf<String?>(null) }
+    var speechError by remember { mutableStateOf<String?>(null) }
+    var speechListening by remember { mutableStateOf(false) }
     var apiKeyConfigured by remember { mutableStateOf(false) }
     var apiKeySaving by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
@@ -796,7 +851,10 @@ fun MissMinutesApp(
                                 speakingMessageId = speakingMessageId,
                                 voiceError = voiceError,
                                 voicePreparing = copy.voicePreparing,
-                                onSpeak = speakMessage
+                                onSpeak = speakMessage,
+                                speechListening = speechListening,
+                                speechError = speechError,
+                                onSpeechInput = requestSpeechInput
                             )
                             AppScreen.Dashboard -> DashboardScreen(
                                 copy = copy,
@@ -947,7 +1005,10 @@ private fun ChatScreen(
     speakingMessageId: Long?,
     voiceError: String?,
     voicePreparing: String,
-    onSpeak: (ChatMessage) -> Unit
+    onSpeak: (ChatMessage) -> Unit,
+    speechListening: Boolean,
+    speechError: String?,
+    onSpeechInput: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -979,8 +1040,10 @@ private fun ChatScreen(
                 )
             }
         }
-        if (voiceError != null) {
-            Text(voiceError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        if (voiceError != null || speechError != null) {
+            Text(voiceError ?: speechError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        } else if (speechListening) {
+            Text(copy.speechListening, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         } else if (speakingMessageId != null) {
             Text(voicePreparing, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
@@ -1010,6 +1073,13 @@ private fun ChatScreen(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { onSend() })
             )
+            TextButton(
+                onClick = onSpeechInput,
+                enabled = !isSending && !speechListening,
+                modifier = Modifier.testTag("speech_input")
+            ) {
+                Text(if (speechListening) copy.speechListening else copy.dictate)
+            }
             Button(
                 onClick = onSend,
                 enabled = draft.isNotBlank() && !isSending,
