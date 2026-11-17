@@ -16,10 +16,13 @@ import com.khayom1.missminutes.ai.OkHttpAiHttpTransport
 import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ui.MissMinutesApp
+import com.khayom1.missminutes.memory.AndroidKeystoreConversationCipher
+import com.khayom1.missminutes.memory.LocalConversationStore
 
 class MainActivity : ComponentActivity() {
     private var ttsProvider: TtsProvider? = null
     private var speechInputProvider: SpeechInputProvider? = null
+    private var conversationStore: LocalConversationStore? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +53,11 @@ class MainActivity : ComponentActivity() {
         ttsProvider = hybridTts
         val speechInput = AndroidSpeechInputProvider(applicationContext)
         speechInputProvider = speechInput
+        val localConversationStore = LocalConversationStore(
+            context = applicationContext,
+            cipher = AndroidKeystoreConversationCipher()
+        )
+        conversationStore = localConversationStore
 
         setContent {
             MissMinutesApp(
@@ -57,7 +65,8 @@ class MainActivity : ComponentActivity() {
                 aiProvider = aiProvider,
                 apiKeyStore = apiKeyStore,
                 ttsProvider = hybridTts,
-                speechInputProvider = speechInput
+                speechInputProvider = speechInput,
+                conversationStore = localConversationStore
             )
         }
     }
@@ -67,6 +76,8 @@ class MainActivity : ComponentActivity() {
         ttsProvider = null
         speechInputProvider?.close()
         speechInputProvider = null
+        conversationStore?.close()
+        conversationStore = null
         super.onDestroy()
     }
 }

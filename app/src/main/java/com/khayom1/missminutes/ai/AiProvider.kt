@@ -15,6 +15,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 enum class AiRole(val wireValue: String) {
+    SYSTEM("system"),
     USER("user"),
     ASSISTANT("assistant")
 }
