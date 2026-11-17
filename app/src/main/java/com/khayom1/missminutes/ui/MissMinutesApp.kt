@@ -73,6 +73,9 @@ import com.khayom1.missminutes.agent.AgentTaskRuntime
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
+import com.khayom1.missminutes.ai.AiToolExecutionLoop
+import com.khayom1.missminutes.ai.AiToolExecutor
+import com.khayom1.missminutes.ai.AiToolExecutionResult
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
@@ -93,6 +96,8 @@ import com.khayom1.missminutes.plugins.FilePluginAuditLog
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
 import com.khayom1.missminutes.plugins.PluginRegistry
+import com.khayom1.missminutes.plugins.PluginToolSchemaFactory
+import com.khayom1.missminutes.plugins.AndroidPluginAccessChecker
 import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
@@ -307,7 +312,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         signOut = "Выйти",
         account = "Аккаунт",
         sending = "Думаю…",
-        sendFailed = "Ответ не получен. Проверьте интернет и настройки сервера.",
+        sendFailed = "Ответ не получен. Проверьте подключение и ключ DeepSeek.",
         conversationTooLong = "Диалог слишком длинный. Начните новый диалог.",
         aiRateLimited = "Достигнут лимит запросов ИИ. Попробуйте немного позже.",
         speak = "Озвучить",
@@ -370,7 +375,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         signOut = "Баромадан",
         account = "Ҳисоб",
         sending = "Фикр карда истодаам…",
-        sendFailed = "Ҷавоб гирифта нашуд. Интернет ва танзимоти серверро санҷед.",
+        sendFailed = "Ҷавоб гирифта нашуд. Пайвастшавӣ ва калиди DeepSeek-ро санҷед.",
         conversationTooLong = "Гуфтугӯ хеле дароз аст. Гуфтугӯи нав оғоз кунед.",
         aiRateLimited = "Маҳдудияти дархостҳои AI расид. Каме баъд кӯшиш кунед.",
         speak = "Хондан",
@@ -416,7 +421,8 @@ fun MissMinutesApp(
         PluginRegistry(
             handlers = AndroidDeviceStatusPlugin.handlers(deviceToolEngine),
             consentStore = pluginConsentStore,
-            auditLog = FilePluginAuditLog(context)
+            auditLog = FilePluginAuditLog(context),
+            accessChecker = AndroidPluginAccessChecker(context)
         ).apply {
             install(AndroidDeviceStatusPlugin.manifest())
             pluginManifestStore.load().forEach { manifest -> runCatching { install(manifest) } }
@@ -427,7 +433,7 @@ fun MissMinutesApp(
             pluginRegistry.installedPlugins().associate { it.id to pluginConsentStore.isGranted(it.id) }
         )
     }
-    val agentOrchestrator = remember(context) { AgentTaskRuntime.get(context) }
+    val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
@@ -1038,7 +1044,10 @@ fun MissMinutesApp(
             )
 
             val request = try {
-                AiRequest(messages = requestMessages)
+                AiRequest(
+                    messages = requestMessages,
+                    tools = PluginToolSchemaFactory.toAiToolDefinitions(agentOrchestrator.availablePluginTools())
+                )
             } catch (_: IllegalArgumentException) {
                 chatError = copy.conversationTooLong
                 null
@@ -1053,7 +1062,7 @@ fun MissMinutesApp(
                 scope.launch {
                     var requestConversationId: String? = null
                     try {
-                        val ownerId = currentOwnerId ?: throw AiProviderException.AuthenticationRequired()
+                        val ownerId = currentOwnerId ?: GUEST_OWNER_ID
                         val conversationId = activeConversationId ?: withContext(Dispatchers.IO) {
                             conversationStore.createConversation(ownerId)
                         }
@@ -1075,7 +1084,15 @@ fun MissMinutesApp(
                             conversationStore.listConversations(ownerId)
                         }
 
-                        val completion: AiCompletion = aiProvider.complete(request)
+                        val completion: AiCompletion = AiToolExecutionLoop(
+                            provider = aiProvider,
+                            executor = AiToolExecutor { call ->
+                                val result = withContext(Dispatchers.IO) {
+                                    agentOrchestrator.executePluginTool(call.name, call.arguments, userConfirmed = false)
+                                }
+                                AiToolExecutionResult(result.status.name + ": " + result.message)
+                            }
+                        ).complete(request)
                         if (requestGeneration != sessionGeneration) return@launch
                         val assistantMessageId = withContext(Dispatchers.IO) {
                             conversationStore.appendMessage(
@@ -1094,10 +1111,6 @@ fun MissMinutesApp(
                             conversationStore.listConversations(ownerId)
                         }
                     } catch (_: AiProviderException.MissingApiKey) {
-                        if (requestGeneration == sessionGeneration) {
-                            chatError = copy.apiKeyRequired
-                        }
-                    } catch (_: AiProviderException.AuthenticationRequired) {
                         if (requestGeneration == sessionGeneration) {
                             chatError = copy.apiKeyRequired
                         }
@@ -1389,8 +1402,12 @@ fun MissMinutesApp(
                                 deviceGrants = deviceGrants,
                                 pluginConsent = androidPluginConsent,
                                 onPluginConsentChange = { granted ->
-                                    pluginConsentStore.setGranted(AndroidDeviceStatusPlugin.PLUGIN_ID, granted)
-                                    androidPluginConsent = granted
+                                    val updated = if (granted) pluginRegistry.connect(AndroidDeviceStatusPlugin.PLUGIN_ID)
+                                    else pluginRegistry.revokeConsent(AndroidDeviceStatusPlugin.PLUGIN_ID)
+                                    if (updated) {
+                                        androidPluginConsent = pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID)
+                                        pluginConsentSnapshot = pluginConsentSnapshot + (AndroidDeviceStatusPlugin.PLUGIN_ID to androidPluginConsent)
+                                    }
                                 },
                                 onRunPluginAction = { actionId ->
                                     pluginRegistry.execute(
@@ -1448,8 +1465,8 @@ fun MissMinutesApp(
                                 },
                                 pluginConsentStates = pluginConsentSnapshot,
                                 onDeclarativePluginConsentChange = { pluginId, granted ->
-                                    pluginConsentStore.setGranted(pluginId, granted)
-                                    pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to granted)
+                                    val updated = if (granted) pluginRegistry.connect(pluginId) else pluginRegistry.revokeConsent(pluginId)
+                                    if (updated) pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to pluginConsentStore.isGranted(pluginId))
                                 },
                                 onExportPlugin = exportSelectedPlugin,
                                 onCreateBackup = createEncryptedBackup,
