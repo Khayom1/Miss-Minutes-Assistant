@@ -9,7 +9,7 @@ import org.junit.Test
 class VoiceServiceCopyTest {
     @Test
     fun everySupportedLanguageHasCompleteForegroundAndStatusCopy() {
-        val copies = listOf("en", "ru", "tg").map(VoiceServiceCopyProvider::forLanguage)
+        val copies = listOf("en", "ru", "tg").map { VoiceServiceCopyProvider.forLanguage(it) }
         copies.forEach { copy ->
             listOf(
                 copy.channelName,
