@@ -71,6 +71,7 @@ import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.SessionManager
+import com.khayom1.missminutes.ai.buildAiContextMessages
 import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.SupabaseAuthException
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
@@ -944,7 +945,7 @@ fun MissMinutesApp(
                     conversationStore.listConversations(owner)
                 }
                 memoryItems = withContext(Dispatchers.IO) { conversationStore.listMemory(owner) }
-                if (activeConversationId !in conversationSummaries.map { it.id }) {
+                if (activeConversationId == null || conversationSummaries.none { it.id == activeConversationId }) {
                     loadConversation(owner)
                 }
             }
