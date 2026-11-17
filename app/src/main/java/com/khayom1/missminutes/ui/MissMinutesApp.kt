@@ -1589,16 +1589,22 @@ fun MissMinutesApp(
                                 deviceGrants = deviceGrants,
                                 pluginConsent = androidPluginConsent,
                                 onPluginConsentChange = { granted ->
-                                    pluginConsentStore.setGranted(AndroidDeviceStatusPlugin.PLUGIN_ID, granted)
-                                    androidPluginConsent = granted
+                                    val pluginId = AndroidDeviceStatusPlugin.PLUGIN_ID
+                                    if (granted) pluginRegistry.grantConsent(pluginId)
+                                    else pluginRegistry.revokeConsent(pluginId)
+                                    androidPluginConsent = pluginConsentStore.isGranted(pluginId)
+                                    pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to androidPluginConsent)
+                                    pluginAuditEntries = pluginAuditLog.readRecent()
                                 },
                                 onRunPluginAction = { actionId ->
-                                    pluginRegistry.execute(
+                                    val result = pluginRegistry.execute(
                                         PluginExecutionRequest(
                                             pluginId = AndroidDeviceStatusPlugin.PLUGIN_ID,
                                             actionId = actionId
                                         )
                                     )
+                                    pluginAuditEntries = pluginAuditLog.readRecent()
+                                    result
                                 },
                                 agentOrchestrator = agentOrchestrator,
                                 agentTaskEnabled = androidPluginConsent &&
@@ -1648,9 +1654,41 @@ fun MissMinutesApp(
                                     it.id != AndroidDeviceStatusPlugin.PLUGIN_ID
                                 },
                                 pluginConsentStates = pluginConsentSnapshot,
+                                pluginAuditEntries = pluginAuditEntries,
                                 onDeclarativePluginConsentChange = { pluginId, granted ->
-                                    pluginConsentStore.setGranted(pluginId, granted)
-                                    pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to granted)
+                                    val updated = if (granted) pluginRegistry.grantConsent(pluginId)
+                                    else pluginRegistry.revokeConsent(pluginId)
+                                    pluginConsentSnapshot = pluginConsentSnapshot + (
+                                        pluginId to pluginConsentStore.isGranted(pluginId)
+                                    )
+                                    pluginAuditEntries = pluginAuditLog.readRecent()
+                                    updated
+                                },
+                                onUninstallPlugin = { pluginId ->
+                                    val existing = pluginRegistry.installedPlugins().firstOrNull { it.id == pluginId }
+                                    if (existing == null) {
+                                        false
+                                    } else {
+                                        val removed = pluginRegistry.uninstall(pluginId)
+                                        if (!removed) {
+                                            false
+                                        } else {
+                                            try {
+                                                pluginManifestStore.replace(pluginRegistry.installedPlugins())
+                                                pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
+                                                    it.id to pluginConsentStore.isGranted(it.id)
+                                                }
+                                                pluginAuditEntries = pluginAuditLog.readRecent()
+                                                true
+                                            } catch (_: Exception) {
+                                                // A stale persisted manifest remains default-deny because consent was revoked.
+                                                runCatching { pluginRegistry.install(existing) }
+                                                pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to false)
+                                                pluginAuditEntries = pluginAuditLog.readRecent()
+                                                false
+                                            }
+                                        }
+                                    }
                                 },
                                 onExportPlugin = exportSelectedPlugin,
                                 onCreateBackup = createEncryptedBackup,
@@ -2140,7 +2178,9 @@ private fun SettingsScreen(
     backupBusy: Boolean,
     pluginManifests: List<com.khayom1.missminutes.plugins.PluginManifest>,
     pluginConsentStates: Map<String, Boolean>,
-    onDeclarativePluginConsentChange: (String, Boolean) -> Unit,
+    pluginAuditEntries: List<PluginAuditEntry>,
+    onDeclarativePluginConsentChange: (String, Boolean) -> Boolean,
+    onUninstallPlugin: (String) -> Boolean,
     onExportPlugin: (String) -> Unit,
     onCreateBackup: () -> Unit,
     onChooseBackup: () -> Unit,
