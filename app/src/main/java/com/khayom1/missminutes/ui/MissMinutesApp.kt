@@ -778,11 +778,13 @@ fun MissMinutesApp(
                 val requestGeneration = sessionGeneration
 
                 scope.launch {
+                    var requestConversationId: String? = null
                     try {
                         val ownerId = currentOwnerId ?: throw AiProviderException.AuthenticationRequired()
                         val conversationId = activeConversationId ?: withContext(Dispatchers.IO) {
                             conversationStore.createConversation(ownerId)
                         }.also { activeConversationId = it }
+                        requestConversationId = conversationId
                         val userMessageId = withContext(Dispatchers.IO) {
                             conversationStore.appendMessage(
                                 ownerId,
@@ -792,7 +794,9 @@ fun MissMinutesApp(
                             )
                         }
                         if (requestGeneration != sessionGeneration) return@launch
-                        messages.add(ChatMessage(userMessageId, value, true))
+                        if (activeConversationId == conversationId) {
+                            messages.add(ChatMessage(userMessageId, value, true))
+                        }
                         conversationSummaries = withContext(Dispatchers.IO) {
                             conversationStore.listConversations(ownerId)
                         }
@@ -808,11 +812,13 @@ fun MissMinutesApp(
                             )
                         }
                         if (requestGeneration != sessionGeneration) return@launch
-                        messages.add(ChatMessage(assistantMessageId, completion.content, false))
+                        if (activeConversationId == conversationId) {
+                            messages.add(ChatMessage(assistantMessageId, completion.content, false))
+                            aiHasResponded = true
+                        }
                         conversationSummaries = withContext(Dispatchers.IO) {
                             conversationStore.listConversations(ownerId)
                         }
-                        aiHasResponded = true
                     } catch (_: AiProviderException.AuthenticationRequired) {
                         if (requestGeneration != sessionGeneration) return@launch
                         sessionGeneration += 1
@@ -848,13 +854,17 @@ fun MissMinutesApp(
                             authBusy = false
                         }
                     } catch (_: AiProviderException.RateLimited) {
-                        if (requestGeneration == sessionGeneration) {
+                        if (requestGeneration == sessionGeneration &&
+                            activeConversationId == requestConversationId
+                        ) {
                             chatError = copy.aiRateLimited
                         }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {
-                        if (requestGeneration == sessionGeneration) {
+                        if (requestGeneration == sessionGeneration &&
+                            activeConversationId == requestConversationId
+                        ) {
                             chatError = copy.sendFailed
                         }
                     } finally {
