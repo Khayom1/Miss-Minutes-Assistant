@@ -73,6 +73,9 @@ import com.khayom1.missminutes.agent.AgentTaskRuntime
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
+import com.khayom1.missminutes.ai.AiToolExecutionLoop
+import com.khayom1.missminutes.ai.AiToolExecutor
+import com.khayom1.missminutes.ai.AiToolExecutionResult
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
@@ -96,6 +99,7 @@ import com.khayom1.missminutes.plugins.FilePluginAuditLog
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
 import com.khayom1.missminutes.plugins.PluginRegistry
+import com.khayom1.missminutes.plugins.PluginToolSchemaFactory
 import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
@@ -1169,7 +1173,10 @@ fun MissMinutesApp(
             )
 
             val request = try {
-                AiRequest(messages = requestMessages)
+                AiRequest(
+                    messages = requestMessages,
+                    tools = PluginToolSchemaFactory.toAiToolDefinitions(agentOrchestrator.availablePluginTools())
+                )
             } catch (_: IllegalArgumentException) {
                 chatError = copy.conversationTooLong
                 null
@@ -1206,7 +1213,15 @@ fun MissMinutesApp(
                             conversationStore.listConversations(ownerId)
                         }
 
-                        val completion: AiCompletion = aiProvider.complete(request)
+                        val completion: AiCompletion = AiToolExecutionLoop(
+                            provider = aiProvider,
+                            executor = AiToolExecutor { call ->
+                                val result = withContext(Dispatchers.IO) {
+                                    agentOrchestrator.executePluginTool(call.name, call.arguments, userConfirmed = false)
+                                }
+                                AiToolExecutionResult(result.status.name + ": " + result.message)
+                            }
+                        ).complete(request)
                         if (requestGeneration != sessionGeneration) return@launch
                         val assistantMessageId = withContext(Dispatchers.IO) {
                             conversationStore.appendMessage(
