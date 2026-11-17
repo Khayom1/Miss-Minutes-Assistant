@@ -90,7 +90,7 @@ class MainActivityTest {
             accessToken = "test-user-access-token",
             refreshToken = "test-user-refresh-token",
             expiresAtEpochSeconds = 10_000L,
-            userId = "test-user-id",
+            userId = "test-user-${email.hashCode()}",
             email = email
         )
     }
