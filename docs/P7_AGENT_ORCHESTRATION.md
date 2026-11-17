@@ -12,7 +12,7 @@ Status: core engine, encrypted task-state adapter, P6 registry adapter and a vis
 - Bounded graph size (24 nodes), step budget, 24-hour deadline, result length, task count and encrypted storage size.
 - State is persisted before dispatch and after the result. A task found in RUNNING after process restart is changed to RECOVERY_REQUIRED and is never automatically replayed, avoiding blind duplicate side effects.
 - Android SharedPreferences adapter encrypts the complete bounded task snapshot using the existing Android Keystore AES-GCM ConversationCipher. The in-memory store is for deterministic tests only.
-- JVM tests cover dependency order, approval, pause/cancel, graph validation, deadlines, step budgets, failed actions and interrupted-execution recovery.\n- Settings exposes a localized Tajik/Russian/English diagnostic task panel with start, next-step, pause, resume and cancel controls.
+- JVM tests cover dependency order, approval, pause/cancel, graph validation, deadlines, step budgets, failed actions and interrupted-execution recovery.\n- Settings exposes a localized Tajik/Russian/English diagnostic task panel behind an explicit expand control; it is composed only when opened. It provides start, next-step, pause, resume and cancel controls.
 
 ## Explicit limits
 
