@@ -48,9 +48,9 @@ class MissMinutesWakeWordService : Service() {
         override fun onEndOfSpeech() = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
-        override fun onPartialResults(partialResults: Bundle?) {
-            if (containsExactWakePhrase(partialResults)) handleWakePhrase()
-        }
+        // Wait for the final transcript so a partial "Miss Minutes" prefix in a
+        // longer utterance (for example, "Miss Minutes please") cannot wake the app.
+        override fun onPartialResults(partialResults: Bundle?) = Unit
 
         override fun onResults(results: Bundle?) {
             if (containsExactWakePhrase(results)) {
