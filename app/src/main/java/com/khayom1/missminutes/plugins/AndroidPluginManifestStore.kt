@@ -31,6 +31,16 @@ class AndroidPluginManifestStore(context: Context) {
     }
 
     @Synchronized
+    fun remove(pluginId: String): Boolean {
+        if (!pluginId.matches(Regex("^[a-z][a-z0-9_.-]{2,63}$"))) return false
+        val current = load()
+        val updated = current.filterNot { it.id == pluginId }
+        if (updated.size == current.size) return false
+        replace(updated)
+        return true
+    }
+
+    @Synchronized
     fun mergeImported(manifests: Collection<PluginManifest>): List<PluginManifest> {
         val merged = load().associateBy { it.id }.toMutableMap()
         manifests.forEach { manifest -> merged[manifest.id] = manifest }

@@ -72,6 +72,11 @@ fun interface PluginConsentStore {
     fun isGranted(pluginId: String): Boolean
 }
 
+/** Mutable local consent stores must support durable revocation. */
+interface MutablePluginConsentStore : PluginConsentStore {
+    fun setGranted(pluginId: String, granted: Boolean)
+}
+
 fun interface PluginAuditLog {
     fun append(entry: PluginAuditEntry)
 }

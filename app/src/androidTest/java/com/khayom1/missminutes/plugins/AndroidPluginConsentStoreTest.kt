@@ -56,4 +56,23 @@ class AndroidPluginConsentStoreTest {
             // expected
         }
     }
+    @Test
+    fun consentChangesAreDurableAndCanBeRevokedIndividuallyOrGlobally() {
+        val preferences = context.getSharedPreferences("plugin_user_consent", Context.MODE_PRIVATE)
+        assertTrue(preferences.edit().clear().commit())
+        val store = AndroidPluginConsentStore(context)
+
+        store.setGranted("test_plugin", true)
+        assertTrue(AndroidPluginConsentStore(context).isGranted("test_plugin"))
+
+        store.setGranted("test_plugin", false)
+        assertFalse(AndroidPluginConsentStore(context).isGranted("test_plugin"))
+
+        store.setGranted("test_plugin", true)
+        store.setGranted("another_plugin", true)
+        store.revokeAll()
+        assertFalse(AndroidPluginConsentStore(context).isGranted("test_plugin"))
+        assertFalse(AndroidPluginConsentStore(context).isGranted("another_plugin"))
+    }
+
 }
