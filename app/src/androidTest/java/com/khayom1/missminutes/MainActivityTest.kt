@@ -224,7 +224,7 @@ class MainActivityTest {
         composeRule.onNodeWithTag("retention_30").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("retention_90").performScrollTo().assertIsDisplayed()
 
-        composeRule.onNodeWithText("Chat").performClick()
+        composeRule.onNodeWithTag("nav_chat").performClick()
         composeRule.onNodeWithTag("chat_input").performTextInput("What is my study goal?")
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
