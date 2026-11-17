@@ -119,6 +119,7 @@ class PluginRegistryTest {
         val handler = object : PluginActionHandler {
             override val actionId = "typed_action"
             override val capability = PluginCapability.DEVICE_INFORMATION
+            override val argumentSchema = numericManifest.actions.single().arguments
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 calls++
                 return PluginActionOutput(true, "ok")
@@ -150,6 +151,31 @@ class PluginRegistryTest {
         assertFalse(invalidBoolean.success)
         assertTrue(valid.success)
         assertEquals(1, calls)
+    }
+
+    @Test
+    fun importedManifestCannotWidenCompiledHandlerArgumentSchema() {
+        val registry = registry(consented = true) { PluginActionOutput(true, "ok") }
+        val widened = manifest.copy(
+            actions = manifest.actions.map { action ->
+                action.copy(
+                    arguments = mapOf(
+                        "locale" to PluginFieldSpec(
+                            name = "locale",
+                            type = PluginValueType.STRING,
+                            maxLength = 256
+                        )
+                    )
+                )
+            }
+        )
+
+        try {
+            registry.install(widened)
+            throw AssertionError("Expected a widened imported schema to be rejected.")
+        } catch (_: IllegalArgumentException) {
+            // The compiled handler schema remains authoritative.
+        }
     }
 
     @Test
@@ -374,6 +400,7 @@ class PluginRegistryTest {
     private fun handler(action: () -> PluginActionOutput) = object : PluginActionHandler {
         override val actionId = "read_info"
         override val capability = PluginCapability.DEVICE_INFORMATION
+        override val argumentSchema = manifest.actions.single().arguments
         override fun execute(arguments: Map<String, PluginValue>) = action()
     }
 
