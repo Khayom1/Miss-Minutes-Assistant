@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import com.khayom1.missminutes.ai.AiCompletion
+import com.khayom1.missminutes.data.AndroidConversationStore
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
 import com.khayom1.missminutes.ai.AiProviderException
@@ -113,6 +114,7 @@ class MainActivityTest {
         )
         aiProvider = FakeAiProvider()
         apiKeyStore = MemoryApiKeyStore()
+        InstrumentationRegistry.getInstrumentation().targetContext.deleteDatabase(AndroidConversationStore.DATABASE_NAME)
         composeRule.setContent {
             com.khayom1.missminutes.ui.MissMinutesApp(
                 sessionManager = sessionManager,
