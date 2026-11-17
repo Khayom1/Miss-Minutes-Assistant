@@ -436,10 +436,9 @@ fun MissMinutesApp(
         if (allGranted) startWakeListening() else wakePermissionLauncher.launch(wakePermissions)
     }
     val disableWakeListening = {
-        context.startService(
-            Intent(context, MissMinutesWakeWordService::class.java)
-                .setAction(MissMinutesWakeWordService.ACTION_STOP)
-        )
+        // Stop an existing listener without starting a new background service.
+        // The service's onDestroy() owns recognizer cleanup and state publication.
+        context.stopService(Intent(context, MissMinutesWakeWordService::class.java))
         WakeWordServiceState.setEnabled(context, false)
         wakeEnabled = false
         wakeMessage = when (language) {
