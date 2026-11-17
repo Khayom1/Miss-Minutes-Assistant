@@ -2205,6 +2205,18 @@ private fun SettingsScreen(
                     language == AppLanguage.Russian -> "Батарея: ${result.message}"
                     else -> "Battery: ${result.message}"
                 }
+                PluginCapability.CALENDAR_READ,
+                PluginCapability.CALENDAR_WRITE,
+                PluginCapability.CONTACTS_READ,
+                PluginCapability.LOCATION_APPROXIMATE,
+                PluginCapability.LOCATION_PRECISE,
+                PluginCapability.NOTIFICATION_READ,
+                PluginCapability.GITHUB_REPOSITORY_READ,
+                PluginCapability.GITHUB_REPOSITORY_WRITE -> when (language) {
+                    AppLanguage.Tajik -> "Амал иҷро шуд: ${result.message}"
+                    AppLanguage.Russian -> "Действие выполнено: ${result.message}"
+                    AppLanguage.English -> "Action completed: ${result.message}"
+                }
             }
         }
         fun deviceResultText(result: DeviceToolResult): String {
