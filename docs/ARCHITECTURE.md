@@ -20,7 +20,7 @@ Miss Minutes is an Android-first personal AI application with a ChatGPT-like con
 
 1. Android client: presentation, local encrypted preferences, local database, audio capture/playback, permission UX, and native platform integrations.
 2. Backend: authenticated API gateway, provider proxy, memory synchronization, plugin metadata, agent job orchestration, audit events, and usage controls.
-3. AI providers: interchangeable adapters behind a provider-neutral interface. Provider credentials remain server-side.
+3. AI providers: interchangeable adapters behind a provider-neutral interface. For the selected direct DeepSeek mode, each user supplies their own API key; it is encrypted at rest with Android Keystore and sent only to DeepSeek over HTTPS. No shared developer key is distributed. A server-proxy mode, if added later, must keep its credential server-side.
 4. Local inference: optional on-device model adapter with strict memory/thermal/battery budgets and a deterministic fallback when unavailable.
 5. Plugin runtime: capability-based tools with explicit manifests, schemas, user-granted permissions, execution limits, and audit logs. Arbitrary third-party code is not loaded into the Android app process.
 6. Memory: local SQLite for offline continuity; cloud PostgreSQL for synchronization; vector retrieval is an enhancement, not the only source of truth.
@@ -47,7 +47,7 @@ AppFunctions are an emerging Android integration surface and must be treated as 
 
 - 3D avatar, GLB/GLTF assets, SceneView, skeletal animation, lip sync.
 - Root access or bypassing Android security boundaries.
-- Storing provider API keys in APK resources, BuildConfig, source control, or client-side preferences.
+- Embedding a shared provider API key in APK resources, BuildConfig, source control, or a distributed APK. User-owned keys may be stored locally only as Android Keystore-encrypted ciphertext; this protects data at rest, not against a compromised device or a process inspecting plaintext at runtime.
 - Claiming unlimited context, unlimited memory, unrestricted Android control, or autonomous background execution without tested platform support.
 
 ## Quality attributes
