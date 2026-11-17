@@ -242,10 +242,6 @@ class MainActivityTest {
                 composeRule.onAllNodesWithText("Sign in to Miss Minutes")
                     .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Sign in to Miss Minutes")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
 
         lateCompletion.complete(
             AiCompletion(content = "Late response from old account", model = "test-mock")
