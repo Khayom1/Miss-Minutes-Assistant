@@ -23,6 +23,8 @@ P4 adds offline-first, account-scoped local conversation history and explicit us
 - Saved memory is user-entered only; the app does not silently extract facts from conversations.
 - Sending saved memory to DeepSeek is off by default and requires a separate explicit opt-in. When enabled, bounded saved notes are sent as untrusted context in the next AI request.
 - No conversation text is written to analytics or diagnostic logs.
+- Limits are explicit: 1,000 conversations, 500 messages per conversation and 1,000 memory items per account. Reaching a limit returns an error; older messages are never silently discarded.
+- JSON export is bounded to 2 MB and fails with a user-visible explanation rather than allocating an unbounded export. SQLite secure-delete mode is enabled for row deletion.
 
 ## User controls
 
