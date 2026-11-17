@@ -22,6 +22,42 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class AgentTaskWorkerTest {
     @Test
+    fun workerProgressIncludesStepBudgetStatusAndActiveNode() {
+        val state = AgentTaskState(
+            plan = AgentTaskPlan(
+                id = "progress_task",
+                nodes = listOf(
+                    AgentTaskNode(
+                        id = "first",
+                        action = AgentAction(
+                            PluginExecutionRequest(AndroidDeviceStatusPlugin.PLUGIN_ID, "device_info")
+                        )
+                    ),
+                    AgentTaskNode(
+                        id = "second",
+                        dependsOn = setOf("first"),
+                        action = AgentAction(
+                            PluginExecutionRequest(AndroidDeviceStatusPlugin.PLUGIN_ID, "device_info")
+                        )
+                    )
+                ),
+                maxSteps = 2,
+                deadlineAtMillis = System.currentTimeMillis() + 60_000L
+            ),
+            nodes = emptyMap(),
+            status = AgentTaskStatus.RUNNING,
+            completedSteps = 1,
+            updatedAtMillis = System.currentTimeMillis()
+        )
+
+        val progress = AgentTaskWorker.progressData(state, "second")
+        assertEquals(1, progress.getInt(AgentTaskWorker.KEY_PROGRESS_COMPLETED, -1))
+        assertEquals(2, progress.getInt(AgentTaskWorker.KEY_PROGRESS_TOTAL, -1))
+        assertEquals(AgentTaskStatus.RUNNING.name, progress.getString(AgentTaskWorker.KEY_PROGRESS_STATUS))
+        assertEquals("second", progress.getString(AgentTaskWorker.KEY_PROGRESS_NODE))
+    }
+
+    @Test
     fun workerExecutesPersistedTaskAndFailsClosedWithoutPluginConsent() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         AndroidPluginConsentStore(context).revokeAll()

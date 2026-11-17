@@ -127,66 +127,91 @@ class BackupArchive private constructor() {
             })
         }.toString().toByteArray(Charsets.UTF_8)
         val output = ByteArrayOutputStream()
-        ZipOutputStream(output).use { zip ->
-            zip.putNextEntry(ZipEntry(MANIFEST_ENTRY))
-            zip.write(manifest)
-            zip.closeEntry()
-            payloads.toSortedMap(compareBy { it.name }).forEach { (category, json) ->
-                val bytes = json.toString().toByteArray(Charsets.UTF_8)
-                require(bytes.size <= MAX_CATEGORY_BYTES) { "A backup category is too large." }
-                zip.putNextEntry(ZipEntry(category.fileName))
-                zip.write(bytes)
+        try {
+            ZipOutputStream(output).use { zip ->
+                zip.putNextEntry(ZipEntry(MANIFEST_ENTRY))
+                zip.write(manifest)
                 zip.closeEntry()
+                payloads.toSortedMap(compareBy { it.name }).forEach { (category, json) ->
+                    val bytes = json.toString().toByteArray(Charsets.UTF_8)
+                    try {
+                        require(bytes.size <= MAX_CATEGORY_BYTES) { "A backup category is too large." }
+                        zip.putNextEntry(ZipEntry(category.fileName))
+                        zip.write(bytes)
+                        zip.closeEntry()
+                    } finally {
+                        bytes.fill(0)
+                    }
+                }
             }
+            return output.toByteArray()
+        } finally {
+            manifest.fill(0)
         }
-        return output.toByteArray()
     }
 
     private fun readZip(bytes: ByteArray): Decoded {
         val entries = linkedMapOf<String, ByteArray>()
-        var total = 0
-        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
-            while (true) {
-                val entry = zip.nextEntry ?: break
-                require(!entry.isDirectory && !entry.name.startsWith("/") &&
-                    !entry.name.contains("..") && entry.name !in entries) {
-                    "Backup contains an unsafe or duplicate entry."
-                }
-                require(entry.name == MANIFEST_ENTRY || Category.entries.any { it.fileName == entry.name }) {
-                    "Backup contains an unknown entry."
-                }
-                val content = ByteArrayOutputStream()
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        try {
+            var total = 0
+            ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
                 while (true) {
-                    val count = zip.read(buffer)
-                    if (count < 0) break
-                    total += count
-                    require(total <= MAX_UNCOMPRESSED_BYTES) { "Backup expands beyond the safety limit." }
-                    require(content.size() + count <= MAX_CATEGORY_BYTES) { "Backup entry is too large." }
-                    content.write(buffer, 0, count)
+                    val entry = zip.nextEntry ?: break
+                    require(!entry.isDirectory && !entry.name.startsWith("/") &&
+                        !entry.name.contains("..") && entry.name !in entries) {
+                        "Backup contains an unsafe or duplicate entry."
+                    }
+                    require(entry.name == MANIFEST_ENTRY || Category.entries.any { it.fileName == entry.name }) {
+                        "Backup contains an unknown entry."
+                    }
+                    val content = ByteArrayOutputStream()
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val count = zip.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= MAX_UNCOMPRESSED_BYTES) { "Backup expands beyond the safety limit." }
+                        require(content.size() + count <= MAX_CATEGORY_BYTES) { "Backup entry is too large." }
+                        content.write(buffer, 0, count)
+                    }
+                    entries[entry.name] = content.toByteArray()
+                    zip.closeEntry()
                 }
-                entries[entry.name] = content.toByteArray()
-                zip.closeEntry()
             }
+
+            val manifestBytes = entries.remove(MANIFEST_ENTRY)
+                ?: throw IllegalArgumentException("Backup manifest is missing.")
+            try {
+                val manifest = Json.parseToJsonElement(manifestBytes.toString(Charsets.UTF_8)).jsonObject
+                val version = manifest["schemaVersion"]?.jsonPrimitive?.content?.toIntOrNull()
+                    ?: throw IllegalArgumentException("Backup schema version is missing.")
+                require(version in 1..CURRENT_SCHEMA_VERSION) {
+                    "This backup was created by a newer app version."
+                }
+                val exportedAt = manifest["exportedAtEpochMillis"]?.jsonPrimitive?.content?.toLongOrNull()
+                    ?: throw IllegalArgumentException("Backup timestamp is invalid.")
+                val declared = manifest["categories"]?.jsonArray?.map {
+                    runCatching { Category.valueOf(it.jsonPrimitive.content) }
+                        .getOrElse { throw IllegalArgumentException("Backup category is invalid.") }
+                }?.toSet() ?: throw IllegalArgumentException("Backup category list is missing.")
+                val actual = entries.keys.map { file ->
+                    Category.entries.single { it.fileName == file }
+                }.toSet()
+                require(declared.isNotEmpty() && declared == actual) {
+                    "Backup manifest does not match its category files."
+                }
+                val payloads = actual.associateWith { category ->
+                    Json.parseToJsonElement(
+                        entries.getValue(category.fileName).toString(Charsets.UTF_8)
+                    ).jsonObject
+                }
+                return Decoded(Preview(version, exportedAt, actual, total), payloads)
+            } finally {
+                manifestBytes.fill(0)
+            }
+        } finally {
+            entries.values.forEach { it.fill(0) }
         }
-        val manifestBytes = entries.remove(MANIFEST_ENTRY)
-            ?: throw IllegalArgumentException("Backup manifest is missing.")
-        val manifest = Json.parseToJsonElement(manifestBytes.toString(Charsets.UTF_8)).jsonObject
-        val version = manifest["schemaVersion"]?.jsonPrimitive?.content?.toIntOrNull()
-            ?: throw IllegalArgumentException("Backup schema version is missing.")
-        require(version in 1..CURRENT_SCHEMA_VERSION) { "This backup was created by a newer app version." }
-        val exportedAt = manifest["exportedAtEpochMillis"]?.jsonPrimitive?.content?.toLongOrNull()
-            ?: throw IllegalArgumentException("Backup timestamp is invalid.")
-        val declared = manifest["categories"]?.jsonArray?.map {
-            runCatching { Category.valueOf(it.jsonPrimitive.content) }
-                .getOrElse { throw IllegalArgumentException("Backup category is invalid.") }
-        }?.toSet() ?: throw IllegalArgumentException("Backup category list is missing.")
-        val actual = entries.keys.map { file -> Category.entries.single { it.fileName == file } }.toSet()
-        require(declared.isNotEmpty() && declared == actual) { "Backup manifest does not match its category files." }
-        val payloads = actual.associateWith { category ->
-            Json.parseToJsonElement(entries.getValue(category.fileName).toString(Charsets.UTF_8)).jsonObject
-        }
-        return Decoded(Preview(version, exportedAt, actual, total), payloads)
     }
 
     private fun deriveKey(password: CharArray, salt: ByteArray): SecretKeySpec {

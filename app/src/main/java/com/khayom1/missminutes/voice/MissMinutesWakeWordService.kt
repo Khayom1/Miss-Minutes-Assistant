@@ -37,6 +37,7 @@ class MissMinutesWakeWordService : Service() {
     private var recognizer: SpeechRecognizer? = null
     private var active = false
     private var wakeHandled = false
+    private val retryBackoff = RecognitionRetryBackoff()
 
     private val restartListening = Runnable {
         if (active && !wakeHandled) startListening()
@@ -58,6 +59,7 @@ class MissMinutesWakeWordService : Service() {
             if (containsExactWakePhrase(results)) {
                 handleWakePhrase()
             } else {
+                retryBackoff.reset()
                 scheduleRestart(RESTART_DELAY_MS)
             }
         }
@@ -66,7 +68,7 @@ class MissMinutesWakeWordService : Service() {
             when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> scheduleRestart(RESTART_DELAY_MS)
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> scheduleRestart(retryBackoff.nextDelayMillis())
                 else -> failClosed()
             }
         }
@@ -110,6 +112,7 @@ class MissMinutesWakeWordService : Service() {
             startForegroundCompat()
             active = true
             wakeHandled = false
+            retryBackoff.reset()
             publishState(true, "Offline wake phrase listening is active.")
             if (!createOnDeviceRecognizer()) {
                 failClosed()
