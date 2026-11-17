@@ -843,7 +843,7 @@ fun MissMinutesApp(
                                 incoming.singleConversation,
                                 backupConflictPolicy
                             )
-                            conversationStore.restoreAll(owner, json, effectivePolicy)
+                            conversationStore.restoreAll(owner, json, effectivePolicy, restoreSettings = false)
                         }
                         incoming.settings?.let { settings ->
                             conversationStore.setRetentionDays(owner, settings.retentionDays)
@@ -879,7 +879,7 @@ fun MissMinutesApp(
                         conversationStore.setRetentionDays(owner, oldRetention)
                         conversationStore.setMemoryContextEnabled(owner, oldMemoryContext)
                         if (oldChat != null) {
-                            conversationStore.restoreAll(owner, oldChat, RestoreConflictPolicy.REPLACE)
+                            conversationStore.restoreAll(owner, oldChat, RestoreConflictPolicy.REPLACE, restoreSettings = false)
                         }
                     }
                     backupError = error.message ?: "Backup restore failed and changes were rolled back."
