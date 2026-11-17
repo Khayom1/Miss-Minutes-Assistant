@@ -314,16 +314,56 @@ class LocalConversationStore(
     fun setRetentionDays(ownerId: String, days: Int) {
         validateOwner(ownerId)
         require(days in ALLOWED_RETENTION_DAYS)
-        val values = ContentValues().apply {
-            put("owner_id", ownerId)
-            put("retention_days", days)
+        val db = writableDatabase
+        val values = ContentValues().apply { put("retention_days", days) }
+        val updated = db.update("user_settings", values, "owner_id = ?", arrayOf(ownerId))
+        if (updated == 0) {
+            db.insertOrThrow(
+                "user_settings",
+                null,
+                ContentValues().apply {
+                    put("owner_id", ownerId)
+                    put("retention_days", days)
+                    put("memory_context_enabled", 0)
+                }
+            )
         }
-        writableDatabase.insertWithOnConflict(
+    }
+
+    @Synchronized
+    fun isMemoryContextEnabled(ownerId: String): Boolean {
+        validateOwner(ownerId)
+        readableDatabase.query(
             "user_settings",
+            arrayOf("memory_context_enabled"),
+            "owner_id = ?",
+            arrayOf(ownerId),
             null,
-            values,
-            SQLiteDatabase.CONFLICT_REPLACE
-        )
+            null,
+            null,
+            "1"
+        ).use { cursor ->
+            return cursor.moveToFirst() && cursor.getInt(0) == 1
+        }
+    }
+
+    @Synchronized
+    fun setMemoryContextEnabled(ownerId: String, enabled: Boolean) {
+        validateOwner(ownerId)
+        val db = writableDatabase
+        val values = ContentValues().apply { put("memory_context_enabled", if (enabled) 1 else 0) }
+        val updated = db.update("user_settings", values, "owner_id = ?", arrayOf(ownerId))
+        if (updated == 0) {
+            db.insertOrThrow(
+                "user_settings",
+                null,
+                ContentValues().apply {
+                    put("owner_id", ownerId)
+                    put("retention_days", DEFAULT_RETENTION_DAYS)
+                    put("memory_context_enabled", if (enabled) 1 else 0)
+                }
+            )
+        }
     }
 
     @Synchronized
@@ -473,7 +513,8 @@ internal object ConversationSchema {
             """
             CREATE TABLE user_settings (
                 owner_id TEXT PRIMARY KEY NOT NULL,
-                retention_days INTEGER NOT NULL DEFAULT 90 CHECK(retention_days IN (0, 30, 90, 365))
+                retention_days INTEGER NOT NULL DEFAULT 90 CHECK(retention_days IN (0, 30, 90, 365)),
+                memory_context_enabled INTEGER NOT NULL DEFAULT 0 CHECK(memory_context_enabled IN (0, 1))
             )
             """.trimIndent()
         )
