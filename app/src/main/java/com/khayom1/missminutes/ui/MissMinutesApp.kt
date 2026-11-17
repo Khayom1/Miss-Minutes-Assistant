@@ -1862,9 +1862,9 @@ private fun SettingsScreen(
                         AppLanguage.English -> "Open Wi-Fi settings"
                     }
                     DeviceToolCapability.OPEN_APP_SETTINGS -> when (language) {
-                        AppLanguage.Tajik -> "Кушодани танзимоти барнома"
-                        AppLanguage.Russian -> "Открыть настройки приложения"
-                        AppLanguage.English -> "Open app settings"
+                        AppLanguage.Tajik -> "Маълумоти барнома"
+                        AppLanguage.Russian -> "Сведения о приложении"
+                        AppLanguage.English -> "Application details"
                     }
                     DeviceToolCapability.SHARE_TEXT -> when (language) {
                         AppLanguage.Tajik -> "Мубодилаи матн"
