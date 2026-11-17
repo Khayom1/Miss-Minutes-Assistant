@@ -2371,6 +2371,11 @@ private fun SettingsScreen(
                     language == AppLanguage.Russian -> "Батарея: ${result.message}"
                     else -> "Battery: ${result.message}"
                 }
+                else -> when (language) {
+                    AppLanguage.Tajik -> "Ин имконият ҳанӯз фаъол нест."
+                    AppLanguage.Russian -> "Эта возможность пока не реализована."
+                    AppLanguage.English -> "This capability is not implemented yet."
+                }
             }
         }
         fun deviceResultText(result: DeviceToolResult): String {
