@@ -63,6 +63,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.ProductIdentity
+import com.khayom1.missminutes.agent.AgentOrchestrator
+import com.khayom1.missminutes.agent.AndroidAgentTaskStateStore
+import com.khayom1.missminutes.agent.PluginRegistryAgentActionExecutor
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
@@ -90,6 +93,7 @@ import com.khayom1.missminutes.plugins.PluginRegistry
 import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
+import com.khayom1.missminutes.memory.AndroidKeystoreConversationCipher
 import com.khayom1.missminutes.memory.ConversationSummary
 import com.khayom1.missminutes.memory.ConversationLimitReachedException
 import com.khayom1.missminutes.memory.LocalConversationStore
@@ -393,6 +397,18 @@ fun MissMinutesApp(
             consentStore = pluginConsentStore,
             auditLog = FilePluginAuditLog(context)
         ).apply { install(AndroidDeviceStatusPlugin.manifest()) }
+    }
+    val agentTaskStore = remember(context) {
+        AndroidAgentTaskStateStore(
+            context,
+            AndroidKeystoreConversationCipher("miss_minutes_agent_tasks_aes_v1")
+        )
+    }
+    val agentOrchestrator = remember(context, pluginRegistry, agentTaskStore) {
+        AgentOrchestrator(
+            store = agentTaskStore,
+            executor = PluginRegistryAgentActionExecutor(pluginRegistry)
+        )
     }
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
@@ -1197,6 +1213,10 @@ fun MissMinutesApp(
                                         )
                                     )
                                 },
+                                agentOrchestrator = agentOrchestrator,
+                                agentTaskEnabled = androidPluginConsent &&
+                                    deviceGrants[DeviceToolCapability.DEVICE_INFO] == true &&
+                                    deviceGrants[DeviceToolCapability.BATTERY_STATUS] == true,
                                 onDeviceGrantChange = { capability, granted ->
                                     deviceAuthorization.setGranted(capability, granted)
                                     deviceGrants = deviceGrants + (capability to granted)
@@ -1663,6 +1683,8 @@ private fun SettingsScreen(
     pluginConsent: Boolean,
     onPluginConsentChange: (Boolean) -> Unit,
     onRunPluginAction: (String) -> PluginExecutionResult,
+    agentOrchestrator: AgentOrchestrator,
+    agentTaskEnabled: Boolean,
     onDeviceGrantChange: (DeviceToolCapability, Boolean) -> Unit,
     onRunDeviceCommand: (DeviceToolCommand, Boolean) -> com.khayom1.missminutes.device.DeviceToolResult,
     onMemoryDraftChange: (String) -> Unit,
@@ -2075,6 +2097,11 @@ private fun SettingsScreen(
                 )
             }
         }
+        AgentTaskPanel(
+            orchestrator = agentOrchestrator,
+            language = language,
+            enabled = agentTaskEnabled
+        )
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 when (language) {
