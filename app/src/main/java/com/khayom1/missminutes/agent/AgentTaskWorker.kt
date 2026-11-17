@@ -7,6 +7,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -39,6 +40,8 @@ class AgentTaskWorker(
                 }
             }
             Result.success()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             Result.failure()
         }
@@ -49,14 +52,14 @@ class AgentTaskWorker(
         private const val MAX_ADVANCES_PER_RUN = 24
         private val TASK_ID_PATTERN = Regex("^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
 
-        fun enqueue(context: Context, taskId: String) {
+        fun enqueue(context: Context, taskId: String, replaceExisting: Boolean = false) {
             require(TASK_ID_PATTERN.matches(taskId))
             val request = OneTimeWorkRequestBuilder<AgentTaskWorker>()
                 .setInputData(workDataOf(KEY_TASK_ID to taskId))
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 uniqueWorkName(taskId),
-                ExistingWorkPolicy.KEEP,
+                if (replaceExisting) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
                 request
             )
         }
