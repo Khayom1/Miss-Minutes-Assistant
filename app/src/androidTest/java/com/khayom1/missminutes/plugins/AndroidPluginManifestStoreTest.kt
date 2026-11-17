@@ -44,4 +44,13 @@ class AndroidPluginManifestStoreTest {
         assertEquals(manifest, merged.single())
         store.replace(emptyList())
     }
+
+    @Test
+    fun corruptStoredManifestArchiveFailsClosedToEmptyRegistryInput() {
+        context.getSharedPreferences("plugin_manifest_store", Context.MODE_PRIVATE)
+            .edit().putString("declarative_manifests_v1", """{"schemaVersion":999,"plugins":[]}""").commit()
+        assertEquals(emptyList<PluginManifest>(), AndroidPluginManifestStore(context).load())
+        context.getSharedPreferences("plugin_manifest_store", Context.MODE_PRIVATE)
+            .edit().remove("declarative_manifests_v1").commit()
+    }
 }
