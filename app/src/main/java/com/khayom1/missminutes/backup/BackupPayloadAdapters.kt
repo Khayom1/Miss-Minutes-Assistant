@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import com.khayom1.missminutes.memory.RestoreConflictPolicy
 import com.khayom1.missminutes.plugins.PluginManifest
 import com.khayom1.missminutes.plugins.PluginManifestArchive
