@@ -78,6 +78,7 @@ fun interface AgentActionExecutor {
 interface AgentTaskStateStore {
     fun create(state: AgentTaskState): Boolean
     fun load(taskId: String): AgentTaskState?
+    fun all(): List<AgentTaskState>
     fun save(state: AgentTaskState)
 }
 
@@ -93,6 +94,9 @@ class InMemoryAgentTaskStateStore : AgentTaskStateStore {
 
     @Synchronized
     override fun load(taskId: String): AgentTaskState? = states[taskId]
+
+    @Synchronized
+    override fun all(): List<AgentTaskState> = states.values.sortedByDescending { it.updatedAtMillis }
 
     @Synchronized
     override fun save(state: AgentTaskState) {
@@ -130,6 +134,9 @@ class AgentOrchestrator(
 
     @Synchronized
     fun state(taskId: String): AgentTaskState? = store.load(taskId)
+
+    @Synchronized
+    fun latestTask(): AgentTaskState? = store.all().maxByOrNull { it.updatedAtMillis }
 
     @Synchronized
     fun pause(taskId: String): AgentTaskState = update(taskId) { current ->
