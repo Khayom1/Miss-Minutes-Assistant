@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PluginToolSchemaFactoryTest {
-    private fun descriptor(connected: Boolean) = PluginToolDescriptor(
+    private fun descriptor(connected: Boolean, requiresConfirmation: Boolean = false) = PluginToolDescriptor(
         toolName = "plugin_test",
         pluginId = "test_plugin",
         actionId = "read_info",
@@ -25,7 +25,7 @@ class PluginToolSchemaFactoryTest {
                 allowedValues = setOf("en", "ru", "tg")
             )
         ),
-        requiresConfirmation = false,
+        requiresConfirmation = requiresConfirmation,
         connected = connected,
         access = PluginAccessDecision.Granted
     )
@@ -41,6 +41,15 @@ class PluginToolSchemaFactoryTest {
         assertEquals("locale", parameters["required"]!!.jsonArray.single().jsonPrimitive.content)
         val locale = parameters["properties"]!!.jsonObject["locale"]!!.jsonObject
         assertEquals(listOf("en", "ru", "tg"), locale["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
+    }
+
+    @Test
+    fun writeToolSchemaDisclosesConfirmationRequirement() {
+        val definition = PluginToolSchemaFactory.toAiToolDefinitions(
+            listOf(descriptor(connected = true, requiresConfirmation = true))
+        ).single()
+
+        assertTrue(definition.description.contains("Requires explicit user confirmation before execution."))
     }
 
     @Test
