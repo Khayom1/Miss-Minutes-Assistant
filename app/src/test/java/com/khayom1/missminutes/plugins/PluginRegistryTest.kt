@@ -164,7 +164,12 @@ class PluginRegistryTest {
         registry.install(confirmedManifest)
         val denied = registry.execute(PluginExecutionRequest("test_plugin", "read_info"))
         val allowed = registry.execute(
-            PluginExecutionRequest("test_plugin", "read_info", userConfirmed = true)
+            PluginExecutionRequest(
+                "test_plugin",
+                "read_info",
+                arguments = mapOf("locale" to PluginValue.Text("en")),
+                userConfirmed = true
+            )
         )
         assertFalse(denied.success)
         assertTrue(allowed.success)
