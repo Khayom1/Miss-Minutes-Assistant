@@ -98,6 +98,24 @@ class BackupPayloadAdaptersTest {
     }
 
     @Test
+    fun selectedChatReplaceRequestCannotDeleteOtherConversations() {
+        assertEquals(
+            com.khayom1.missminutes.memory.RestoreConflictPolicy.MERGE,
+            BackupPayloadAdapters.safeConflictPolicy(
+                true,
+                com.khayom1.missminutes.memory.RestoreConflictPolicy.REPLACE
+            )
+        )
+        assertEquals(
+            com.khayom1.missminutes.memory.RestoreConflictPolicy.REPLACE,
+            BackupPayloadAdapters.safeConflictPolicy(
+                false,
+                com.khayom1.missminutes.memory.RestoreConflictPolicy.REPLACE
+            )
+        )
+    }
+
+    @Test
     fun rejectsMalformedConversationPayloadBeforeEncryption() {
         assertThrows(IllegalArgumentException::class.java) {
             BackupPayloadAdapters.encode(
