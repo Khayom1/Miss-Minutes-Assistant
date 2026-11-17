@@ -63,6 +63,7 @@ jobs:
       - name: Run JVM tests, debug and release builds, and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
 
+
       - name: Record resolved Android runtime dependencies
         run: |
           mkdir -p app/build/release-evidence
@@ -73,6 +74,10 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+
+      - name: Install pinned emulator packages
+        run: |
+          sdkmanager --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "emulator" "platform-tools"
 
       - name: Run Android instrumentation tests (API 35)
         uses: reactivecircus/android-emulator-runner@v2
