@@ -1268,6 +1268,7 @@ fun MissMinutesApp(
                             )
                             AppScreen.Dashboard -> DashboardScreen(
                                 copy = copy,
+                                accountLabel = userEmail,
                                 aiStatus = if (aiHasResponded) {
                                     copy.providerResponding
                                 } else {
@@ -1299,7 +1300,7 @@ fun MissMinutesApp(
                                 copy = copy,
                                 language = language,
                                 darkTheme = darkTheme,
-                                isBusy = authBusy || apiKeySaving,
+                                isBusy = apiKeySaving,
                                 apiKeyConfigured = apiKeyConfigured,
                                 apiKeyInput = apiKeyInput,
                                 apiKeyMessage = apiKeyMessage,
@@ -1568,7 +1569,7 @@ private fun MessageBubble(
 @Composable
 private fun DashboardScreen(
     copy: UiCopy,
-    email: String,
+    accountLabel: String,
     aiStatus: String,
     voiceStatus: String
 ) {
@@ -1580,7 +1581,7 @@ private fun DashboardScreen(
     ) {
         Text(copy.dashboardTitle, style = MaterialTheme.typography.headlineMedium)
         Text(copy.dashboardBody, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        StatusCard(copy.account, email)
+        StatusCard(copy.account, accountLabel)
         StatusCard(copy.aiProvider, aiStatus)
         StatusCard(copy.voice, voiceStatus)
         StatusCard(copy.memory, copy.notConnected)
@@ -1740,7 +1741,6 @@ private fun SettingsScreen(
     copy: UiCopy,
     language: AppLanguage,
     darkTheme: Boolean,
-    email: String,
     isBusy: Boolean,
     apiKeyConfigured: Boolean,
     apiKeyInput: String,
