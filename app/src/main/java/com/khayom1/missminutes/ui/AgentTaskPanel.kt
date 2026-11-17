@@ -70,13 +70,15 @@ fun AgentTaskPanel(
     }
 
     val current = taskState
-    val terminal = current?.status in setOf(
-        AgentTaskStatus.SUCCEEDED,
-        AgentTaskStatus.FAILED,
-        AgentTaskStatus.CANCELLED,
-        AgentTaskStatus.EXPIRED,
-        AgentTaskStatus.RECOVERY_REQUIRED
-    )
+    val terminal = current?.status?.let {
+        it in setOf(
+            AgentTaskStatus.SUCCEEDED,
+            AgentTaskStatus.FAILED,
+            AgentTaskStatus.CANCELLED,
+            AgentTaskStatus.EXPIRED,
+            AgentTaskStatus.RECOVERY_REQUIRED
+        )
+    } == true
     val title = when (language) {
         AppLanguage.Tajik -> "Иҷрои вазифаҳои AI"
         AppLanguage.Russian -> "Выполнение задач ИИ"
