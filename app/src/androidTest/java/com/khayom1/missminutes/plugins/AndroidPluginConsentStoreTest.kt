@@ -27,6 +27,26 @@ class AndroidPluginConsentStoreTest {
     }
 
     @Test
+    fun pluginAuditLogIsBoundedAndContainsNoArguments() {
+        val logFile = java.io.File(context.filesDir, "plugin-audit.log")
+        logFile.delete()
+        val log = FilePluginAuditLog(context)
+        repeat(5_000) { index ->
+            log.append(
+                PluginAuditEntry(
+                    timestampMillis = index.toLong(),
+                    pluginId = "android_device_status",
+                    actionId = "device_info",
+                    outcome = "success"
+                )
+            )
+        }
+        assertTrue(logFile.length() <= 64 * 1024L)
+        assertFalse(logFile.readText().contains("private-user-argument"))
+        logFile.delete()
+    }
+
+    @Test
     fun invalidPluginIdCannotCreateConsentEntry() {
         val store = AndroidPluginConsentStore(context)
         try {
