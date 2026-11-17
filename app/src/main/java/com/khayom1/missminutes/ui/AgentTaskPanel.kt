@@ -152,14 +152,14 @@ internal fun AgentTaskPanel(
         }
         if (current != null) {
             Text(
-                text = "${current.status.name} · ${current.completedSteps}/${current.plan.maxSteps}",
+                text = "${taskStatusLabel(current.status, language)} · ${current.completedSteps}/${current.plan.maxSteps}",
                 modifier = Modifier.testTag("agent_task_status"),
                 style = MaterialTheme.typography.bodyMedium
             )
             current.plan.nodes.forEach { node ->
                 val nodeState = current.nodes.getValue(node.id)
                 Text(
-                    text = "${node.id}: ${nodeState.status.name}" +
+                    text = "${node.id}: ${nodeStatusLabel(nodeState.status, language)}" +
                         (nodeState.message?.let { " — $it" } ?: ""),
                     style = MaterialTheme.typography.bodySmall
                 )

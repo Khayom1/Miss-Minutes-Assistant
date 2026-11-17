@@ -3,6 +3,7 @@ package com.khayom1.missminutes
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertTextContains
 import android.Manifest
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -483,6 +484,7 @@ class MainActivityTest {
         composeRule.onNodeWithText("Settings").performClick()
 
         composeRule.onNodeWithTag("wake_phrase_disclosure").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("wake_phrase_disclosure").assertTextContains("Android 12+", substring = true)
         composeRule.onNodeWithText("Offline wake phrase").assertIsDisplayed()
         composeRule.onNodeWithTag("wake_phrase_toggle").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Enable microphone listening").performScrollTo().assertIsDisplayed()

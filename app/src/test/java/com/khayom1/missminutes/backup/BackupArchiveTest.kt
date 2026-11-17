@@ -54,6 +54,29 @@ class BackupArchiveTest {
     }
 
     @Test
+    fun trailingContainerBytesAreRejected() {
+        val valid = archive.encode(
+            mapOf(BackupArchive.Category.APP_SETTINGS to buildJsonObject { put("darkMode", false) }),
+            password
+        )
+        val withTrailingByte = valid + byteArrayOf(0x01)
+        assertThrows(IllegalArgumentException::class.java) {
+            archive.decode(withTrailingByte, password)
+        }
+    }
+
+    @Test
+    fun truncatedContainerIsRejectedBeforeDecryption() {
+        val valid = archive.encode(
+            mapOf(BackupArchive.Category.PLUGINS to buildJsonObject { put("count", 1) }),
+            password
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            archive.decode(valid.copyOf(valid.size - 1), password)
+        }
+    }
+
+    @Test
     fun emptyCategorySelectionIsRejected() {
         assertThrows(IllegalArgumentException::class.java) { archive.encode(emptyMap(), password) }
     }
