@@ -927,6 +927,9 @@ fun MissMinutesApp(
                 conversationSummaries = emptyList()
                 memoryItems = emptyList()
                 memoryDraft = ""
+                exportPayload = null
+                exportError = null
+                pendingDeleteConversationId = null
                 aiHasResponded = false
             }
         }
