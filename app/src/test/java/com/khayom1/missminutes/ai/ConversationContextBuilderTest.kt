@@ -22,7 +22,7 @@ class ConversationContextBuilderTest {
 
     @Test
     fun memoryContextIsBoundedAndDoesNotDisplaceCurrentUserMessage() {
-        val history = (1..30).map { AiMessage(AiRole.USER, "history-$it") }
+        val history = (1..30).map { AiMessage(AiRole.USER, "h".repeat(8_000)) }
         val memory = listOf("x".repeat(2_000), "y".repeat(2_000), "z".repeat(2_000))
         val result = buildAiContextMessages(history, "final question", memory, true)
 
