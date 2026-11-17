@@ -123,6 +123,9 @@ class MainActivityTest {
         aiProvider = FakeAiProvider()
         apiKeyStore = MemoryApiKeyStore()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.getSharedPreferences("app_preferences", 0).edit().clear().commit()
+        context.getSharedPreferences("plugin_manifest_store", 0).edit().clear().commit()
+        context.getSharedPreferences("plugin_user_consent", 0).edit().clear().commit()
         conversationDatabaseName = "ui-memory-test-${UUID.randomUUID()}.db"
         conversationStore = LocalConversationStore(
             context,
@@ -468,6 +471,18 @@ class MainActivityTest {
         composeRule.onNodeWithText("Offline wake phrase").assertIsDisplayed()
         composeRule.onNodeWithTag("wake_phrase_toggle").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Enable microphone listening").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun settingsExposeEncryptedBackupAndRestoreControls() {
+        signIn()
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("Backup and restore").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Backup password (at least 10 characters)")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "The backup is password-encrypted. API keys, Android permissions and plugin consent are never included."
+        ).performScrollTo().assertIsDisplayed()
     }
 
     @Test
