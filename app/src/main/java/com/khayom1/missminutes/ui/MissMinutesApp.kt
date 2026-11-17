@@ -422,7 +422,7 @@ fun MissMinutesApp(
             auditLog = FilePluginAuditLog(context)
         ).apply {
             install(AndroidDeviceStatusPlugin.manifest())
-            pluginManifestStore.load().forEach(::install)
+            pluginManifestStore.load().forEach { manifest -> runCatching { install(manifest) } }
         }
     }
     var pluginConsentSnapshot by remember(pluginRegistry) {
