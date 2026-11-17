@@ -183,13 +183,13 @@ class PluginRegistryTest {
         listOf(
             PluginCapability.CALENDAR_WRITE,
             PluginCapability.GITHUB_REPOSITORY_WRITE
-        ).forEachIndexed { index, capability ->
+        ).forEachIndexed { index, writeCapability ->
             val pluginId = "write_plugin_$index"
-            val actionId = "write_action_$index"
+            val compiledActionId = "write_action_$index"
             var calls = 0
             val handler = object : PluginActionHandler {
-                override val actionId = actionId
-                override val capability = capability
+                override val actionId = compiledActionId
+                override val capability = writeCapability
                 override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                     calls++
                     return PluginActionOutput(true, "written")
@@ -206,13 +206,13 @@ class PluginRegistryTest {
                 version = "1.0.0",
                 displayName = "Write test",
                 description = "A write capability must require confirmation.",
-                capabilities = setOf(capability),
-                actions = listOf(PluginActionSpec(actionId, capability))
+                capabilities = setOf(writeCapability),
+                actions = listOf(PluginActionSpec(compiledActionId, writeCapability))
             )
             assertTrue(registry.install(manifest))
             assertTrue(registry.connectedTools().single().requiresConfirmation)
 
-            val request = PluginExecutionRequest(pluginId, actionId)
+            val request = PluginExecutionRequest(pluginId, compiledActionId)
             assertEquals(
                 PluginExecutionStatus.CONFIRMATION_REQUIRED,
                 registry.execute(request).status
