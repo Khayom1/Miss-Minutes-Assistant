@@ -945,27 +945,16 @@ fun MissMinutesApp(
         }
     }
 
-    LaunchedEffect(sessionManager) {
-        // Saved Compose state can outlive a revoked/expired session. Start fail-closed
-        // and derive authenticated UI exclusively from the Keystore-backed session.
-        isAuthenticated = false
-        isGuestSession = false
-        userEmail = ""
+    LaunchedEffect(conversationStore) {
         try {
-            val session = sessionManager.restoreSession()
-            if (session != null) {
-                isAuthenticated = true
-                userEmail = session.email.orEmpty()
-                authEmail = session.email.orEmpty()
-                loadConversation(session.userId)
-            } else {
-                disableWakeListening()
-            }
+            loadConversation(GUEST_OWNER_ID)
+            isGuestSession = true
+            userEmail = copy.guestAccount
+            isAuthenticated = true
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
-            disableWakeListening()
-            authMessage = copy.authUnavailable
+            authMessage = copy.sendFailed
         } finally {
             isRestoring = false
         }
