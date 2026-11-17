@@ -24,13 +24,14 @@ object BackupPayloadAdapters {
         selected: Set<BackupArchive.Category>,
         conversationExportJson: String?,
         settings: SettingsBackupAdapter.Settings?,
-        pluginManifests: List<PluginManifest>
+        pluginManifests: List<PluginManifest>,
+        conversationRetentionDays: Int = 90
     ): Map<BackupArchive.Category, JsonObject> {
         require(selected.isNotEmpty()) { "Select at least one backup category." }
         val result = linkedMapOf<BackupArchive.Category, JsonObject>()
         if (BackupArchive.Category.CHAT_HISTORY in selected) {
             val raw = requireNotNull(conversationExportJson) { "Conversation data is unavailable." }
-            val chat = Json.parseToJsonElement(raw).jsonObject
+            val chat = normalizeConversationPayload(raw, conversationRetentionDays)
             validateConversationPayload(chat)
             result[BackupArchive.Category.CHAT_HISTORY] = chat
         }
@@ -58,6 +59,25 @@ object BackupPayloadAdapters {
             "Backup preview does not match its decoded categories."
         }
         return RestoredPayloads(chat?.toString(), settings, plugins)
+    }
+
+    private fun normalizeConversationPayload(raw: String, retentionDays: Int): JsonObject {
+        require(retentionDays in setOf(0, 30, 90, 365))
+        val source = Json.parseToJsonElement(raw).jsonObject
+        if ("conversations" in source) return source
+        require(source.keys == setOf("schemaVersion", "exportedAt", "conversation")) {
+            "Selected conversation backup contains unknown or missing fields."
+        }
+        val conversation = source["conversation"]?.jsonObject
+            ?: throw IllegalArgumentException("Selected conversation is missing.")
+        require(conversation.keys == setOf("id", "title", "createdAt", "updatedAt", "messages"))
+        return kotlinx.serialization.json.buildJsonObject {
+            put("schemaVersion", 2)
+            put("exportedAt", source["exportedAt"] ?: throw IllegalArgumentException("Export timestamp is missing."))
+            put("retentionDays", retentionDays)
+            put("conversations", kotlinx.serialization.json.buildJsonArray { add(conversation) })
+            put("memory", kotlinx.serialization.json.buildJsonArray {})
+        }
     }
 
     private fun validateConversationPayload(payload: JsonObject) {
