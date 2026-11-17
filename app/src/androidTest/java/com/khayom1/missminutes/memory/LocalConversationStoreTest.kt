@@ -197,6 +197,39 @@ class LocalConversationStoreTest {
     }
 
     @Test
+    fun replaceRestoreRollsBackEntireTransactionWhenEncryptionFails() {
+        val name = "restore-rollback-${UUID.randomUUID()}.db"
+        val cipher = FailingConversationCipher()
+        val store = LocalConversationStore(context, cipher, name)
+        try {
+            val existingId = store.createConversation("owner", title = "Preserve this chat")
+            store.appendMessage("owner", existingId, "user", "preserve this message")
+            store.addMemory("owner", "preserve this memory")
+            store.setRetentionDays("owner", 30)
+            val callsBeforeRestore = cipher.encryptCalls
+            cipher.failOnEncryptCall = callsBeforeRestore + 2
+
+            val incoming = """
+                {"schemaVersion":2,"exportedAt":1000,"retentionDays":90,
+                 "conversations":[{"id":"incoming-id","title":"incoming","createdAt":1,"updatedAt":2,
+                 "messages":[{"role":"user","content":"incoming message","createdAt":2}]}],
+                 "memory":[]}
+            """.trimIndent()
+            val error = runCatching {
+                store.restoreAll("owner", incoming, RestoreConflictPolicy.REPLACE)
+            }.exceptionOrNull()
+
+            assertTrue(error is IllegalStateException)
+            assertEquals(listOf("Preserve this chat"), store.listConversations("owner").map { it.title })
+            assertEquals("preserve this message", store.getMessages("owner", existingId).single().content)
+            assertEquals("preserve this memory", store.listMemory("owner").single().content)
+            assertEquals(30, store.getRetentionDays("owner"))
+        } finally {
+            clean(name, store)
+        }
+    }
+
+    @Test
     fun versionOneDatabaseMigratesWithoutLosingEncryptedMessages() {
         val name = "memory-migration-${UUID.randomUUID()}.db"
         val cipher = AndroidKeystoreConversationCipher("miss_minutes_test_conversation_aes_v1")
@@ -242,6 +275,23 @@ class LocalConversationStoreTest {
             migrated.close()
             context.deleteDatabase(name)
         }
+    }
+
+    private class FailingConversationCipher : ConversationCipher {
+        private val delegate = AndroidKeystoreConversationCipher("miss_minutes_test_conversation_aes_v1")
+        var encryptCalls = 0
+        var failOnEncryptCall: Int? = null
+
+        override fun encrypt(ownerId: String, plaintext: String): String {
+            encryptCalls++
+            if (encryptCalls == failOnEncryptCall) {
+                throw IllegalStateException("Forced encryption failure for rollback test.")
+            }
+            return delegate.encrypt(ownerId, plaintext)
+        }
+
+        override fun decrypt(ownerId: String, ciphertext: String): String =
+            delegate.decrypt(ownerId, ciphertext)
     }
 
     private class LegacyVersionOneDatabase(
