@@ -499,6 +499,14 @@ fun MissMinutesApp(
                                 AppLanguage.Tajik -> "Барои оғоз кардани чат калиди DeepSeek-ро дар Танзимот ворид кунед."
                             }
                         }
+                    } catch (_: AiProviderException.InvalidApiKey) {
+                        if (requestGeneration == sessionGeneration) {
+                            chatError = when (language) {
+                                AppLanguage.English -> "DeepSeek rejected this API key. Update it in Settings."
+                                AppLanguage.Russian -> "DeepSeek отклонил этот ключ. Обновите его в настройках."
+                                AppLanguage.Tajik -> "DeepSeek ин калидро рад кард. Дар Танзимот калиди нав гузоред."
+                            }
+                        }
                     } catch (_: AiProviderException.AuthenticationRequired) {
                         if (requestGeneration != sessionGeneration) return@launch
                         sessionGeneration += 1
