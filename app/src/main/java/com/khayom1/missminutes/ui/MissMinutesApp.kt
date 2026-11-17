@@ -911,6 +911,7 @@ private fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -1012,7 +1013,7 @@ private fun SettingsScreen(
                 Text(if (isBusy) copy.wait else copy.signOut)
             }
         }
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.padding(top = 8.dp))
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(copy.about, fontWeight = FontWeight.SemiBold)
             Text("${ProductIdentity.NAME} · ${copy.version} ${ProductIdentity.VERSION_NAME}")
