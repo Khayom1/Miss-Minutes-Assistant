@@ -77,10 +77,8 @@ import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
-import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.buildAiContextMessages
 import com.khayom1.missminutes.ai.TtsProvider
-import com.khayom1.missminutes.ai.SupabaseAuthException
 import com.khayom1.missminutes.device.AndroidDeviceToolHost
 import com.khayom1.missminutes.device.DeviceToolCapability
 import com.khayom1.missminutes.device.DeviceToolCommand
@@ -206,7 +204,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Your personal assistant, ready when you are.",
         composerHint = "Message Miss Minutes",
         send = "Send",
-        gatewayNotice = "AI replies use your personal DeepSeek API key, encrypted on this device and sent directly to DeepSeek over HTTPS. Supabase is used only for sign-in.",
+        gatewayNotice = "Online AI uses your personal DeepSeek API key, encrypted on this device and sent directly to DeepSeek over HTTPS. Your chats stay local.",
         you = "You",
         dashboardTitle = "Your workspace",
         dashboardBody = "A clear view of assistant capabilities and their connection status.",
@@ -230,7 +228,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         authBody = "Sign in with an account, or continue without registration.",
         continueAsGuest = "Continue as guest — no account needed",
         guestAccount = "Guest (local only)",
-        apiKeyRequired = "Add your DeepSeek API key in Settings to use AI replies. Guest conversations remain on this device.",
+        apiKeyRequired = "Add your DeepSeek API key in Settings to use online AI. Conversations remain on this device.",
         email = "Email",
         password = "Password",
         signIn = "Sign in",
@@ -246,7 +244,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         signOut = "Sign out",
         account = "Account",
         sending = "Thinking…",
-        sendFailed = "No response received. Check your connection and server configuration.",
+        sendFailed = "No response received. Check your internet connection or API key.",
         conversationTooLong = "This conversation is too long to send. Start a new conversation.",
         aiRateLimited = "The AI request limit was reached. Try again shortly.",
         speak = "Speak",
@@ -269,7 +267,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ваш персональный помощник всегда под рукой.",
         composerHint = "Сообщение Miss Minutes",
         send = "Отправить",
-        gatewayNotice = "Ответы ИИ используют ваш личный API-ключ DeepSeek: он хранится на устройстве в зашифрованном виде и отправляется напрямую в DeepSeek по HTTPS. Supabase используется только для входа.",
+        gatewayNotice = "Сетевой ИИ использует ваш личный API-ключ DeepSeek: он хранится на устройстве в зашифрованном виде и отправляется напрямую в DeepSeek по HTTPS. История чатов остаётся локальной.",
         you = "Вы",
         dashboardTitle = "Ваше пространство",
         dashboardBody = "Состояние возможностей помощника и подключённых сервисов.",
@@ -293,7 +291,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         authBody = "Войдите в аккаунт или продолжите без регистрации.",
         continueAsGuest = "Продолжить без регистрации",
         guestAccount = "Гость (только локально)",
-        apiKeyRequired = "Добавьте свой API-ключ DeepSeek в настройках. Гостевые диалоги остаются на устройстве.",
+        apiKeyRequired = "Добавьте свой API-ключ DeepSeek в настройках для сетевого ИИ. Диалоги остаются на устройстве.",
         email = "Электронная почта",
         password = "Пароль",
         signIn = "Войти",
@@ -309,7 +307,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         signOut = "Выйти",
         account = "Аккаунт",
         sending = "Думаю…",
-        sendFailed = "Ответ не получен. Проверьте интернет и настройки сервера.",
+        sendFailed = "Ответ не получен. Проверьте подключение к интернету или API-ключ.",
         conversationTooLong = "Диалог слишком длинный. Начните новый диалог.",
         aiRateLimited = "Достигнут лимит запросов ИИ. Попробуйте немного позже.",
         speak = "Озвучить",
@@ -332,7 +330,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ёвари шахсии шумо ҳамеша омода аст.",
         composerHint = "Ба Miss Minutes паём нависед",
         send = "Фиристодан",
-        gatewayNotice = "Ҷавобҳои AI бо калиди шахсии DeepSeek-и шумо кор мекунанд: калид дар телефон рамзгузорӣ шуда, мустақиман тавассути HTTPS ба DeepSeek фиристода мешавад. Supabase танҳо барои ворид шудан истифода мешавад.",
+        gatewayNotice = "AI-и онлайн калиди шахсии DeepSeek-и шуморо истифода мебарад: калид дар телефон рамзгузорӣ шуда, мустақиман тавассути HTTPS ба DeepSeek фиристода мешавад. Таърихи чат дар телефон мемонад.",
         you = "Шумо",
         dashboardTitle = "Муҳити кории шумо",
         dashboardBody = "Ҳолати имкониятҳо ва пайвасти хидматҳои ёвар.",
@@ -356,7 +354,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         authBody = "Бо ҳисоб ворид шавед ё бе бақайдгирӣ истифода баред.",
         continueAsGuest = "Бе бақайдгирӣ идома додан",
         guestAccount = "Меҳмон (танҳо маҳаллӣ)",
-        apiKeyRequired = "Барои ҷавоби AI калиди шахсии DeepSeek-ро дар Танзимот илова кунед. Гуфтугӯҳои меҳмонӣ танҳо дар телефон мемонанд.",
+        apiKeyRequired = "Барои истифодаи AI-и онлайн калиди DeepSeek-ро дар Танзимот илова кунед. Гуфтугӯҳо дар телефон мемонанд.",
         email = "Почтаи электронӣ",
         password = "Рамз",
         signIn = "Ворид шудан",
@@ -372,7 +370,7 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         signOut = "Баромадан",
         account = "Ҳисоб",
         sending = "Фикр карда истодаам…",
-        sendFailed = "Ҷавоб гирифта нашуд. Интернет ва танзимоти серверро санҷед.",
+        sendFailed = "Ҷавоб гирифта нашуд. Интернет ё калиди API-ро санҷед. ",
         conversationTooLong = "Гуфтугӯ хеле дароз аст. Гуфтугӯи нав оғоз кунед.",
         aiRateLimited = "Маҳдудияти дархостҳои AI расид. Каме баъд кӯшиш кунед.",
         speak = "Хондан",
@@ -391,7 +389,6 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MissMinutesApp(
-    sessionManager: SessionManager,
     aiProvider: AiProvider,
     ttsProvider: TtsProvider,
     apiKeyStore: DeepSeekApiKeyStore,
@@ -946,144 +943,18 @@ fun MissMinutesApp(
         }
     }
 
-    LaunchedEffect(sessionManager) {
-        // Saved Compose state can outlive a revoked/expired session. Start fail-closed
-        // and derive authenticated UI exclusively from the Keystore-backed session.
-        isAuthenticated = false
-        isGuestSession = false
-        userEmail = ""
+    LaunchedEffect(conversationStore) {
         try {
-            val session = sessionManager.restoreSession()
-            if (session != null) {
-                isAuthenticated = true
-                userEmail = session.email.orEmpty()
-                authEmail = session.email.orEmpty()
-                loadConversation(session.userId)
-            } else {
-                disableWakeListening()
-            }
+            loadConversation(GUEST_OWNER_ID)
+            isGuestSession = true
+            userEmail = copy.guestAccount
+            isAuthenticated = true
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
-            disableWakeListening()
-            authMessage = copy.authUnavailable
+            authMessage = copy.sendFailed
         } finally {
             isRestoring = false
-        }
-    }
-
-    val continueAsGuest: () -> Unit = {
-        if (!authBusy && !isRestoring) {
-            authBusy = true
-            sessionGeneration += 1
-            authMessage = null
-            authPassword = ""
-            scope.launch {
-                try {
-                    loadConversation(GUEST_OWNER_ID)
-                    isGuestSession = true
-                    userEmail = copy.guestAccount
-                    selectedScreenName = AppScreen.Chat.name
-                    isAuthenticated = true
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    authMessage = copy.sendFailed
-                } finally {
-                    authBusy = false
-                }
-            }
-        }
-    }
-
-    val submitAuth: () -> Unit = {
-        if (!authBusy) {
-            authBusy = true
-            scope.launch {
-                authMessage = null
-                try {
-                    if (isSignUp) {
-                        val result = sessionManager.signUp(authEmail.trim(), authPassword)
-                        val session = result.session
-                        if (session != null) {
-                            sessionGeneration += 1
-                            isGuestSession = false
-                            isAuthenticated = true
-                            userEmail = session.email ?: authEmail.trim()
-                            authEmail = userEmail
-                            authPassword = ""
-                            loadConversation(session.userId)
-                        } else {
-                            isSignUp = false
-                            authPassword = ""
-                            authMessage = copy.emailConfirmation
-                        }
-                    } else {
-                        val session = sessionManager.signIn(authEmail.trim(), authPassword)
-                        sessionGeneration += 1
-                        isGuestSession = false
-                        isAuthenticated = true
-                        userEmail = session.email ?: authEmail.trim()
-                        authEmail = userEmail
-                        authPassword = ""
-                        loadConversation(session.userId)
-                    }
-                } catch (_: SupabaseAuthException.InvalidCredentials) {
-                    authMessage = copy.invalidCredentials
-                } catch (_: SupabaseAuthException.RateLimited) {
-                    authMessage = copy.authRateLimited
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    authMessage = copy.authUnavailable
-                } finally {
-                    authBusy = false
-                }
-            }
-        }
-    }
-
-    val signOut: () -> Unit = {
-        if (!authBusy) {
-            authBusy = true
-            disableWakeListening()
-            sessionGeneration += 1
-            isAuthenticated = false
-            isGuestSession = false
-            userEmail = ""
-            authEmail = ""
-            authPassword = ""
-            messages = emptyList()
-            currentOwnerId = null
-            activeConversationId = null
-            conversationSummaries = emptyList()
-            memoryItems = emptyList()
-            memoryDraft = ""
-            memoryContextEnabled = false
-            exportPayload = null
-            exportError = null
-            pendingDeleteConversationId = null
-            confirmDeleteAll = false
-            memoryMessage = null
-            ttsProvider.stop()
-            speakingMessageId = null
-            voiceError = null
-            draft = ""
-            aiHasResponded = false
-            chatError = null
-            isSending = false
-            selectedScreenName = AppScreen.Chat.name
-            scope.launch {
-                try {
-                    sessionManager.signOut()
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    // Local credentials are cleared by SessionManager even if revocation fails.
-                } finally {
-                    authBusy = false
-                }
-            }
         }
     }
 
@@ -1227,43 +1098,8 @@ fun MissMinutesApp(
                             chatError = copy.apiKeyRequired
                         }
                     } catch (_: AiProviderException.AuthenticationRequired) {
-                        if (requestGeneration != sessionGeneration) return@launch
-                        if (isGuestSession) {
-                            // Provider credentials are independent from local guest access.
+                        if (requestGeneration == sessionGeneration) {
                             chatError = copy.apiKeyRequired
-                        } else {
-                            sessionGeneration += 1
-                            authBusy = true
-                            disableWakeListening()
-                            isAuthenticated = false
-                            userEmail = ""
-                            authEmail = ""
-                            authPassword = ""
-                            messages = emptyList()
-                            currentOwnerId = null
-                            activeConversationId = null
-                            conversationSummaries = emptyList()
-                            memoryItems = emptyList()
-                            memoryContextEnabled = false
-                            exportPayload = null
-                            exportError = null
-                            pendingDeleteConversationId = null
-                            memoryMessage = null
-                            draft = ""
-                            aiHasResponded = false
-                            chatError = null
-                            isSending = false
-                            selectedScreenName = AppScreen.Chat.name
-                            authMessage = copy.sessionExpired
-                            try {
-                                sessionManager.signOut()
-                            } catch (error: CancellationException) {
-                                throw error
-                            } catch (_: Exception) {
-                                // SessionManager always clears local tokens in its finally block.
-                            } finally {
-                                authBusy = false
-                            }
                         }
                     } catch (_: ConversationLimitReachedException) {
                         if (requestGeneration == sessionGeneration &&
@@ -1438,23 +1274,6 @@ fun MissMinutesApp(
     MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
         when {
             isRestoring -> LoadingScreen()
-            !isAuthenticated -> AuthScreen(
-                copy = copy,
-                email = authEmail,
-                password = authPassword,
-                isSignUp = isSignUp,
-                isBusy = authBusy,
-                message = authMessage,
-                onEmailChange = { authEmail = it },
-                onPasswordChange = { if (it.length <= 128) authPassword = it },
-                onModeChange = {
-                    isSignUp = !isSignUp
-                    authMessage = null
-                    authPassword = ""
-                },
-                onSubmit = submitAuth,
-                onContinueAsGuest = continueAsGuest
-            )
             else -> {
                 val screen = AppScreen.valueOf(selectedScreenName).let { if (it == AppScreen.Dashboard) AppScreen.Chat else it }
                 Scaffold(
@@ -1608,7 +1427,6 @@ fun MissMinutesApp(
                                         }
                                     }
                                 },
-                                onSignOut = signOut,
                                 backupCategories = backupCategories,
                                 onToggleBackupCategory = { category ->
                                     backupCategories = if (category in backupCategories) {
@@ -2108,7 +1926,6 @@ private fun SettingsScreen(
     onDeleteMemory: (String) -> Unit,
     onRetentionChange: (Int) -> Unit,
     onMemoryContextChange: (Boolean) -> Unit,
-    onSignOut: () -> Unit,
     backupCategories: Set<BackupArchive.Category>,
     onToggleBackupCategory: (BackupArchive.Category) -> Unit,
     backupPassword: String,
@@ -2721,14 +2538,6 @@ private fun SettingsScreen(
                 }
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(copy.account, fontWeight = FontWeight.SemiBold)
-            Text(email, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Button(onClick = onSignOut, enabled = !isBusy) {
-                Text(if (isBusy) copy.wait else copy.signOut)
-            }
-        }
-        Spacer(modifier = Modifier.padding(top = 8.dp))
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(copy.about, fontWeight = FontWeight.SemiBold)
             Text("${ProductIdentity.NAME} · ${copy.version} ${ProductIdentity.VERSION_NAME}")

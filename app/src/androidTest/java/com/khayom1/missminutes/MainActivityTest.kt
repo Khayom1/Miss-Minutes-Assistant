@@ -23,13 +23,8 @@ import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import kotlinx.coroutines.CompletableDeferred
 import com.khayom1.missminutes.ai.AiRequest
-import com.khayom1.missminutes.ai.AuthFlowResult
-import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.SpeechInputProvider
-import com.khayom1.missminutes.ai.SessionStore
-import com.khayom1.missminutes.ai.SupabaseAuthRepository
-import com.khayom1.missminutes.ai.SupabaseAuthSession
 import com.khayom1.missminutes.voice.WakeWordServiceState
 import com.khayom1.missminutes.memory.AndroidKeystoreConversationCipher
 import com.khayom1.missminutes.memory.LocalConversationStore
@@ -52,50 +47,16 @@ class MainActivityTest {
     @get:Rule
     val testRule = RuleChain.outerRule(microphonePermissionRule).around(composeRule)
 
-    private lateinit var sessionManager: SessionManager
     private lateinit var aiProvider: FakeAiProvider
     private lateinit var apiKeyStore: MemoryApiKeyStore
     private lateinit var conversationStore: LocalConversationStore
     private lateinit var conversationDatabaseName: String
-
-    private class MemoryStore : SessionStore {
-        private var session: SupabaseAuthSession? = null
-
-        override fun load(): SupabaseAuthSession? = session
-
-        override fun save(session: SupabaseAuthSession) {
-            this.session = session
-        }
-
-        override fun clear() {
-            session = null
-        }
-    }
 
     private class MemoryApiKeyStore : DeepSeekApiKeyStore {
         var key: String? = null
         override fun load(): String? = key
         override fun save(apiKey: String) { key = apiKey }
         override fun clear() { key = null }
-    }
-
-    private class FakeAuthRepository : SupabaseAuthRepository {
-        override suspend fun signIn(email: String, password: String) = testSession(email)
-
-        override suspend fun signUp(email: String, password: String) =
-            AuthFlowResult(session = null, needsEmailConfirmation = true)
-
-        override suspend fun refresh(refreshToken: String) = testSession("user@example.test")
-
-        override suspend fun signOut(accessToken: String) = Unit
-
-        private fun testSession(email: String) = SupabaseAuthSession(
-            accessToken = "test-user-access-token",
-            refreshToken = "test-user-refresh-token",
-            expiresAtEpochSeconds = 10_000L,
-            userId = "test-user-${email.hashCode()}",
-            email = email
-        )
     }
 
     private class FakeAiProvider : AiProvider {
@@ -116,11 +77,6 @@ class MainActivityTest {
 
     @Before
     fun setUp() {
-        sessionManager = SessionManager(
-            repository = FakeAuthRepository(),
-            store = MemoryStore(),
-            nowEpochSeconds = { 1_000L }
-        )
         aiProvider = FakeAiProvider()
         apiKeyStore = MemoryApiKeyStore()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -135,7 +91,6 @@ class MainActivityTest {
         )
         composeRule.setContent {
             com.khayom1.missminutes.ui.MissMinutesApp(
-                sessionManager = sessionManager,
                 aiProvider = aiProvider,
                 apiKeyStore = apiKeyStore,
                 ttsProvider = object : TtsProvider {
@@ -155,10 +110,7 @@ class MainActivityTest {
                 conversationStore = conversationStore
             )
         }
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Sign in to Miss Minutes")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+        waitForChatScreen()
     }
 
     @After
@@ -174,17 +126,12 @@ class MainActivityTest {
     }
 
     private fun signIn() {
-        composeRule.onNodeWithTag("auth_email").performTextInput("user@example.test")
-        composeRule.onNodeWithTag("auth_password").performTextInput("correct-horse-battery")
-        composeRule.onNodeWithTag("auth_submit").performClick()
         waitForChatScreen()
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
     }
 
     @Test
     fun guestModeOpensAssistantWithoutSupabaseRegistration() {
-        composeRule.onNodeWithTag("auth_continue_guest").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("auth_continue_guest").performClick()
         waitForChatScreen()
 
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
@@ -195,15 +142,10 @@ class MainActivityTest {
         }
 
         assertTrue(conversationStore.listConversations("guest-local").isNotEmpty())
-        assertTrue(conversationStore.listConversations("test-user-" + "user@example.test".hashCode()).isEmpty())
-        composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("Guest (local only)").performScrollTo().assertIsDisplayed()
     }
 
     @Test
     fun guestProviderCredentialFailureDoesNotForceAccountRegistration() {
-        composeRule.onNodeWithTag("auth_continue_guest").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("auth_continue_guest").performClick()
         waitForChatScreen()
 
         aiProvider.nextError = AiProviderException.MissingApiKey()
@@ -211,23 +153,11 @@ class MainActivityTest {
         composeRule.onNodeWithTag("chat_send").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(
-                "Add your DeepSeek API key in Settings to use AI replies. Guest conversations remain on this device."
+                "Add your DeepSeek API key in Settings to use online AI. Conversations remain on this device."
             ).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("chat_input").assertIsDisplayed()
         assertTrue(composeRule.onAllNodesWithText("Sign in to Miss Minutes").fetchSemanticsNodes().isEmpty())
-    }
-
-    @Test
-    fun authenticationScreenAcceptsSignInBeforeOpeningAssistant() {
-        composeRule.onNodeWithText("Sign in to Miss Minutes").assertIsDisplayed()
-        composeRule.onNodeWithTag("auth_submit").assertIsDisplayed()
-
-        signIn()
-
-        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
-        composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("user@example.test").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -261,7 +191,7 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        val ownerId = "test-user-${"user@example.test".hashCode()}"
+        val ownerId = "guest-local"
         val savedConversation = conversationStore.listConversations(ownerId).single()
         val savedMessages = conversationStore.getMessages(ownerId, savedConversation.id)
         assertTrue(savedMessages.any { it.role == LocalConversationStore.ROLE_USER && it.content == "Check the authenticated chat" })
@@ -365,94 +295,6 @@ class MainActivityTest {
     }
 
     @Test
-    fun expiredSessionClearsPreviousAccountConversationBeforeReauthentication() {
-        signIn()
-        aiProvider.nextError = AiProviderException.AuthenticationRequired()
-
-        composeRule.onNodeWithTag("chat_input")
-            .performTextInput("Private conversation from previous account")
-        composeRule.onNodeWithTag("chat_send").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Sign in to Miss Minutes")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-
-        composeRule.onNodeWithText("Sign in to Miss Minutes").assertIsDisplayed()
-        assertEquals(
-            0,
-            composeRule.onAllNodesWithText("Private conversation from previous account")
-                .fetchSemanticsNodes().size
-        )
-
-        composeRule.onNodeWithTag("auth_email").performTextInput("new-user@example.test")
-        composeRule.onNodeWithTag("auth_password").performTextInput("correct-horse-battery")
-        composeRule.onNodeWithTag("auth_submit").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("How can I help?")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-
-        composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("new-user@example.test").performScrollTo().assertIsDisplayed()
-        assertEquals(
-            0,
-            composeRule.onAllNodesWithText("Private conversation from previous account")
-                .fetchSemanticsNodes().size
-        )
-    }
-
-    @Test
-    fun inFlightAiResponseIsDiscardedAfterSignOutAndAccountSwitch() {
-        signIn()
-        val lateCompletion = CompletableDeferred<AiCompletion>()
-        aiProvider.pendingCompletion = lateCompletion
-
-        composeRule.onNodeWithTag("chat_input")
-            .performTextInput("Private pending prompt from old account")
-        composeRule.onNodeWithTag("chat_send").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Thinking…")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        WakeWordServiceState.setEnabled(context, true)
-        composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("Sign out").performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            !WakeWordServiceState.isEnabled(context) &&
-                composeRule.onAllNodesWithText("Sign in to Miss Minutes")
-                    .fetchSemanticsNodes().isNotEmpty()
-        }
-
-        lateCompletion.complete(
-            AiCompletion(content = "Late response from old account", model = "test-mock")
-        )
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithTag("auth_email").performTextInput("new-user@example.test")
-        composeRule.onNodeWithTag("auth_password").performTextInput("correct-horse-battery")
-        composeRule.onNodeWithTag("auth_submit").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("How can I help?")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-
-        composeRule.onNodeWithText("Settings").performClick()
-        composeRule.onNodeWithText("new-user@example.test").performScrollTo().assertIsDisplayed()
-        assertEquals(
-            0,
-            composeRule.onAllNodesWithText("Private pending prompt from old account")
-                .fetchSemanticsNodes().size
-        )
-        assertEquals(
-            0,
-            composeRule.onAllNodesWithText("Late response from old account")
-                .fetchSemanticsNodes().size
-        )
-    }
-
-    @Test
     fun settingsSavesAndRemovesUserOwnedDeepSeekKey() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
@@ -524,18 +366,5 @@ class MainActivityTest {
         composeRule.onNodeWithText("Тоҷикӣ").performClick()
         composeRule.onAllNodesWithText("Танзимоти барнома").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Забон").assertIsDisplayed()
-    }
-
-    @Test
-    fun signUpShowsEmailConfirmationWithoutCreatingAnAuthenticatedSession() {
-        composeRule.onNodeWithTag("auth_toggle_mode").performClick()
-        composeRule.onNodeWithTag("auth_email").performTextInput("new-user@example.test")
-        composeRule.onNodeWithTag("auth_password").performTextInput("strong-password")
-        composeRule.onNodeWithTag("auth_submit").performClick()
-
-        composeRule.onNodeWithText(
-            "Check your email to confirm your account, then sign in."
-        ).assertIsDisplayed()
-        composeRule.onNodeWithText("Sign in").assertIsDisplayed()
     }
 }
