@@ -59,6 +59,7 @@ class BackupPayloadAdaptersTest {
         )
         assertNull(restored.conversationExportJson)
         assertNull(restored.pluginManifests)
+        assertEquals(false, restored.singleConversation)
         assertEquals(settings, restored.settings)
     }
 
@@ -93,6 +94,7 @@ class BackupPayloadAdaptersTest {
         ).jsonObject
         assertEquals(1, normalized.getValue("conversations").jsonArray.size)
         assertEquals(30, normalized.getValue("retentionDays").jsonPrimitive.content.toInt())
+        assertEquals(true, restored.singleConversation)
     }
 
     @Test
