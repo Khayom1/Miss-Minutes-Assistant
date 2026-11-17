@@ -2,7 +2,6 @@ package com.khayom1.missminutes.voice
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -26,8 +25,8 @@ class VoiceServiceCopyTest {
                 copy.stopped
             ).forEach { assertTrue(it.isNotBlank()) }
         }
-        assertNotEquals(copies[0].stopAction, copies[1].stopAction)
-        assertNotEquals(copies[1].stopAction, copies[2].stopAction)
+        assertFalse(copies[0].stopAction == copies[1].stopAction)
+        assertFalse(copies[1].stopAction == copies[2].stopAction)
     }
 
     @Test
