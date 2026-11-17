@@ -179,24 +179,32 @@ private data class HistoryCopy(
     val memoryKey: String,
     val memoryValue: String,
     val saveMemory: String,
-    val noMemories: String
+    val noMemories: String,
+    val retentionLabel: String,
+    val retention30: String,
+    val retention90: String,
+    val retention365: String,
+    val retentionNever: String
 )
 
 private fun historyCopyFor(language: AppLanguage) = when (language) {
     AppLanguage.English -> HistoryCopy(
         "New conversation", "Export JSON", "Delete all history", "Delete", "Cancel",
         "Permanently delete all local conversations and messages?", "Automatic retention: 90 days.",
-        "No saved conversations yet.", "Saved memory", "Memory label", "What should Miss Minutes remember?", "Save memory", "No saved memories."
+        "No saved conversations yet.", "Saved memory", "Memory label", "What should Miss Minutes remember?", "Save memory", "No saved memories.",
+        "Automatically delete older conversations:", "30 days", "90 days", "1 year", "Never"
     )
     AppLanguage.Russian -> HistoryCopy(
         "Новый диалог", "Экспорт JSON", "Удалить всю историю", "Удалить", "Отмена",
         "Безвозвратно удалить все локальные диалоги и сообщения?", "Автоматическое хранение: 90 дней.",
-        "Сохранённых диалогов пока нет.", "Сохранённая память", "Название", "Что Miss Minutes должна запомнить?", "Сохранить", "Сохранённых заметок нет."
+        "Сохранённых диалогов пока нет.", "Сохранённая память", "Название", "Что Miss Minutes должна запомнить?", "Сохранить", "Сохранённых заметок нет.",
+        "Автоматически удалять диалоги старше:", "30 дней", "90 дней", "1 год", "Никогда"
     )
     AppLanguage.Tajik -> HistoryCopy(
         "Гуфтугӯи нав", "Содироти JSON", "Пок кардани тамоми таърих", "Пок кардан", "Бекор кардан",
         "Ҳамаи гуфтугӯҳо ва паёмҳои маҳаллӣ бебозгашт пок карда шаванд?", "Муҳлати нигоҳдорӣ: 90 рӯз.",
-        "Ҳоло гуфтугӯи сабтшуда нест.", "Хотираи сабтшуда", "Номи хотира", "Мисс Минутс чиро дар хотир нигоҳ дорад?", "Сабт кардан", "Хотираи сабтшуда нест."
+        "Ҳоло гуфтугӯи сабтшуда нест.", "Хотираи сабтшуда", "Номи хотира", "Мисс Минутс чиро дар хотир нигоҳ дорад?", "Сабт кардан", "Хотираи сабтшуда нест.",
+        "Гуфтугӯҳои аз ин муҳлат кӯҳнаро худкор пок кун:", "30 рӯз", "90 рӯз", "1 сол", "Ҳеҷ гоҳ"
     )
 }
 
@@ -509,6 +517,9 @@ fun MissMinutesApp(
     var activeConversationId by remember { mutableStateOf<String?>(null) }
     val savedConversations = remember { mutableStateListOf<StoredConversation>() }
     val savedMemories = remember { mutableStateListOf<StoredMemory>() }
+    var retentionDays by rememberSaveable {
+        mutableStateOf(context.getSharedPreferences("miss_minutes_history_prefs", android.content.Context.MODE_PRIVATE).getInt("retention_days", 90))
+    }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
     var aiHasResponded by remember { mutableStateOf(false) }
@@ -524,14 +535,16 @@ fun MissMinutesApp(
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val copy = copyFor(language)
 
-    LaunchedEffect(currentOwnerId) {
+    LaunchedEffect(currentOwnerId, retentionDays) {
         messages.clear()
         activeConversationId = null
         savedConversations.clear()
         savedMemories.clear()
         val owner = currentOwnerId ?: return@LaunchedEffect
         val restored = withContext(Dispatchers.IO) {
-            conversationStore.deleteOlderThan(owner, System.currentTimeMillis() - DEFAULT_RETENTION_MILLIS)
+            if (retentionDays > 0) {
+                conversationStore.deleteOlderThan(owner, System.currentTimeMillis() - retentionDays.toLong() * MILLIS_PER_DAY)
+            }
             val conversations = conversationStore.listConversations(owner)
             val latest = conversations.firstOrNull()
             val restoredMessages = latest?.let { conversationStore.loadMessages(owner, it.id) }.orEmpty()
@@ -1068,6 +1081,12 @@ fun MissMinutesApp(
                                 actions = historyCopyFor(language),
                                 conversations = savedConversations,
                                 memories = savedMemories,
+                                retentionDays = retentionDays,
+                                onRetentionChange = { days ->
+                                    retentionDays = days
+                                    context.getSharedPreferences("miss_minutes_history_prefs", android.content.Context.MODE_PRIVATE)
+                                        .edit().putInt("retention_days", days).apply()
+                                },
                                 onOpen = openConversation,
                                 onNew = startNewConversation,
                                 onDelete = deleteConversation,
@@ -1382,6 +1401,8 @@ private fun HistoryScreen(
     actions: HistoryCopy,
     conversations: List<StoredConversation>,
     memories: List<StoredMemory>,
+    retentionDays: Int,
+    onRetentionChange: (Int) -> Unit,
     onOpen: (StoredConversation) -> Unit,
     onNew: () -> Unit,
     onDelete: (StoredConversation) -> Unit,
@@ -1399,7 +1420,22 @@ private fun HistoryScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(copy.historyTitle, style = MaterialTheme.typography.headlineMedium)
-        Text(actions.retention, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(actions.retentionLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf(30, 90, 365, 0).forEach { days ->
+                val label = when (days) {
+                    30 -> actions.retention30
+                    90 -> actions.retention90
+                    365 -> actions.retention365
+                    else -> actions.retentionNever
+                }
+                FilterChip(
+                    selected = retentionDays == days,
+                    onClick = { onRetentionChange(days) },
+                    label = { Text(label) }
+                )
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onNew) { Text(actions.newConversation) }
             TextButton(onClick = onExport, enabled = conversations.isNotEmpty() || memories.isNotEmpty()) { Text(actions.export) }
