@@ -45,7 +45,8 @@ jobs:
       - name: Verify Kotlin source formatting basics
         run: |
           test -f app/src/main/java/com/khayom1/missminutes/MainActivity.kt
-          test ! -d app/src/main/assets/models
+          # Keep large local LLM payloads out of the APK; P3 may add a small offline wake-word asset.
+          test ! -d app/src/main/assets/llm-models
 
       - name: Scan tracked working tree for secrets
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
