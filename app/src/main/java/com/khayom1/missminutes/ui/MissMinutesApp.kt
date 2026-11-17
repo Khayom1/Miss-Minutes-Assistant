@@ -57,7 +57,6 @@ import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.SessionManager
 import com.khayom1.missminutes.ai.TtsProvider
-import com.khayom1.missminutes.ai.AndroidTtsPlayback
 import com.khayom1.missminutes.ai.SupabaseAuthException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -189,9 +188,9 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         aiRateLimited = "The AI request limit was reached. Try again shortly.",
         speak = "Speak",
         stopSpeaking = "Stop voice",
-        voicePreparing = "Preparing voice…",
+        voicePreparing = "Speaking with the device voice…",
         voiceFailed = "Voice playback failed. Check TTS configuration.",
-        voiceNeedsSetup = "TTS setup required"
+        voiceNeedsSetup = "On-device voice"
     )
     AppLanguage.Russian -> UiCopy(
         chat = "Чат",
@@ -244,9 +243,9 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         aiRateLimited = "Достигнут лимит запросов ИИ. Попробуйте немного позже.",
         speak = "Озвучить",
         stopSpeaking = "Остановить",
-        voicePreparing = "Подготовка голоса…",
+        voicePreparing = "Озвучивание системным голосом…",
         voiceFailed = "Не удалось воспроизвести голос. Проверьте настройки TTS.",
-        voiceNeedsSetup = "Нужно настроить TTS"
+        voiceNeedsSetup = "Системный голос устройства"
     )
     AppLanguage.Tajik -> UiCopy(
         chat = "Чат",
@@ -299,9 +298,9 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         aiRateLimited = "Маҳдудияти дархостҳои AI расид. Каме баъд кӯшиш кунед.",
         speak = "Хондан",
         stopSpeaking = "Истодан",
-        voicePreparing = "Овоз омода мешавад…",
+        voicePreparing = "Бо овози худи телефон хонда мешавад…",
         voiceFailed = "Пахши овоз ноком шуд. Танзимоти TTS-ро санҷед.",
-        voiceNeedsSetup = "Танзими TTS лозим аст"
+        voiceNeedsSetup = "Овози дохилии телефон"
     )
 }
 
@@ -311,7 +310,7 @@ fun MissMinutesApp(
     sessionManager: SessionManager,
     aiProvider: AiProvider,
     ttsProvider: TtsProvider,
-    ttsPlayback: AndroidTtsPlayback
+    ttsProvider: TtsProvider
 ) {
     val scope = rememberCoroutineScope()
     var selectedScreenName by rememberSaveable { mutableStateOf(AppScreen.Chat.name) }
@@ -411,7 +410,7 @@ fun MissMinutesApp(
             authEmail = ""
             authPassword = ""
             messages.clear()
-            ttsPlayback.stop()
+            ttsProvider.stop()
             speakingMessageId = null
             voiceError = null
             draft = ""
@@ -522,32 +521,20 @@ fun MissMinutesApp(
     val speakMessage: (ChatMessage) -> Unit = { message ->
         if (!message.isUser) {
             if (speakingMessageId == message.id) {
-                ttsPlayback.stop()
+                ttsProvider.stop()
                 speakingMessageId = null
             } else {
-                ttsPlayback.stop()
+                ttsProvider.stop()
                 speakingMessageId = message.id
                 voiceError = null
-                scope.launch {
-                    try {
-                        val audio = ttsProvider.synthesize(message.text)
-                        if (speakingMessageId == message.id) {
-                            ttsPlayback.play(
-                                audio = audio,
-                                onCompleted = { speakingMessageId = null },
-                                onError = {
-                                    speakingMessageId = null
-                                    voiceError = copy.voiceFailed
-                                }
-                            )
-                        }
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (_: Exception) {
+                ttsProvider.speak(
+                    text = message.text,
+                    onDone = { speakingMessageId = null },
+                    onError = {
                         speakingMessageId = null
                         voiceError = copy.voiceFailed
                     }
-                }
+                )
             }
         }
     }
