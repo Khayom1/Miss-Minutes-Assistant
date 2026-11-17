@@ -1857,9 +1857,9 @@ private fun SettingsScreen(
                         AppLanguage.English -> "Battery status"
                     }
                     DeviceToolCapability.OPEN_WIFI_SETTINGS -> when (language) {
-                        AppLanguage.Tajik -> "Кушодани танзимоти Wi-Fi"
-                        AppLanguage.Russian -> "Открыть настройки Wi-Fi"
-                        AppLanguage.English -> "Open Wi-Fi settings"
+                        AppLanguage.Tajik -> "Танзимоти шабакаи бесим"
+                        AppLanguage.Russian -> "Настройки беспроводной сети"
+                        AppLanguage.English -> "Wireless network settings"
                     }
                     DeviceToolCapability.OPEN_APP_SETTINGS -> when (language) {
                         AppLanguage.Tajik -> "Маълумоти барнома"
@@ -1867,9 +1867,9 @@ private fun SettingsScreen(
                         AppLanguage.English -> "Application details"
                     }
                     DeviceToolCapability.SHARE_TEXT -> when (language) {
-                        AppLanguage.Tajik -> "Мубодилаи матн"
-                        AppLanguage.Russian -> "Поделиться текстом"
-                        AppLanguage.English -> "Share text"
+                        AppLanguage.Tajik -> "Иҷозати мубодилаи матн"
+                        AppLanguage.Russian -> "Разрешить обмен текстом"
+                        AppLanguage.English -> "Text sharing permission"
                     }
                 }
                 Row(
@@ -1934,7 +1934,7 @@ private fun SettingsScreen(
                 enabled = deviceGrants[DeviceToolCapability.SHARE_TEXT] == true && shareTextDraft.isNotBlank(),
                 onClick = { pendingDeviceCommand = DeviceToolCommand.ShareText(shareTextDraft) }
             ) {
-                Text(if (language == AppLanguage.Tajik) "Мубодила" else if (language == AppLanguage.Russian) "Поделиться" else "Share text")
+                Text(if (language == AppLanguage.Tajik) "Фиристодани матн" else if (language == AppLanguage.Russian) "Отправить текст" else "Send text")
             }
             if (deviceToolMessage != null) {
                 Text(deviceToolMessage!!, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
