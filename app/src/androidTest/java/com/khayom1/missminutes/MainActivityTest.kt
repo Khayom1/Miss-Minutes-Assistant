@@ -237,6 +237,30 @@ class MainActivityTest {
     }
 
     @Test
+    fun lateResponseFromPreviousConversationDoesNotAppearInNewConversation() {
+        signIn()
+        val lateCompletion = CompletableDeferred<AiCompletion>()
+        aiProvider.pendingCompletion = lateCompletion
+
+        composeRule.onNodeWithTag("chat_input").performTextInput("Original conversation prompt")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Thinking…").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("History").performClick()
+        composeRule.onNodeWithText("New conversation").performClick()
+        composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+
+        lateCompletion.complete(AiCompletion(content = "Late original conversation response", model = "test-mock"))
+        composeRule.waitForIdle()
+        assertEquals(
+            0,
+            composeRule.onAllNodesWithText("Late original conversation response").fetchSemanticsNodes().size
+        )
+    }
+
+    @Test
     fun savedMemoryIsSentOnlyAfterExplicitOptIn() {
         signIn()
         composeRule.onNodeWithText("Settings").performClick()
