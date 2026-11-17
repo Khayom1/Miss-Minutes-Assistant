@@ -391,7 +391,6 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MissMinutesApp(
-    sessionManager: SessionManager,
     aiProvider: AiProvider,
     ttsProvider: TtsProvider,
     apiKeyStore: DeepSeekApiKeyStore,
