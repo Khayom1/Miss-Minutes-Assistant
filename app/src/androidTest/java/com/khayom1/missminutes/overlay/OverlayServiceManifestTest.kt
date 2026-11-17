@@ -1,5 +1,6 @@
 package com.khayom1.missminutes.overlay
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -35,6 +36,25 @@ class OverlayServiceManifestTest {
                 context.packageName
             )
         )
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun overlayPermissionIsDeclaredForSettingsGrantFlow() {
+        val packageInfo = context.packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.GET_PERMISSIONS
+        )
+        assertTrue(
+            packageInfo.requestedPermissions?.contains(Manifest.permission.SYSTEM_ALERT_WINDOW) == true
+        )
+    }
+
+    @Test
+    fun overlayServiceRejectsImplicitRestartAndUsesNonStickyLifecycle() {
+        assertFalse(OverlayServicePolicy.shouldStart(null))
+        assertFalse(OverlayServicePolicy.shouldStart(MissMinutesOverlayService.ACTION_STOP))
+        assertEquals(android.app.Service.START_NOT_STICKY, OverlayServicePolicy.RESTART_POLICY)
     }
 
     @Test

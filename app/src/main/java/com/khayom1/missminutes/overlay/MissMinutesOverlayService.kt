@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
@@ -18,64 +19,79 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.TextView
-import android.content.pm.ServiceInfo
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.khayom1.missminutes.MainActivity
+import com.khayom1.missminutes.backup.AndroidAppSettingsStore
 
 /**
  * User-started floating entry point. It never listens to the microphone or executes
  * device actions; it only opens the app. Android's overlay permission is checked
- * again at every start and the persistent notification always exposes a stop action.
+ * again at every start and during dragging; the notification always exposes Stop.
  */
 class MissMinutesOverlayService : Service() {
     private var windowManager: WindowManager? = null
     private var bubble: View? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopSelf()
-            return START_NOT_STICKY
+        val action = intent?.action
+        if (OverlayServicePolicy.shouldStop(action)) {
+            stopSelf(startId)
+            return OverlayServicePolicy.RESTART_POLICY
+        }
+        // START_STICKY may redeliver a null intent after process death. Never
+        // recreate a user-controlled overlay without a fresh explicit tap.
+        if (!OverlayServicePolicy.shouldStart(action)) {
+            stopSelf(startId)
+            return OverlayServicePolicy.RESTART_POLICY
         }
         if (!Settings.canDrawOverlays(this)) {
-            stopSelf()
-            return START_NOT_STICKY
+            stopSelf(startId)
+            return OverlayServicePolicy.RESTART_POLICY
         }
 
         return try {
-            createNotificationChannel()
+            val strings = OverlayServicePolicy.strings(
+                AndroidAppSettingsStore(this).loadAppearance().language
+            )
+            createNotificationChannel(strings)
             val type = if (Build.VERSION.SDK_INT >= 34) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             } else {
                 0
             }
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), type)
-            showBubble()
-            START_STICKY
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(strings), type)
+            showBubble(strings)
+            // Overlay is deliberately non-sticky: Android must not restart it
+            // without the user's explicit foreground interaction.
+            OverlayServicePolicy.RESTART_POLICY
         } catch (_: SecurityException) {
-            stopSelf()
-            START_NOT_STICKY
+            stopSelf(startId)
+            OverlayServicePolicy.RESTART_POLICY
         } catch (_: WindowManager.BadTokenException) {
-            stopSelf()
-            START_NOT_STICKY
+            stopSelf(startId)
+            OverlayServicePolicy.RESTART_POLICY
         } catch (_: IllegalStateException) {
-            stopSelf()
-            START_NOT_STICKY
+            stopSelf(startId)
+            OverlayServicePolicy.RESTART_POLICY
+        } catch (_: IllegalArgumentException) {
+            stopSelf(startId)
+            OverlayServicePolicy.RESTART_POLICY
         }
     }
 
-    private fun showBubble() {
+    private fun showBubble(strings: OverlayStrings) {
         if (bubble != null) return
         val manager = getSystemService(WINDOW_SERVICE) as WindowManager
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
         val view = TextView(this).apply {
-            text = "◷  Miss Minutes"
+            text = strings.bubbleLabel
             textSize = 14f
             setTextColor(Color.WHITE)
             setPadding(dp(18), dp(12), dp(18), dp(12))
-            contentDescription = "Open Miss Minutes assistant"
+            contentDescription = strings.bubbleDescription
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dp(28).toFloat()
@@ -83,7 +99,8 @@ class MissMinutesOverlayService : Service() {
                 setStroke(dp(1), Color.rgb(150, 180, 255))
             }
             isClickable = true
-            isFocusable = false
+            isFocusable = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             setOnClickListener {
                 val launch = Intent(this@MissMinutesOverlayService, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -126,9 +143,30 @@ class MissMinutesOverlayService : Service() {
                             kotlin.math.abs(deltaY) > touchSlop)
                     ) dragged = true
                     if (dragged) {
-                        layout.x = (startX - deltaX.toInt()).coerceAtLeast(0)
-                        layout.y = (startY + deltaY.toInt()).coerceAtLeast(0)
-                        runCatching { manager.updateViewLayout(view, layout) }
+                        if (!Settings.canDrawOverlays(this)) {
+                            stopSelf()
+                            return@setOnTouchListener true
+                        }
+                        val metrics = resources.displayMetrics
+                        val bounded = OverlayServicePolicy.clampPosition(
+                            x = startX - deltaX.toInt(),
+                            y = startY + deltaY.toInt(),
+                            screenWidthPixels = metrics.widthPixels,
+                            screenHeightPixels = metrics.heightPixels,
+                            bubbleWidthPixels = view.width,
+                            bubbleHeightPixels = view.height
+                        )
+                        layout.x = bounded.x
+                        layout.y = bounded.y
+                        try {
+                            manager.updateViewLayout(view, layout)
+                        } catch (_: SecurityException) {
+                            stopSelf()
+                        } catch (_: WindowManager.BadTokenException) {
+                            stopSelf()
+                        } catch (_: IllegalArgumentException) {
+                            stopSelf()
+                        }
                     }
                     true
                 }
@@ -145,23 +183,23 @@ class MissMinutesOverlayService : Service() {
         bubble = view
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannel(strings: OverlayStrings) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID,
-                    "Floating assistant",
+                    strings.channelName,
                     NotificationManager.IMPORTANCE_LOW
                 ).apply {
-                    description = "Controls the user-started Miss Minutes floating shortcut."
+                    description = strings.channelDescription
                     setShowBadge(false)
                 }
             )
         }
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(strings: OverlayStrings): Notification {
         val openIntent = PendingIntent.getActivity(
             this,
             0,
@@ -178,13 +216,15 @@ class MissMinutesOverlayService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Miss Minutes floating assistant")
-            .setContentText("The floating shortcut is active. Tap Stop to hide it.")
+            .setContentTitle(strings.notificationTitle)
+            .setContentText(strings.notificationText)
             .setContentIntent(openIntent)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, strings.stopAction, stopIntent)
             .build()
     }
 
