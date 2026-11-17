@@ -34,7 +34,7 @@ object PluginToolSchemaFactory {
         return tools.filter { it.connected }.sortedBy { it.toolName }.map { tool ->
             AiToolDefinition(
                 name = tool.toolName,
-                description = tool.pluginName + ": " + tool.description.take(512),
+                description = (tool.pluginName + ": " + tool.description).take(512),
                 parameters = parametersSchema(tool.arguments)
             )
         }
