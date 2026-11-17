@@ -96,6 +96,61 @@ class PluginRegistryTest {
     }
 
     @Test
+    fun integerBoundsAndBooleanTypesAreValidated() {
+        var calls = 0
+        val numericManifest = PluginManifest(
+            id = "typed_plugin",
+            version = "1.0.0",
+            displayName = "Typed plugin",
+            description = "Validates numeric and boolean arguments.",
+            capabilities = setOf(PluginCapability.DEVICE_INFORMATION),
+            actions = listOf(
+                PluginActionSpec(
+                    id = "typed_action",
+                    capability = PluginCapability.DEVICE_INFORMATION,
+                    arguments = mapOf(
+                        "count" to PluginFieldSpec("count", PluginValueType.INTEGER, minimum = 1, maximum = 3),
+                        "enabled" to PluginFieldSpec("enabled", PluginValueType.BOOLEAN)
+                    )
+                )
+            )
+        )
+        val handler = object : PluginActionHandler {
+            override val actionId = "typed_action"
+            override val capability = PluginCapability.DEVICE_INFORMATION
+            override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
+                calls++
+                return PluginActionOutput(true, "ok")
+            }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(handler),
+            consentStore = PluginConsentStore { true },
+            auditLog = PluginAuditLog {}
+        )
+        registry.install(numericManifest)
+        val invalidNumber = registry.execute(
+            PluginExecutionRequest("typed_plugin", "typed_action", mapOf(
+                "count" to PluginValue.Number(4), "enabled" to PluginValue.Flag(true)
+            ))
+        )
+        val invalidBoolean = registry.execute(
+            PluginExecutionRequest("typed_plugin", "typed_action", mapOf(
+                "count" to PluginValue.Number(2), "enabled" to PluginValue.Text("true")
+            ))
+        )
+        val valid = registry.execute(
+            PluginExecutionRequest("typed_plugin", "typed_action", mapOf(
+                "count" to PluginValue.Number(2), "enabled" to PluginValue.Flag(false)
+            ))
+        )
+        assertFalse(invalidNumber.success)
+        assertFalse(invalidBoolean.success)
+        assertTrue(valid.success)
+        assertEquals(1, calls)
+    }
+
+    @Test
     fun confirmationAndConsentAreIndependentGates() {
         var calls = 0
         val registry = PluginRegistry(
