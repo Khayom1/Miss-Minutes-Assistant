@@ -115,7 +115,7 @@ class HybridTtsProvider(
             .build()
         val call = client.newCall(request)
         activeCall = call
-        try {
+        return try {
             call.execute().use { response ->
                 if (!response.isSuccessful) throw IOException("Hosted TTS request failed.")
                 val body = response.body ?: throw IOException("Hosted TTS returned no audio.")
