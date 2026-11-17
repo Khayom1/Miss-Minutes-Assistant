@@ -790,7 +790,7 @@ fun MissMinutesApp(
         val value = draft.trim()
         if (value.isNotEmpty() && value.length <= 8_000 && !isSending) {
             val memoryContext = savedMemories.take(12)
-                .joinToString("\\n") { "- ${it.key.take(80)}: ${it.value.take(400)}" }
+                .joinToString("\n") { "- ${it.key.take(80)}: ${it.value.take(400)}" }
                 .take(3_000)
             val hasMemoryContext = memoryContext.isNotBlank()
             val requestMessages = messages.takeLast(if (hasMemoryContext) 18 else 19).map { message ->
