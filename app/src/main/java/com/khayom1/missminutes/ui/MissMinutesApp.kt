@@ -1913,7 +1913,7 @@ private fun SettingsScreen(
                     enabled = deviceGrants[DeviceToolCapability.OPEN_APP_SETTINGS] == true,
                     onClick = { pendingDeviceCommand = DeviceToolCommand.OpenAppSettings }
                 ) {
-                    Text(if (language == AppLanguage.Tajik) "Танзимоти барнома" else if (language == AppLanguage.Russian) "Настройки приложения" else "App settings")
+                    Text(if (language == AppLanguage.Tajik) "Танзимоти система" else if (language == AppLanguage.Russian) "Системные настройки" else "System settings")
                 }
             }
             OutlinedTextField(
