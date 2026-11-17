@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: android-ci-${{ github.ref }}
@@ -18,7 +19,7 @@ jobs:
   build:
     name: Build, test and lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,21 +35,49 @@ jobs:
         with:
           packages: "platform-tools"
 
+      - name: Update Android SDK command-line tools
+        run: |
+          sdkmanager --install "cmdline-tools;latest"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_SDK_ROOT/emulator" >> "$GITHUB_PATH"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+          sdkmanager --version
+          sdkmanager --list --channel=3 | grep -E 'platforms;android-37|system-images;android-37|build-tools;37' || true
+
       - name: Install Android platform
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager --channel=3 --install "platforms;android-35" "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.13"
+          gradle-version: "9.5.0"
 
       - name: Verify Kotlin source formatting basics
         run: |
           test -f app/src/main/java/com/khayom1/missminutes/MainActivity.kt
           test ! -d app/src/main/assets/models
 
+      - name: Verify Android 17 platform security policy
+        run: bash scripts/verify-android-platform-policy.sh
+
       - name: Scan tracked working tree for secrets
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
+
+      - name: Resolve Gradle lockfiles for dependency vulnerability scanning
+        run: |
+          gradle --no-daemon -p app --write-locks dependencies --configuration debugRuntimeClasspath
+          gradle --no-daemon -p app --write-locks dependencies --configuration releaseRuntimeClasspath
+          gradle --no-daemon -p app --write-locks dependencies --configuration debugUnitTestRuntimeClasspath
+          gradle --no-daemon -p app --write-locks dependencies --configuration debugAndroidTestRuntimeClasspath
+          test -s app/gradle.lockfile
+
+      - name: Scan resolved Gradle dependencies with OSV
+        uses: google/osv-scanner-action/osv-scanner-action@v2.7.1
+        with:
+          scan-args: |-
+            --recursive
+            .
 
       - name: Run JVM tests, debug and release builds, and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
@@ -67,9 +96,59 @@ jobs:
 
       - name: Install pinned emulator packages
         run: |
-          sdkmanager --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "emulator" "platform-tools"
+          sdkmanager --channel=3 --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "platforms;android-37.0" "system-images;android-37.0;google_apis;x86_64" "emulator" "platform-tools"
 
-      - name: Run Android instrumentation tests (API 35)
+      - name: Run Android instrumentation tests (API 37.0)
+        run: |
+          set -euo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          export ANDROID_SDK_HOME="$HOME/.android"
+          mkdir -p "$ANDROID_AVD_HOME"
+          AVD_OUTPUT="$(printf 'no\n' | avdmanager create avd --force -n android17-api37 -k "system-images;android-37.0;google_apis;x86_64" -d "pixel_2" -p "$ANDROID_AVD_HOME/android17-api37.avd" 2>&1)" || {
+            printf '%s\n' "$AVD_OUTPUT"
+            avdmanager list avd
+            exit 1
+          }
+          printf '%s\n' "$AVD_OUTPUT"
+          if [ ! -s "$ANDROID_AVD_HOME/android17-api37.ini" ] || [ ! -s "$ANDROID_AVD_HOME/android17-api37.avd/config.ini" ]; then
+            echo "API 37 AVD was not created in ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >&2
+            find "$HOME/.android" -maxdepth 3 -type f -name '*.ini' -print || true
+            avdmanager list avd
+            exit 1
+          fi
+          # The default Pixel 2 data partition is too small for the current
+          # debug + instrumentation APK split. Give API 37 a clean 4 GiB userdata.
+          AVD_CONFIG="$ANDROID_AVD_HOME/android17-api37.avd/config.ini"
+          sed -i '/^disk.dataPartition.size=/d' "$AVD_CONFIG"
+          printf '\ndisk.dataPartition.size=4G\n' >> "$AVD_CONFIG"
+          grep -Fx 'disk.dataPartition.size=4G' "$AVD_CONFIG"
+          emulator -list-avds | grep -Fx "android17-api37"
+          emulator -avd android17-api37 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-snapshot-save -wipe-data &
+          EMULATOR_PID=$!
+          trap 'adb emu kill >/dev/null 2>&1 || kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
+          timeout 240 adb wait-for-device
+          for attempt in $(seq 1 90); do
+            BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+            if [ "$BOOTED" = "1" ]; then break; fi
+            sleep 5
+          done
+          if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; then
+            adb logcat -d | tail -200
+            exit 1
+          fi
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          DATA_AVAILABLE_KB="$(adb shell df -k /data | awk 'NR==2 {print $4}' | tr -d '\r')"
+          if [ -z "$DATA_AVAILABLE_KB" ] || [ "$DATA_AVAILABLE_KB" -lt 524288 ]; then
+            echo "API 37 emulator has less than 512 MiB available in /data." >&2
+            adb shell df -h /data
+            exit 1
+          fi
+          adb shell df -h /data
+          gradle --no-daemon connectedDebugAndroidTest
+
+      - name: Run Android instrumentation tests (API 35 compatibility)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           disable-linux-hw-accel: false
@@ -80,6 +159,46 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: gradle --no-daemon connectedDebugAndroidTest
+
+      - name: Verify APK package, version and signature metadata
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$ANDROID_SDK_ROOT/build-tools/37.0.0"
+          AAPT="$BUILD_TOOLS/aapt"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          unzip -tq "$DEBUG_APK"
+          unzip -tq "$RELEASE_APK"
+          DEBUG_BADGING="$("$AAPT" dump badging "$DEBUG_APK")"
+          RELEASE_BADGING="$("$AAPT" dump badging "$RELEASE_APK")"
+          printf '%s\n' "$DEBUG_BADGING" > app/build/release-evidence/debug-badging.txt
+          printf '%s\n' "$RELEASE_BADGING" > app/build/release-evidence/release-badging.txt
+          for BADGING in "$DEBUG_BADGING" "$RELEASE_BADGING"; do
+            printf '%s\n' "$BADGING" | grep -F "package: name='com.khayom1.missminutes'"
+            printf '%s\n' "$BADGING" | grep -F "sdkVersion:'26'"
+            printf '%s\n' "$BADGING" | grep -F "targetSdkVersion:'37'"
+          done
+          DEBUG_VERSION="$(printf '%s\n' "$DEBUG_BADGING" | sed -n "s/^package:.*versionCode='\\([^']*\\)'.*versionName='\\([^']*\\)'.*/\\1 \\2/p")"
+          RELEASE_VERSION="$(printf '%s\n' "$RELEASE_BADGING" | sed -n "s/^package:.*versionCode='\\([^']*\\)'.*versionName='\\([^']*\\)'.*/\\1 \\2/p")"
+          test -n "$DEBUG_VERSION"
+          test "$DEBUG_VERSION" = "$RELEASE_VERSION"
+          "$APKSIGNER" verify --verbose --print-certs "$DEBUG_APK" > app/build/release-evidence/debug-signature.txt 2>&1
+          if "$APKSIGNER" verify --verbose --print-certs "$RELEASE_APK" > app/build/release-evidence/release-signature.txt 2>&1; then
+            echo "Release APK is signed without an authorized owner-controlled release key." >&2
+            exit 1
+          fi
+          grep -Eqi "DOES NOT VERIFY|No signatures|not signed" app/build/release-evidence/release-signature.txt
+          {
+            echo "applicationId=com.khayom1.missminutes"
+            echo "version=$DEBUG_VERSION"
+            echo "minSdk=26"
+            echo "targetSdk=37"
+            echo "debugSignature=verified; see debug-signature.txt"
+            echo "releaseSignature=unsigned; owner-controlled release signing is required"
+          } > app/build/release-evidence/apk-metadata.txt
 
       - name: Generate APK checksums
         run: |
