@@ -42,7 +42,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -481,7 +480,7 @@ fun MissMinutesApp(
     var apiKeySaving by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
     var apiKeyMessage by remember { mutableStateOf<String?>(null) }
-    val messages = remember { mutableStateListOf<ChatMessage>() }
+    var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var currentOwnerId by remember { mutableStateOf<String?>(null) }
     var activeConversationId by remember { mutableStateOf<String?>(null) }
     var conversationSummaries by remember { mutableStateOf<List<ConversationSummary>>(emptyList()) }
@@ -513,14 +512,11 @@ fun MissMinutesApp(
         currentOwnerId = ownerId
         activeConversationId = snapshot.first
         conversationSummaries = snapshot.second
-        messages.clear()
-        snapshot.third.first.forEach { item ->
-            messages.add(
-                ChatMessage(
-                    id = item.id,
-                    text = item.content,
-                    isUser = item.role == LocalConversationStore.ROLE_USER
-                )
+        messages = snapshot.third.first.map { item ->
+            ChatMessage(
+                id = item.id,
+                text = item.content,
+                isUser = item.role == LocalConversationStore.ROLE_USER
             )
         }
         memoryItems = snapshot.third.second
@@ -653,7 +649,7 @@ fun MissMinutesApp(
             userEmail = ""
             authEmail = ""
             authPassword = ""
-            messages.clear()
+            messages = emptyList()
             currentOwnerId = null
             activeConversationId = null
             conversationSummaries = emptyList()
@@ -798,7 +794,7 @@ fun MissMinutesApp(
                         }
                         if (requestGeneration != sessionGeneration) return@launch
                         if (activeConversationId == conversationId) {
-                            messages.add(ChatMessage(userMessageId, value, true))
+                            messages = messages + ChatMessage(userMessageId, value, true)
                         }
                         conversationSummaries = withContext(Dispatchers.IO) {
                             conversationStore.listConversations(ownerId)
@@ -816,7 +812,7 @@ fun MissMinutesApp(
                         }
                         if (requestGeneration != sessionGeneration) return@launch
                         if (activeConversationId == conversationId) {
-                            messages.add(ChatMessage(assistantMessageId, completion.content, false))
+                            messages = messages + ChatMessage(assistantMessageId, completion.content, false)
                             aiHasResponded = true
                         }
                         conversationSummaries = withContext(Dispatchers.IO) {
@@ -831,7 +827,7 @@ fun MissMinutesApp(
                         userEmail = ""
                         authEmail = ""
                         authPassword = ""
-                        messages.clear()
+                        messages = emptyList()
                         currentOwnerId = null
                         activeConversationId = null
                         conversationSummaries = emptyList()
@@ -946,7 +942,7 @@ fun MissMinutesApp(
                 withContext(Dispatchers.IO) { conversationStore.deleteAll(owner) }
                 confirmDeleteAll = false
                 activeConversationId = null
-                messages.clear()
+                messages = emptyList()
                 conversationSummaries = emptyList()
                 memoryItems = emptyList()
                 memoryDraft = ""
