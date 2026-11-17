@@ -402,7 +402,7 @@ fun MissMinutesApp(
     val context = LocalContext.current
     val appSettingsStore = remember(context) { AndroidAppSettingsStore(context) }
     var selectedLanguageName by remember(context) {
-        mutableStateOf(appSettingsStore.loadAppearance().language)
+        mutableStateOf(when (appSettingsStore.loadAppearance().language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name })
     }
     val language = AppLanguage.valueOf(selectedLanguageName)
     val deviceAuthorization = remember(context) { SharedPreferencesDeviceToolAuthorization(context) }
@@ -703,7 +703,7 @@ fun MissMinutesApp(
                         } else null
                         val settings = if (BackupArchive.Category.APP_SETTINGS in selected) {
                             SettingsBackupAdapter.Settings(
-                                language = language.name,
+                                language = when (language) { AppLanguage.English -> "en"; AppLanguage.Russian -> "ru"; AppLanguage.Tajik -> "tg" },
                                 darkMode = darkTheme,
                                 retentionDays = conversationStore.getRetentionDays(owner),
                                 memoryContextEnabled = conversationStore.isMemoryContextEnabled(owner)
@@ -813,7 +813,7 @@ fun MissMinutesApp(
                         }
                     }
                     incoming.settings?.let { settings ->
-                        selectedLanguageName = settings.language
+                        selectedLanguageName = when (settings.language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name }
                         darkTheme = settings.darkMode
                     }
                     if (AndroidDeviceStatusPlugin.PLUGIN_ID in incomingPluginIds) {
@@ -1503,11 +1503,11 @@ fun MissMinutesApp(
                                 onDisableWakeListening = disableWakeListening,
                                 onLanguageChange = {
                                     selectedLanguageName = it.name
-                                    appSettingsStore.saveAppearance(it.name, darkTheme)
+                                    appSettingsStore.saveAppearance(when (it) { AppLanguage.English -> "en"; AppLanguage.Russian -> "ru"; AppLanguage.Tajik -> "tg" }, darkTheme)
                                 },
                                 onDarkThemeChange = {
                                     darkTheme = it
-                                    appSettingsStore.saveAppearance(language.name, it)
+                                    appSettingsStore.saveAppearance(when (language) { AppLanguage.English -> "en"; AppLanguage.Russian -> "ru"; AppLanguage.Tajik -> "tg" }, it)
                                 },
                                 memoryItems = memoryItems,
                                 memoryDraft = memoryDraft,
