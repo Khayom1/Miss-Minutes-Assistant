@@ -43,5 +43,13 @@ class SettingsBackupAdapterTest {
             put("memoryContextEnabled", false)
         }
         assertThrows(IllegalArgumentException::class.java) { SettingsBackupAdapter.decode(payload) }
+        val stringBoolean = buildJsonObject {
+            put("schemaVersion", 1)
+            put("language", "en")
+            put("darkMode", "true")
+            put("retentionDays", 30)
+            put("memoryContextEnabled", false)
+        }
+        assertThrows(IllegalArgumentException::class.java) { SettingsBackupAdapter.decode(stringBoolean) }
     }
 }
