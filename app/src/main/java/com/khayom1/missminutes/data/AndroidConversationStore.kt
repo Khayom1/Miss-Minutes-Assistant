@@ -231,7 +231,7 @@ class AndroidConversationStore(
             put(COL_OWNER, ownerId)
             put(COL_MEMORY_KEY, encrypt(normalizedKey, aad(ownerId, id, MEMORY_KEY_FIELD)))
             put(COL_MEMORY_VALUE, encrypt(value.trim(), aad(ownerId, id, MEMORY_VALUE_FIELD)))
-            if (existingId == null) put(COL_CREATED, now)
+            put(COL_CREATED, now)
             put(COL_UPDATED, now)
         }
         db.insertWithOnConflict(TABLE_MEMORIES, null, values, SQLiteDatabase.CONFLICT_REPLACE)
