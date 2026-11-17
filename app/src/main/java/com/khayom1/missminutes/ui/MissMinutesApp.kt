@@ -1629,7 +1629,7 @@ fun MissMinutesApp(
                                     it.id != AndroidDeviceStatusPlugin.PLUGIN_ID
                                 },
                                 pluginConsentStates = pluginConsentSnapshot,
-                                onPluginConsentChange = { pluginId, granted ->
+                                onDeclarativePluginConsentChange = { pluginId, granted ->
                                     pluginConsentStore.setGranted(pluginId, granted)
                                     pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to granted)
                                 },
@@ -2121,7 +2121,7 @@ private fun SettingsScreen(
     backupBusy: Boolean,
     pluginManifests: List<com.khayom1.missminutes.plugins.PluginManifest>,
     pluginConsentStates: Map<String, Boolean>,
-    onPluginConsentChange: (String, Boolean) -> Unit,
+    onDeclarativePluginConsentChange: (String, Boolean) -> Unit,
     onExportPlugin: (String) -> Unit,
     onCreateBackup: () -> Unit,
     onChooseBackup: () -> Unit,
@@ -2676,7 +2676,7 @@ private fun SettingsScreen(
             busy = backupBusy,
             pluginManifests = pluginManifests,
             pluginConsentStates = pluginConsentStates,
-            onPluginConsentChange = onPluginConsentChange,
+            onPluginConsentChange = onDeclarativePluginConsentChange,
             onExportPlugin = onExportPlugin,
             onCreateBackup = onCreateBackup,
             onChooseBackup = onChooseBackup,
