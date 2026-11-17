@@ -2,7 +2,7 @@
 
 ## Request path
 
-Android client → Supabase Edge Function `miss-minutes-ai` → Supabase Auth verification → server-only quota RPC → DeepSeek Chat Completions.
+Android client → Android direct DeepSeek provider `miss-minutes-ai` → Supabase Auth verification → server-only quota RPC → DeepSeek Chat Completions.
 
 The Android application must never call `api.deepseek.com` directly.
 
@@ -20,7 +20,7 @@ The Android application must never call `api.deepseek.com` directly.
 - Prefer the platform-injected `SUPABASE_SECRET_KEYS.default` value when available.
 - A modern `sb_secret_...` key is not a JWT: it is sent only in the `apikey` header and must never be placed in `Authorization: Bearer`.
 - The legacy `SUPABASE_SERVICE_ROLE_KEY` fallback is a JWT and is sent as both `apikey` and `Authorization: Bearer`.
-- These privileged credentials remain server-side. They are never embedded in Android source/BuildConfig or returned to the client.
+- These privileged credentials remain device-side. They are never embedded in Android source/BuildConfig or returned to the client.
 - The quota RPC is called only after authentication and provider configuration checks.
 
 ## DeepSeek provider secret
