@@ -72,11 +72,11 @@ object PluginManifestArchive {
                         minimum = field.optionalLong("minimum"),
                         maximum = field.optionalLong("maximum"),
                         allowedValues = allowed
-                    ).also {
-                        require(key == it.name)
-                        require(it.maxLength in 1..2_000)
-                        require(it.minimum == null || it.maximum == null || it.minimum <= it.maximum)
-                        require(it.allowedValues.all { value -> value.length <= it.maxLength })
+                    ).also { spec ->
+                        require(key == spec.name)
+                        require(spec.maxLength in 1..2_000)
+                        require(spec.minimum == null || spec.maximum == null || spec.minimum <= spec.maximum)
+                        require(spec.allowedValues.all { value -> value.length <= spec.maxLength })
                     }
                 }
                 PluginActionSpec(
