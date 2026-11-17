@@ -569,6 +569,12 @@ fun MissMinutesApp(
         }
         savedConversations.clear()
         savedConversations.addAll(restored.first)
+        if (!ownerChanged && activeConversationId != null &&
+            savedConversations.none { it.id == activeConversationId }
+        ) {
+            activeConversationId = null
+            messages.clear()
+        }
         savedMemories.clear()
         savedMemories.addAll(restored.third)
         if (ownerChanged) {
