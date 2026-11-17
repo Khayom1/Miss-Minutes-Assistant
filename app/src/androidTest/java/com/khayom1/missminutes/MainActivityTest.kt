@@ -260,7 +260,11 @@ class MainActivityTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("Check the authenticated chat").performScrollTo().assertIsDisplayed()
+        val ownerId = "test-user-${"user@example.test".hashCode()}"
+        val savedConversation = conversationStore.listConversations(ownerId).single()
+        val savedMessages = conversationStore.getMessages(ownerId, savedConversation.id)
+        assertTrue(savedMessages.any { it.role == LocalConversationStore.ROLE_USER && it.content == "Check the authenticated chat" })
+        assertTrue(savedMessages.any { it.role == LocalConversationStore.ROLE_ASSISTANT && it.content == "Mock AI response" })
         composeRule.onNodeWithText("Mock AI response").performScrollTo().assertIsDisplayed()
         assertEquals(
             AiMessage(
@@ -506,7 +510,7 @@ class MainActivityTest {
         composeRule.onNodeWithText("Язык").assertIsDisplayed()
 
         composeRule.onNodeWithText("Тоҷикӣ").performClick()
-        composeRule.onNodeWithText("Танзимоти барнома").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Танзимоти барнома").get(0).assertIsDisplayed()
         composeRule.onNodeWithText("Забон").assertIsDisplayed()
     }
 
