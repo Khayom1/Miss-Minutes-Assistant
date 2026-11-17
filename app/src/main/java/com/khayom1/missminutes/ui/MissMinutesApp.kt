@@ -901,6 +901,10 @@ fun MissMinutesApp(
                         conversationSummaries = withContext(Dispatchers.IO) {
                             conversationStore.listConversations(ownerId)
                         }
+                    } catch (_: AiProviderException.MissingApiKey) {
+                        if (requestGeneration == sessionGeneration) {
+                            chatError = copy.apiKeyRequired
+                        }
                     } catch (_: AiProviderException.AuthenticationRequired) {
                         if (requestGeneration != sessionGeneration) return@launch
                         if (isGuestSession) {
