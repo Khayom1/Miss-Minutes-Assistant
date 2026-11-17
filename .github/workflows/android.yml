@@ -64,6 +64,21 @@ jobs:
       - name: Scan tracked working tree for secrets
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
 
+      - name: Resolve Gradle lockfiles for dependency vulnerability scanning
+        run: |
+          gradle --no-daemon -p app --write-locks dependencies --configuration debugRuntimeClasspath
+          gradle --no-daemon -p app --write-locks dependencies --configuration releaseRuntimeClasspath
+          gradle --no-daemon -p app --write-locks dependencies --configuration debugUnitTestRuntimeClasspath
+          gradle --no-daemon -p app --write-locks dependencies --configuration debugAndroidTestRuntimeClasspath
+          test -s app/gradle.lockfile
+
+      - name: Scan resolved Gradle dependencies with OSV
+        uses: google/osv-scanner-action/osv-scanner-action@v2.7.1
+        with:
+          scan-args: |-
+            --recursive
+            .
+
       - name: Run JVM tests, debug and release builds, and lint
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
 
@@ -186,17 +201,3 @@ jobs:
             app/build/release-evidence/
           if-no-files-found: error
           retention-days: 14
-
-  dependency-review:
-    name: Dependency vulnerability review
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - name: Review dependency changes against known advisories
-        uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high
-          comment-summary-in-pr: false
