@@ -18,7 +18,7 @@ jobs:
   build:
     name: Build, test and lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,17 +35,20 @@ jobs:
           packages: "platform-tools"
 
       - name: Install Android platform
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager "platforms;android-35" "platforms;android-37" "build-tools;37.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.13"
+          gradle-version: "9.5.0"
 
       - name: Verify Kotlin source formatting basics
         run: |
           test -f app/src/main/java/com/khayom1/missminutes/MainActivity.kt
           test ! -d app/src/main/assets/models
+
+      - name: Verify Android 17 platform security policy
+        run: bash scripts/verify-android-platform-policy.sh
 
       - name: Scan tracked working tree for secrets
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
@@ -67,9 +70,21 @@ jobs:
 
       - name: Install pinned emulator packages
         run: |
-          sdkmanager --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "emulator" "platform-tools"
+          sdkmanager --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "platforms;android-37" "system-images;android-37;google_apis;x86_64" "emulator" "platform-tools"
 
-      - name: Run Android instrumentation tests (API 35)
+      - name: Run Android instrumentation tests (API 37)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          disable-linux-hw-accel: false
+          api-level: 37
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: gradle --no-daemon connectedDebugAndroidTest
+
+      - name: Run Android instrumentation tests (API 35 compatibility)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           disable-linux-hw-accel: false
