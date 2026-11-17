@@ -322,6 +322,7 @@ fun MissMinutesApp(
     ttsProvider: TtsProvider
 ) {
     val scope = rememberCoroutineScope()
+    val language = AppLanguage.valueOf(selectedLanguageName)
     val context = LocalContext.current
     var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
     var wakeMessage by remember { mutableStateOf<String?>(null) }
@@ -419,7 +420,6 @@ fun MissMinutesApp(
     var voiceError by remember { mutableStateOf<String?>(null) }
     var nextMessageId by remember { mutableStateOf(0L) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
-    val language = AppLanguage.valueOf(selectedLanguageName)
     val copy = copyFor(language)
 
     LaunchedEffect(sessionManager) {
