@@ -2097,11 +2097,26 @@ private fun SettingsScreen(
                 )
             }
         }
-        AgentTaskPanel(
-            orchestrator = agentOrchestrator,
-            language = language,
-            enabled = agentTaskEnabled
-        )
+        var showAgentTaskPanel by remember { mutableStateOf(false) }
+        OutlinedButton(
+            onClick = { showAgentTaskPanel = !showAgentTaskPanel },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> if (showAgentTaskPanel) "Пӯшидани вазифаҳои AI" else "Вазифаҳои AI"
+                    AppLanguage.Russian -> if (showAgentTaskPanel) "Скрыть задачи ИИ" else "Задачи ИИ"
+                    AppLanguage.English -> if (showAgentTaskPanel) "Hide AI tasks" else "AI tasks"
+                }
+            )
+        }
+        if (showAgentTaskPanel) {
+            AgentTaskPanel(
+                orchestrator = agentOrchestrator,
+                language = language,
+                enabled = agentTaskEnabled
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 when (language) {
