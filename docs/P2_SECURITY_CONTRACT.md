@@ -1,49 +1,32 @@
-# P2 AI Provider — Security Contract
+# P2 Security Contract — User-Owned BYOK
 
-## Request path
+## Data flow
 
-Android Settings → user enters their DeepSeek API key → Android Keystore encrypts it → Android app sends an HTTPS request directly to DeepSeek Chat Completions.
+Android Settings → user enters a personal DeepSeek API key → Android Keystore-backed encryption protects it at rest → the app sends an HTTPS request directly to https://api.deepseek.com/chat/completions.
 
-The Android client calls only `https://api.deepseek.com/chat/completions` for DeepSeek inference. The AI request does not pass through Supabase Edge Functions and does not send Supabase credentials to DeepSeek.
+There is no Supabase account, provider proxy, application backend, or shared provider key.
 
-## User-owned API key
+## Credential controls
 
-- The user enters the personal DeepSeek API key in the app's Settings screen.
-- The input is masked and the app does not put the key in Compose saved state, navigation arguments, logs, analytics, crash messages or network diagnostics.
-- The key is encrypted using AES-256-GCM with a non-exportable Android Keystore key.
-- SharedPreferences contain ciphertext and the IV only, never plaintext.
-- The user can replace or remove the key from Settings.
-- The key is decrypted only when a request is about to be sent, on an IO dispatcher.
-- The key is transmitted only as `Authorization: Bearer ...` over HTTPS to the official DeepSeek API endpoint.
-- The key is never embedded in BuildConfig, resources, APK constants, source control, GitHub Actions secrets, Supabase secrets or Supabase database rows.
-- Android Keystore encryption protects the stored key at rest; the plaintext necessarily exists briefly in the app process when building the HTTPS Authorization header. A rooted/compromised device or runtime instrumentation may capture it. This is a user-owned BYOK trade-off, not a safe place for a shared developer key. Users must be able to revoke the key in their DeepSeek account.
-- A distributed APK cannot safely contain a shared developer API key. Each user must supply their own credential.
+- The key is entered by the user and stored only in app-private encrypted storage protected by Android Keystore.
+- The plaintext key exists briefly in process memory while the HTTPS Authorization header is constructed.
+- The key is sent only to the official DeepSeek HTTPS endpoint.
+- The key is never embedded in BuildConfig, resources, source control, CI secrets, backup archives, chat history, or diagnostic logs.
+- The user can replace or clear the key in Settings and revoke it in their DeepSeek account.
+- Invalid-key and rate-limit responses are mapped to typed errors without exposing the key.
 
-## Supabase account session
+## Offline behavior
 
-- Existing Supabase email/password sign-in and encrypted session persistence remain a separate account feature in this increment.
-- Supabase session tokens continue to be encrypted with AES-256-GCM using a non-exportable Android Keystore key.
-- Supabase JWTs and publishable keys are not sent to DeepSeek.
-- Supabase authentication is not used as a proxy for DeepSeek inference.
+- Missing key means remote inference is unavailable; there is no hidden server fallback.
+- Local inference is available only when a supported runtime and model are installed.
+- If the local runtime is absent, the app reports unavailable instead of generating a fake local response.
+- Android TTS and local conversation/memory storage remain usable without network access.
 
-## Input and output controls
+## Tool-call boundary
 
-- Maximum 20 user/assistant messages; maximum 8,000 characters per message and 16,000 combined.
-- Output is limited by the existing client request contract to at most 768 tokens.
-- Requests use HTTPS and bounded connect/read/call timeouts.
-- HTTP 401/403 maps to an invalid-key error without signing the user out of Supabase.
-- HTTP 429 maps to a rate-limit error; upstream 5xx maps to a sanitized unavailable error.
-- Provider response parsing is bounded and malformed responses fail closed.
-- API keys and provider error bodies are never returned to the UI or logged.
-
-## Supabase Edge Function status
-
-The older `miss-minutes-ai` function and its server-side DeepSeek secret are no longer part of the Android AI request path. They may remain deployed during migration but are not invoked by the app. They can be retired separately after verifying no other client depends on them.
-
-## Acceptance
-
-- Unit tests verify direct endpoint, key header, missing-key behavior, invalid-key behavior, rate limits and malformed responses.
-- Android instrumentation verifies the key round-trips through Keystore encryption and that the persisted preference does not contain plaintext.
-- Gitleaks, JVM tests, APK build, lint, API 35 instrumentation and artifact upload must pass on the exact final branch head.
-- A real request with a valid user-supplied key is required before claiming live DeepSeek acceptance.
-- Physical Samsung Galaxy A35 5G / Android 17 testing is reported only after an actual device test.
+- The model receives schemas only for locally connected plugins.
+- A tool name must match the current connected catalog and a compiled handler.
+- Arguments are strict JSON primitives validated against the local schema.
+- Permission and credential state is checked at execution time.
+- Consequential writes are blocked unless the user explicitly confirms.
+- No GitHub repository mutation is supported until a real authorized GitHub handler exists and passes tests.
