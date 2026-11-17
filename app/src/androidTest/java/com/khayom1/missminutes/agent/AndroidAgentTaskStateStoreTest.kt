@@ -55,6 +55,7 @@ class AndroidAgentTaskStateStoreTest {
         val restored = store.load("persisted_task")
         assertNotNull(restored)
         assertEquals(state, restored)
+        assertEquals(listOf(state), store.all())
         val ciphertext = context.getSharedPreferences("miss_minutes_agent_tasks", Context.MODE_PRIVATE)
             .getString("encrypted_task_graphs_v1", null)
         assertNotNull(ciphertext)
