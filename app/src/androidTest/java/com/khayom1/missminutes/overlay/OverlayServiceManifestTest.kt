@@ -38,6 +38,13 @@ class OverlayServiceManifestTest {
     }
 
     @Test
+    fun overlayServiceRejectsImplicitRestartAndUsesNonStickyLifecycle() {
+        assertFalse(OverlayServicePolicy.shouldStart(null))
+        assertFalse(OverlayServicePolicy.shouldStart(MissMinutesOverlayService.ACTION_STOP))
+        assertEquals(android.app.Service.START_NOT_STICKY, OverlayServicePolicy.RESTART_POLICY)
+    }
+
+    @Test
     fun overlayServiceExposesOnlyExplicitStartAndStopActions() {
         assertEquals(
             "com.khayom1.missminutes.overlay.START",
