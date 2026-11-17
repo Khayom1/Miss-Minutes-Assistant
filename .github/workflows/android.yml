@@ -55,8 +55,10 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Run Supabase AI gateway unit tests
-        run: deno test supabase/functions/miss-minutes-ai/index_test.ts
+      - name: Run Supabase Edge Function unit tests
+        run: |
+          deno test supabase/functions/miss-minutes-ai/index_test.ts
+          deno test supabase/functions/miss-minutes-tts/index_test.ts
 
       # DeepSeek inference now calls the official provider directly from Android.
       # No live Supabase AI gateway is required by the Android client.
