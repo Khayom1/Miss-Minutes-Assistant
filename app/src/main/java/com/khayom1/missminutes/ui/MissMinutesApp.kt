@@ -90,6 +90,7 @@ import com.khayom1.missminutes.device.FileDeviceToolAuditLog
 import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
+import com.khayom1.missminutes.plugins.AndroidPluginAccessChecker
 import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.FilePluginAuditLog
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
@@ -419,7 +420,8 @@ fun MissMinutesApp(
         PluginRegistry(
             handlers = AndroidDeviceStatusPlugin.handlers(deviceToolEngine),
             consentStore = pluginConsentStore,
-            auditLog = FilePluginAuditLog(context)
+            auditLog = FilePluginAuditLog(context),
+            accessChecker = AndroidPluginAccessChecker(context)
         ).apply {
             install(AndroidDeviceStatusPlugin.manifest())
             pluginManifestStore.load().forEach { manifest -> runCatching { install(manifest) } }
@@ -1570,8 +1572,9 @@ fun MissMinutesApp(
                                 deviceGrants = deviceGrants,
                                 pluginConsent = androidPluginConsent,
                                 onPluginConsentChange = { granted ->
-                                    pluginConsentStore.setGranted(AndroidDeviceStatusPlugin.PLUGIN_ID, granted)
-                                    androidPluginConsent = granted
+                                    val updated = if (granted) pluginRegistry.connect(AndroidDeviceStatusPlugin.PLUGIN_ID)
+                                    else pluginRegistry.revokeConsent(AndroidDeviceStatusPlugin.PLUGIN_ID)
+                                    if (updated) androidPluginConsent = pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID)
                                 },
                                 onRunPluginAction = { actionId ->
                                     pluginRegistry.execute(
@@ -1630,8 +1633,8 @@ fun MissMinutesApp(
                                 },
                                 pluginConsentStates = pluginConsentSnapshot,
                                 onDeclarativePluginConsentChange = { pluginId, granted ->
-                                    pluginConsentStore.setGranted(pluginId, granted)
-                                    pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to granted)
+                                    val updated = if (granted) pluginRegistry.connect(pluginId) else pluginRegistry.revokeConsent(pluginId)
+                                    if (updated) pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to pluginConsentStore.isGranted(pluginId))
                                 },
                                 onExportPlugin = exportSelectedPlugin,
                                 onCreateBackup = createEncryptedBackup,
