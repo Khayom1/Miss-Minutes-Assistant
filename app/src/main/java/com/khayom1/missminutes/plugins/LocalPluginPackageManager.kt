@@ -60,29 +60,28 @@ class LocalPluginPackageManager(
         val installed = mutableListOf<PluginManifest>()
         val rejected = mutableListOf<String>()
 
-        for (manifest in manifests) {
-            if (manifest.id in existingIds) {
-                rejected += manifest.id
-                continue
-            }
-            try {
+        try {
+            for (manifest in manifests) {
+                if (manifest.id in existingIds) {
+                    rejected += manifest.id
+                    continue
+                }
                 consentStore.setGranted(manifest.id, false)
-                if (registry.install(manifest)) {
-                    installed += manifest
-                } else {
+                try {
+                    if (registry.install(manifest)) {
+                        installed += manifest
+                    } else {
+                        rejected += manifest.id
+                    }
+                } catch (_: IllegalArgumentException) {
                     rejected += manifest.id
                 }
-            } catch (_: IllegalArgumentException) {
-                rejected += manifest.id
             }
-        }
-
-        try {
             persistence.replace(registry.installedPlugins())
         } catch (error: Exception) {
             installed.forEach { registry.uninstall(it.id) }
             runCatching { persistence.replace(previous) }
-            throw IllegalStateException("Plugin package import could not be saved; imported plugins were rolled back.", error)
+            throw IllegalStateException("Plugin package import failed; newly installed plugins were rolled back.", error)
         }
 
         return PluginPackageImportReport(
