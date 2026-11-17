@@ -309,7 +309,6 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
 fun MissMinutesApp(
     sessionManager: SessionManager,
     aiProvider: AiProvider,
-    ttsProvider: TtsProvider,
     ttsProvider: TtsProvider
 ) {
     val scope = rememberCoroutineScope()
