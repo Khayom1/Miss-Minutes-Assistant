@@ -165,7 +165,7 @@ class AgentOrchestrator(
         require(planNode.action.approvalRequired) { "This action does not require approval." }
         val node = current.nodes.getValue(nodeId)
         require(node.status == AgentNodeStatus.WAITING_APPROVAL) { "Node is not waiting for approval." }
-        val nodes = current.nodes + (nodeId to node.copy(status = AgentNodeStatus.PENDING, message = "Approved by user."))
+        val nodes = current.nodes + (nodeId to node.copy(status = AgentNodeStatus.PENDING, message = "Approved by user.", approved = true))
         current.copy(nodes = nodes, status = AgentTaskStatus.READY)
     }
 
@@ -240,7 +240,7 @@ class AgentOrchestrator(
             return AgentAdvanceResult.Finished(current)
         }
 
-        if (pending.action.approvalRequired) {
+        val pendingState = current.nodes.getValue(pending.id)\n        if (pending.action.approvalRequired && !pendingState.approved) {
             val nodes = current.nodes + (pending.id to current.nodes.getValue(pending.id)
                 .copy(status = AgentNodeStatus.WAITING_APPROVAL, message = "User approval required."))
             current = current.copy(nodes = nodes, status = AgentTaskStatus.WAITING_APPROVAL, updatedAtMillis = now)
@@ -254,7 +254,7 @@ class AgentOrchestrator(
         store.save(current)
 
         val result = try {
-            executor.execute(pending.action.request, running.getValue(pending.id).idempotencyKey)
+            executor.execute(\n                pending.action.request.copy(userConfirmed = pendingState.approved || pending.action.request.userConfirmed),\n                running.getValue(pending.id).idempotencyKey\n            )
         } catch (_: Exception) {
             PluginExecutionResult(false, "Action failed safely.", pending.action.requestCapability())
         }
