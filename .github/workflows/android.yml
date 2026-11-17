@@ -119,11 +119,90 @@ jobs:
           # The default Pixel 2 data partition is too small for the current
           # debug + instrumentation APK split. Give API 37 a clean 4 GiB userdata.
           AVD_CONFIG="$ANDROID_AVD_HOME/android17-api37.avd/config.ini"
-          sed -i '/^disk.dataPartition.size=/d' "$AVD_CONFIG"
-          printf '\ndisk.dataPartition.size=4G\n' >> "$AVD_CONFIG"
-          grep -Fx 'disk.dataPartition.size=4G' "$AVD_CONFIG"
+          sed -i '/^disk.dataPartition.size=/d; /^hw.ramSize=/d; /^vm.heapSize=/d; /^hw.cpu.ncore=/d' "$AVD_CONFIG"
+          printf '\ndisk.dataPartition.size=4G\nhw.ramSize=3072\nvm.heapSize=512\nhw.cpu.ncore=4\n' >> "$AVD_CONFIG"
+          grep -E '^(disk.dataPartition.size=4G|hw.ramSize=3072|vm.heapSize=512|hw.cpu.ncore=4)
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          DATA_AVAILABLE_KB="$(adb shell df -k /data | awk 'NR==2 {print $4}' | tr -d '\r')"
+          if [ -z "$DATA_AVAILABLE_KB" ] || [ "$DATA_AVAILABLE_KB" -lt 524288 ]; then
+            echo "API 37 emulator has less than 512 MiB available in /data." >&2
+            adb shell df -h /data
+            exit 1
+          fi
+          adb shell df -h /data
+          gradle --no-daemon connectedDebugAndroidTest
+
+      - name: Run Android instrumentation tests (API 35 compatibility)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          disable-linux-hw-accel: false
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: gradle --no-daemon connectedDebugAndroidTest
+
+      - name: Verify APK package, version and signature metadata
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$ANDROID_SDK_ROOT/build-tools/37.0.0"
+          AAPT="$BUILD_TOOLS/aapt"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          unzip -tq "$DEBUG_APK"
+          unzip -tq "$RELEASE_APK"
+          DEBUG_BADGING="$("$AAPT" dump badging "$DEBUG_APK")"
+          RELEASE_BADGING="$("$AAPT" dump badging "$RELEASE_APK")"
+          printf '%s\n' "$DEBUG_BADGING" > app/build/release-evidence/debug-badging.txt
+          printf '%s\n' "$RELEASE_BADGING" > app/build/release-evidence/release-badging.txt
+          for BADGING in "$DEBUG_BADGING" "$RELEASE_BADGING"; do
+            printf '%s\n' "$BADGING" | grep -F "package: name='com.khayom1.missminutes'"
+            printf '%s\n' "$BADGING" | grep -F "sdkVersion:'26'"
+            printf '%s\n' "$BADGING" | grep -F "targetSdkVersion:'37'"
+          done
+          DEBUG_VERSION="$(printf '%s\n' "$DEBUG_BADGING" | sed -n "s/^package:.*versionCode='\\([^']*\\)'.*versionName='\\([^']*\\)'.*/\\1 \\2/p")"
+          RELEASE_VERSION="$(printf '%s\n' "$RELEASE_BADGING" | sed -n "s/^package:.*versionCode='\\([^']*\\)'.*versionName='\\([^']*\\)'.*/\\1 \\2/p")"
+          test -n "$DEBUG_VERSION"
+          test "$DEBUG_VERSION" = "$RELEASE_VERSION"
+          "$APKSIGNER" verify --verbose --print-certs "$DEBUG_APK" > app/build/release-evidence/debug-signature.txt 2>&1
+          if "$APKSIGNER" verify --verbose --print-certs "$RELEASE_APK" > app/build/release-evidence/release-signature.txt 2>&1; then
+            echo "Release APK is signed without an authorized owner-controlled release key." >&2
+            exit 1
+          fi
+          grep -Eqi "DOES NOT VERIFY|No signatures|not signed" app/build/release-evidence/release-signature.txt
+          {
+            echo "applicationId=com.khayom1.missminutes"
+            echo "version=$DEBUG_VERSION"
+            echo "minSdk=26"
+            echo "targetSdk=37"
+            echo "debugSignature=verified; see debug-signature.txt"
+            echo "releaseSignature=unsigned; owner-controlled release signing is required"
+          } > app/build/release-evidence/apk-metadata.txt
+
+      - name: Generate APK checksums
+        run: |
+          sha256sum app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk > app/build/release-evidence/SHA256SUMS.txt
+
+      - name: Upload release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: miss-minutes-p8-release-candidates
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/release-evidence/
+          if-no-files-found: error
+          retention-days: 14
+ "$AVD_CONFIG"
           emulator -list-avds | grep -Fx "android17-api37"
-          emulator -avd android17-api37 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-snapshot-save -wipe-data &
+          EMULATOR_LOG="$RUNNER_TEMP/android17-api37-emulator.log"
+          emulator -avd android17-api37 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-snapshot-save -wipe-data > "$EMULATOR_LOG" 2>&1 &
           EMULATOR_PID=$!
           trap 'adb emu kill >/dev/null 2>&1 || kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
           timeout 240 adb wait-for-device
@@ -133,9 +212,32 @@ jobs:
             sleep 5
           done
           if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; then
-            adb logcat -d | tail -200
+            echo "API 37 emulator did not finish Android boot." >&2
+            adb logcat -b all -d | tail -200 || true
+            tail -200 "$EMULATOR_LOG" || true
             exit 1
           fi
+          # sys.boot_completed can be set before system_server has published all
+          # framework services. Do not let instrumentation try to install APKs
+          # until PackageManager and ActivityManager respond to real commands.
+          SERVICES_READY=0
+          for attempt in $(seq 1 60); do
+            if adb shell cmd package list packages 2>/dev/null | grep -q '^package:' &&
+               adb shell cmd activity get-current-user >/dev/null 2>&1; then
+              SERVICES_READY=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$SERVICES_READY" != "1" ]; then
+            echo "API 37 boot property was set, but PackageManager/ActivityManager never became ready." >&2
+            adb shell service list || true
+            adb shell getprop | grep -E 'sys.boot_completed|init.svc.system_server|ro.build.version.sdk' || true
+            adb logcat -b all -d | grep -Ei 'system_server|PackageManager|FATAL EXCEPTION|OutOfMemory|Watchdog' | tail -200 || adb logcat -b all -d | tail -200
+            tail -200 "$EMULATOR_LOG" || true
+            exit 1
+          fi
+          adb shell cmd package list packages | head -5
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
