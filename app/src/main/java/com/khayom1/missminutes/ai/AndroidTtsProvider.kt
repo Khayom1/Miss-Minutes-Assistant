@@ -26,13 +26,18 @@ internal fun selectBestOfflineTtsVoice(
 /** On-device speech synthesis. No network, API key, account session or audio upload. */
 interface TtsProvider {
     fun speak(text: String, onDone: () -> Unit, onError: () -> Unit)
+
+    /** Uses the requested app language; implementations must not silently switch languages. */
+    fun speak(text: String, locale: Locale, onDone: () -> Unit, onError: () -> Unit) =
+        speak(text, onDone, onError)
+
     fun stop()
     fun close()
 }
 
 class AndroidTtsProvider(
     context: Context,
-    private val locale: Locale = Locale.getDefault()
+    private val defaultLocale: Locale = Locale.getDefault()
 ) : TtsProvider {
     private val appContext = context.applicationContext
     @Volatile private var engine: TextToSpeech? = null
@@ -57,25 +62,12 @@ class AndroidTtsProvider(
                     requiresNetwork = voice.isNetworkConnectionRequired
                 )
             }
-            val selectedCandidate = selectBestOfflineTtsVoice(candidates, locale)
-                ?: if (locale != Locale.getDefault()) {
-                    selectBestOfflineTtsVoice(candidates, Locale.getDefault())
-                } else {
-                    null
-                }
-            val selectedVoice = selectedCandidate?.let { candidate ->
-                installedVoices.firstOrNull { it.name == candidate.name }
-            }
-            if (selectedVoice != null &&
-                tts.setLanguage(selectedVoice.locale) >= TextToSpeech.LANG_AVAILABLE
-            ) {
-                tts.voice = selectedVoice
+            // Do not silently speak in a different language when the requested
+            // language has no installed offline voice.
+            ready = candidates.any { !it.requiresNetwork }
+            if (ready) {
                 tts.setSpeechRate(0.96f)
                 tts.setPitch(0.98f)
-                ready = true
-            } else {
-                // Never silently fall back to a network-required system voice.
-                ready = false
             }
         }.also { created ->
             engine = created
@@ -96,14 +88,37 @@ class AndroidTtsProvider(
         }
     }
 
-    override fun speak(text: String, onDone: () -> Unit, onError: () -> Unit) {
+    override fun speak(text: String, onDone: () -> Unit, onError: () -> Unit) =
+        speak(text, defaultLocale, onDone, onError)
+
+    override fun speak(text: String, locale: Locale, onDone: () -> Unit, onError: () -> Unit) {
         val normalized = text.trim().take(8_000)
         val tts = engine
         if (normalized.isEmpty() || !ready || tts == null) {
             onError()
             return
         }
+        val installedVoices = tts.voices.orEmpty()
+        val candidates = installedVoices.map { voice ->
+            TtsVoiceCandidate(
+                name = voice.name,
+                languageTag = voice.locale.toLanguageTag(),
+                quality = voice.quality,
+                requiresNetwork = voice.isNetworkConnectionRequired
+            )
+        }
+        val selectedCandidate = selectBestOfflineTtsVoice(candidates, locale)
+        val selectedVoice = selectedCandidate?.let { candidate ->
+            installedVoices.firstOrNull { it.name == candidate.name }
+        }
+        if (selectedVoice == null ||
+            tts.setLanguage(selectedVoice.locale) < TextToSpeech.LANG_AVAILABLE
+        ) {
+            onError()
+            return
+        }
         stop()
+        tts.voice = selectedVoice
         val id = UUID.randomUUID().toString()
         activeUtteranceId = id
         completion = onDone
