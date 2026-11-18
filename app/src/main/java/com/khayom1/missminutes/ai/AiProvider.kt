@@ -136,7 +136,10 @@ interface AiHttpTransport {
  * local runtime exposes a structured tool-call contract.
  */
 interface LocalInferenceRuntime {
-    /** True only when a compatible on-device runtime and model are installed and ready. */
+    /**
+     * A fast, non-blocking probe backed by cached readiness state.
+     * True only when a compatible on-device runtime and model are installed and ready.
+     */
     fun isAvailable(): Boolean
 
     suspend fun generate(
