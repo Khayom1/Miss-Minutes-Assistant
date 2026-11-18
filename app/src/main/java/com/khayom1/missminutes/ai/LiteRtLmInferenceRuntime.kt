@@ -83,19 +83,25 @@ class LiteRtLmInferenceRuntime(
             ) {
                 throw IOException("The selected .litertlm model file is missing, empty or invalid.")
             }
-            val candidate = Engine(
-                EngineConfig(
-                    modelPath = file.absolutePath,
-                    backend = Backend.CPU(),
-                    cacheDir = cacheDirectory.absolutePath
+            val candidate = try {
+                Engine(
+                    EngineConfig(
+                        modelPath = file.absolutePath,
+                        backend = Backend.CPU(),
+                        cacheDir = cacheDirectory.absolutePath
+                    )
                 )
-            )
+            } catch (error: LinkageError) {
+                throw IOException("The LiteRT-LM native runtime is unavailable on this device.", error)
+            }
             var initialized = false
             try {
                 candidate.initialize()
                 initialized = true
             } catch (error: Exception) {
                 throw IOException("LiteRT-LM could not initialize this model. Choose a compatible .litertlm file.", error)
+            } catch (error: LinkageError) {
+                throw IOException("The LiteRT-LM native runtime is unavailable on this device.", error)
             } finally {
                 if (initialized) runCatching { candidate.close() }
             }
@@ -261,19 +267,25 @@ class LiteRtLmInferenceRuntime(
     private fun ensureEngine(path: String) {
         if (loadedPath == path && engine != null) return
 
-        val candidate = Engine(
-            EngineConfig(
-                modelPath = path,
-                backend = Backend.CPU(),
-                cacheDir = cacheDirectory.absolutePath
+        val candidate = try {
+            Engine(
+                EngineConfig(
+                    modelPath = path,
+                    backend = Backend.CPU(),
+                    cacheDir = cacheDirectory.absolutePath
+                )
             )
-        )
+        } catch (error: LinkageError) {
+            throw IOException("The LiteRT-LM native runtime is unavailable on this device.", error)
+        }
         // Keep the previously loaded engine until the replacement initializes.
         // LiteRT-LM documents closing an engine whose initialize() failed as unsafe.
         try {
             candidate.initialize()
         } catch (error: Exception) {
             throw IOException("The selected local model could not be initialized.", error)
+        } catch (error: LinkageError) {
+            throw IOException("The LiteRT-LM native runtime is unavailable on this device.", error)
         }
         val previous = engine
         engine = candidate
