@@ -44,6 +44,10 @@ kotlin {
     }
 }
 
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.12.00"))
     implementation("androidx.activity:activity-compose:1.12.0")

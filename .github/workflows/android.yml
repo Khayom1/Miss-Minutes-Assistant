@@ -58,7 +58,15 @@ jobs:
       - name: Record resolved Android runtime dependencies
         run: |
           mkdir -p app/build/release-evidence
-          gradle --no-daemon -p app dependencies --configuration debugRuntimeClasspath > app/build/release-evidence/debug-runtime-dependencies.txt
+          gradle --no-daemon -p app dependencies --configuration debugRuntimeClasspath --write-locks > app/build/release-evidence/debug-runtime-dependencies.txt
+          test -s app/gradle.lockfile
+
+      - name: Scan resolved dependencies for known vulnerabilities (OSV)
+        uses: google/osv-scanner-action/osv-scanner-action@v2.7.1
+        with:
+          scan-args: |-
+            --recursive
+            .
 
       - name: Enable KVM
         run: |
@@ -94,5 +102,6 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/release/app-release-unsigned.apk
             app/build/release-evidence/
+            app/gradle.lockfile
           if-no-files-found: error
           retention-days: 14
