@@ -35,9 +35,48 @@ class AiProviderTest {
                 return "Local model response"
             }
         }
-        val completion = OptionalLocalAiProvider(runtime).complete(validRequest)
+        val provider = OptionalLocalAiProvider(runtime)
+        assertTrue(provider.capabilities.isLocal)
+        val completion = provider.complete(validRequest)
         assertEquals("Local model response", completion.content)
         assertEquals("local", completion.model)
+    }
+
+    @Test
+    fun localProviderDeclaresItsCurrentToolAndExecutionCapabilities() {
+        val provider = OptionalLocalAiProvider(object : LocalInferenceRuntime {
+            override fun isAvailable(): Boolean = false
+            override suspend fun generate(messages: List<AiMessage>, maxOutputTokens: Int): String = error("Unavailable")
+        })
+        assertFalse(provider.capabilities.supportsStructuredTools)
+        assertFalse(provider.capabilities.isLocal)
+    }
+
+    @Test
+    fun localCapabilityTracksRuntimeAndModelAvailabilityDynamically() {
+        var available = false
+        val provider = OptionalLocalAiProvider(object : LocalInferenceRuntime {
+            override fun isAvailable(): Boolean = available
+            override suspend fun generate(messages: List<AiMessage>, maxOutputTokens: Int): String =
+                error("This test only checks capability detection")
+        })
+
+        assertFalse(provider.capabilities.isLocal)
+        available = true
+        assertTrue(provider.capabilities.isLocal)
+    }
+
+    @Test
+    fun localProviderTreatsCapabilityProbeErrorsAsUnavailable() = runBlocking {
+        val runtime = object : LocalInferenceRuntime {
+            override fun isAvailable(): Boolean = error("Capability probe failed")
+            override suspend fun generate(messages: List<AiMessage>, maxOutputTokens: Int): String =
+                error("Unavailable runtimes must not be called")
+        }
+        val provider = OptionalLocalAiProvider(runtime)
+        assertFalse(provider.capabilities.isLocal)
+        val error = runCatching { provider.complete(validRequest) }.exceptionOrNull()
+        assertTrue(error is AiProviderException.Unavailable)
     }
 
     @Test
@@ -46,6 +85,17 @@ class AiProviderTest {
             override fun isAvailable(): Boolean = false
             override suspend fun generate(messages: List<AiMessage>, maxOutputTokens: Int): String =
                 error("Unavailable runtimes must not be called")
+        }
+        val error = runCatching { OptionalLocalAiProvider(runtime).complete(validRequest) }.exceptionOrNull()
+        assertTrue(error is AiProviderException.Unavailable)
+    }
+
+    @Test
+    fun localProviderMapsInferenceRuntimeFailuresToUnavailable() = runBlocking {
+        val runtime = object : LocalInferenceRuntime {
+            override fun isAvailable(): Boolean = true
+            override suspend fun generate(messages: List<AiMessage>, maxOutputTokens: Int): String =
+                error("Local inference runtime failed")
         }
         val error = runCatching { OptionalLocalAiProvider(runtime).complete(validRequest) }.exceptionOrNull()
         assertTrue(error is AiProviderException.Unavailable)
