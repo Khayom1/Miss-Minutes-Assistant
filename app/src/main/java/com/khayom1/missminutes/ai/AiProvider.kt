@@ -133,26 +133,51 @@ interface LocalInferenceRuntime {
         messages: List<AiMessage>,
         maxOutputTokens: Int
     ): String
+
+    /**
+     * Structured local tool calls are opt-in per runtime. The safe default
+     * rejects them, so an older/test runtime cannot accidentally bypass the
+     * common approval-gated tool dispatcher.
+     */
+    suspend fun complete(request: AiRequest): AiCompletion {
+        if (request.tools.isNotEmpty() ||
+            request.messages.any { it.role == AiRole.TOOL || it.toolCalls.isNotEmpty() }
+        ) {
+            throw AiProviderException.Unavailable()
+        }
+        return AiCompletion(
+            content = generate(request.messages, request.maxOutputTokens),
+            model = "local"
+        )
+    }
 }
 
 class OptionalLocalAiProvider(
     private val runtime: LocalInferenceRuntime
 ) : AiProvider {
     override suspend fun complete(request: AiRequest): AiCompletion {
-        if (!runtime.isAvailable() || request.tools.isNotEmpty() ||
-            request.messages.any { it.role == AiRole.TOOL || it.toolCalls.isNotEmpty() }
-        ) {
-            throw AiProviderException.Unavailable()
-        }
-
-        val output = try {
-            runtime.generate(request.messages, request.maxOutputTokens).trim()
+        if (!runtime.isAvailable()) throw AiProviderException.Unavailable()
+        val completion = try {
+            runtime.complete(request)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: AiProviderException) {
+            throw error
         } catch (error: IOException) {
             throw AiProviderException.Unavailable(error)
         }
 
-        if (output.isEmpty()) throw AiProviderException.InvalidResponse()
-        return AiCompletion(content = output, model = "local")
+        if (completion.content.isBlank() && completion.toolCalls.isEmpty()) {
+            throw AiProviderException.InvalidResponse()
+        }
+        val allowedTools = request.tools.map { it.name }.toSet()
+        if (completion.toolCalls.size > 4 ||
+            completion.toolCalls.any { it.name !in allowedTools } ||
+            completion.toolCalls.map { it.id }.distinct().size != completion.toolCalls.size
+        ) {
+            throw AiProviderException.InvalidResponse()
+        }
+        return completion
     }
 }
 
