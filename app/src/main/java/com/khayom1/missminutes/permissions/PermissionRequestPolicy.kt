@@ -6,6 +6,6 @@ internal fun permissionsToRequest(
     isGranted: (String) -> Boolean
 ): Array<String> {
     val uniquePermissions = requiredPermissions.distinct()
-    require(uniquePermissions.all(String::isNotBlank))
+    require(uniquePermissions.all { it.isNotBlank() })
     return uniquePermissions.filterNot(isGranted).toTypedArray()
 }
