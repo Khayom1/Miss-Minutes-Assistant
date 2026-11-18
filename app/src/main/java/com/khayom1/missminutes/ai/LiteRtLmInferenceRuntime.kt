@@ -13,15 +13,15 @@ import com.google.ai.edge.litertlm.tool
 import java.io.File
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -57,7 +57,7 @@ class LiteRtLmInferenceRuntime(
         Thread(runnable, "miss-minutes-litertlm").apply { isDaemon = true }
     }
     private val dispatcher = executor.asCoroutineDispatcher()
-    private val runtimeScope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val activeRequests = ConcurrentHashMap.newKeySet<Job>()
     private val mutex = Mutex()
     private val closed = AtomicBoolean(false)
 
@@ -68,7 +68,38 @@ class LiteRtLmInferenceRuntime(
         if (closed.get()) return false
         val path = modelPath() ?: return false
         val file = File(path)
-        return file.isFile && file.length() > 0L
+        return file.isFile &&
+            file.length() > 0L &&
+            file.name.endsWith(".litertlm", ignoreCase = true)
+    }
+
+    /** Initializes the exact staged model off the main thread before the store activates it. */
+    suspend fun validateModel(path: String) = withContext(dispatcher) {
+        check(!closed.get()) { "Local inference runtime is closed." }
+        mutex.withLock {
+            val file = File(path).canonicalFile
+            if (!file.isFile || file.length() <= 0L ||
+                !file.name.endsWith(".litertlm", ignoreCase = true)
+            ) {
+                throw IOException("The selected .litertlm model file is missing, empty or invalid.")
+            }
+            val candidate = Engine(
+                EngineConfig(
+                    modelPath = file.absolutePath,
+                    backend = Backend.CPU(),
+                    cacheDir = cacheDirectory.absolutePath
+                )
+            )
+            var initialized = false
+            try {
+                candidate.initialize()
+                initialized = true
+            } catch (error: Exception) {
+                throw IOException("LiteRT-LM could not initialize this model. Choose a compatible .litertlm file.", error)
+            } finally {
+                if (initialized) runCatching { candidate.close() }
+            }
+        }
     }
 
     override suspend fun generate(
@@ -78,8 +109,13 @@ class LiteRtLmInferenceRuntime(
         AiRequest(messages = messages, maxOutputTokens = maxOutputTokens)
     ).content
 
-    override suspend fun complete(request: AiRequest): AiCompletion =
-        withContext(dispatcher) {
+    override suspend fun complete(request: AiRequest): AiCompletion = coroutineScope {
+        check(!closed.get()) { "Local inference runtime is closed." }
+        val requestJob = Job(currentCoroutineContext()[Job])
+        activeRequests.add(requestJob)
+        if (closed.get()) requestJob.cancel(CancellationException("Local inference runtime is closed."))
+        try {
+            withContext(dispatcher + requestJob) {
             check(!closed.get()) { "Local inference runtime is closed." }
             require(request.maxOutputTokens in 1..768)
             require(request.messages.isNotEmpty())
@@ -171,7 +207,11 @@ class LiteRtLmInferenceRuntime(
                     conversation.close()
                 }
             }
+        } finally {
+            activeRequests.remove(requestJob)
+            requestJob.cancel()
         }
+    }
 
     private fun toRuntimeMessage(message: AiMessage): Message =
         when (message.role) {
@@ -219,7 +259,6 @@ class LiteRtLmInferenceRuntime(
 
     private fun ensureEngine(path: String) {
         if (loadedPath == path && engine != null) return
-        releaseEngine()
 
         val candidate = Engine(
             EngineConfig(
@@ -228,25 +267,35 @@ class LiteRtLmInferenceRuntime(
                 cacheDir = cacheDirectory.absolutePath
             )
         )
-        // Store the engine only after successful initialization. LiteRT-LM
-        // documents closing an engine whose initialize() failed as unsafe.
-        candidate.initialize()
+        // Keep the previously loaded engine until the replacement initializes.
+        // LiteRT-LM documents closing an engine whose initialize() failed as unsafe.
+        try {
+            candidate.initialize()
+        } catch (error: Exception) {
+            throw IOException("The selected local model could not be initialized.", error)
+        }
+        val previous = engine
         engine = candidate
         loadedPath = path
+        runCatching { previous?.close() }
     }
 
     private fun releaseEngine() {
-        engine?.close()
+        val previous = engine
         engine = null
         loadedPath = null
+        runCatching { previous?.close() }
     }
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        runtimeScope.launch {
-            mutex.withLock { releaseEngine() }
-            dispatcher.close()
-            runtimeScope.cancel()
+        activeRequests.forEach { it.cancel(CancellationException("Local inference runtime is closed.")) }
+        executor.execute {
+            try {
+                releaseEngine()
+            } finally {
+                dispatcher.close()
+            }
         }
     }
 
