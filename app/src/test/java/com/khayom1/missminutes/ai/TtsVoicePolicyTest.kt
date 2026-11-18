@@ -1,11 +1,19 @@
 package com.khayom1.missminutes.ai
 
+import com.khayom1.missminutes.ui.AppLanguage
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TtsVoicePolicyTest {
+    @Test
+    fun appLanguagesMapToTheirOwnSpeechLocales() {
+        assertEquals("en", AppLanguage.English.speechLocale.language)
+        assertEquals("ru", AppLanguage.Russian.speechLocale.language)
+        assertEquals("tg", AppLanguage.Tajik.speechLocale.language)
+    }
+
     @Test
     fun choosesHighestQualityOfflineVoiceForRequestedLanguage() {
         val candidates = listOf(
