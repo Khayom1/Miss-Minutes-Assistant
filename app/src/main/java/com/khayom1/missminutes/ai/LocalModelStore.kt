@@ -11,6 +11,8 @@ import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val LOCAL_MODEL_EXTENSION = ".litertlm"
@@ -52,6 +54,7 @@ class LocalModelStore(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val modelDirectory = File(appContext.noBackupFilesDir, MODEL_DIRECTORY)
+    private val importMutex = Mutex()
 
     fun currentModelPath(): String? {
         val path = preferences.getString(KEY_MODEL_PATH, null) ?: return null
@@ -81,12 +84,12 @@ class LocalModelStore(context: Context) {
      * through LiteRT-LM, then atomically activates it. A failed validation or commit
      * leaves the previously selected model and its file untouched.
      */
-    @Synchronized
     suspend fun importModel(
         contentResolver: ContentResolver,
         uri: Uri,
         validateModel: suspend (String) -> Unit
-    ): String = withContext(Dispatchers.IO) {
+    ): String = importMutex.withLock {
+        withContext(Dispatchers.IO) {
         if (!modelDirectory.exists() && !modelDirectory.mkdirs()) {
             throw IOException("Model storage is unavailable.")
         }
@@ -155,6 +158,7 @@ class LocalModelStore(context: Context) {
             if (!activated) destination.delete()
             if (error is IOException) throw error
             throw IOException("The selected model is not a compatible LiteRT-LM model.", error)
+        }
         }
     }
 
