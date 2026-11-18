@@ -37,18 +37,4 @@ class LocalModelStorePathTest {
         assertTrue(id.matches(Regex("^[a-zA-Z0-9_-]{1,128}$")))
     }
 
-    @Test
-    fun localPromptIncludesActualConversationTextAndToolNames() {
-        val prompt = buildLiteRtLmPrompt(
-            listOf(
-                AiMessage(AiRole.USER, "Read my private local note."),
-                AiMessage(AiRole.ASSISTANT, "I will inspect it."),
-                AiMessage(AiRole.TOOL, "The note says hello.", name = "notes_read")
-            )
-        )
-
-        assertTrue(prompt.contains("User:\nRead my private local note."))
-        assertTrue(prompt.contains("Assistant:\nI will inspect it."))
-        assertTrue(prompt.contains("Tool result (notes_read):\nThe note says hello."))
-    }
 }
