@@ -77,8 +77,11 @@ class AiToolApprovalGate {
 
     private var nextRequestId = 0L
 
-    suspend fun awaitApproval(prompt: AiToolApprovalPrompt): Boolean =
-        requestMutex.withLock {
+    suspend fun awaitApproval(
+        prompt: AiToolApprovalPrompt,
+        isCurrent: () -> Boolean = { true }
+    ): Boolean = requestMutex.withLock {
+            if (!isCurrent()) return@withLock false
             val requestId = ++nextRequestId
             val requestPrompt = prompt.copy(requestId = requestId)
             val decision = CompletableDeferred<Boolean>()

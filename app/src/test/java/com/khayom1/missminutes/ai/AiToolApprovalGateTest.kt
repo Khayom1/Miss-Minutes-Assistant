@@ -126,6 +126,27 @@ class AiToolApprovalGateTest {
     }
 
     @Test
+    fun queuedApprovalIsSkippedWhenItsConversationBecomesStale() = runBlocking {
+        val gate = AiToolApprovalGate()
+        var currentConversation = true
+        val first = async(start = CoroutineStart.UNDISPATCHED) {
+            gate.awaitApproval(prompt) { currentConversation }
+        }
+        val second = async(start = CoroutineStart.UNDISPATCHED) {
+            gate.awaitApproval(prompt.copy(toolName = "calendar_delete_event")) {
+                currentConversation
+            }
+        }
+
+        assertEquals(prompt.toolName, gate.pending.value?.toolName)
+        currentConversation = false
+        assertTrue(gate.rejectPending())
+        assertFalse(first.await())
+        assertFalse(second.await())
+        assertNull(gate.pending.value)
+    }
+
+    @Test
     fun concurrentRequestsArePresentedOneAtATime() = runBlocking {
         val gate = AiToolApprovalGate()
         val secondPrompt = prompt.copy(toolName = "calendar_delete_event")

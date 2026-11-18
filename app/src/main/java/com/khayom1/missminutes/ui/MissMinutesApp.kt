@@ -1199,7 +1199,8 @@ fun MissMinutesApp(
                                                 pluginName = sanitizeApprovalDisplayText(descriptor.pluginName, 128),
                                                 description = sanitizeApprovalDisplayText(descriptor.description, 512),
                                                 argumentNames = names
-                                            )
+                                            ),
+                                            isCurrent = { requestGeneration == conversationGeneration }
                                         )
                                     } ?: false
                                     userApproved && requestGeneration == conversationGeneration
