@@ -1483,6 +1483,7 @@ fun MissMinutesApp(
                         when (screen) {
                             AppScreen.Chat -> ChatScreen(
                                 copy = copy,
+                                language = language,
                                 messages = messages,
                                 draft = draft,
                                 isSending = isSending,
@@ -1678,6 +1679,7 @@ private fun LoadingScreen() {
 @Composable
 private fun ChatScreen(
     copy: UiCopy,
+    language: AppLanguage,
     messages: List<ChatMessage>,
     draft: String,
     isSending: Boolean,
@@ -1717,7 +1719,7 @@ private fun ChatScreen(
                 onClick = { onAiBackendChange(false) },
                 label = {
                     Text(
-                        when (copy.language) {
+                        when (language) {
                             "Тоҷикӣ" -> "DeepSeek"
                             "Русский" -> "DeepSeek"
                             else -> "DeepSeek"
@@ -1732,7 +1734,7 @@ private fun ChatScreen(
                 enabled = localModelReady,
                 label = {
                     Text(
-                        when (copy.language) {
+                        when (language) {
                             "Тоҷикӣ" -> "Модели маҳаллӣ"
                             "Русский" -> "Локальная модель"
                             else -> "Local model"
@@ -1776,7 +1778,7 @@ private fun ChatScreen(
         }
         Text(
             text = if (usingLocalModel) {
-                when (copy.language) {
+                when (language) {
                     "Тоҷикӣ" -> "Чати офлайн фаъол аст. Барои ин модели маҳаллӣ даъвати плагинҳо ҳоло хомӯш аст."
                     "Русский" -> "Работает офлайн-чат. Вызов плагинов для этой локальной модели пока отключён."
                     else -> "Offline chat is active. Plugin tool calling is not enabled for this local model yet."
