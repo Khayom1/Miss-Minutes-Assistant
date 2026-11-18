@@ -28,6 +28,16 @@ class LocalModelStorePathTest {
     }
 
     @Test
+    fun localToolCallIdsMatchDispatcherValidation() {
+        val id = newLocalToolCallId(
+            UUID.fromString("00000000-0000-0000-0000-000000000001")
+        )
+
+        assertEquals("local_00000000000000000000000000000001", id)
+        assertTrue(id.matches(Regex("^[a-zA-Z0-9_-]{1,128}$")))
+    }
+
+    @Test
     fun localPromptIncludesActualConversationTextAndToolNames() {
         val prompt = buildLiteRtLmPrompt(
             listOf(

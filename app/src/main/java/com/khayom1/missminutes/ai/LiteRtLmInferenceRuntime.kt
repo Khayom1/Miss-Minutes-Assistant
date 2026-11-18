@@ -13,6 +13,7 @@ import com.google.ai.edge.litertlm.tool
 import java.io.File
 import java.io.IOException
 import java.util.UUID
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -46,6 +47,9 @@ import org.json.JSONObject
  * tool calls are returned to the app rather than auto-executed by the SDK, so
  * the shared AiToolExecutionLoop and user approval gate remain authoritative.
  */
+internal fun newLocalToolCallId(id: UUID = UUID.randomUUID()): String =
+    "local_${id.toString().replace("-", "")}"
+
 class LiteRtLmInferenceRuntime(
     private val modelPath: () -> String?,
     private val cacheDirectory: File
@@ -146,7 +150,7 @@ class LiteRtLmInferenceRuntime(
                         ?: throw IOException("The local model returned no response.")
                     val toolCalls = responseMessage.toolCalls.map { call ->
                         AiToolCall(
-                            id = "local_\${UUID.randomUUID().toString().replace("-", "")}",
+                            id = newLocalToolCallId(),
                             name = call.name,
                             arguments = JSONObject(call.arguments).toString()
                         )
