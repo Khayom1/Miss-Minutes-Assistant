@@ -6,6 +6,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+
+/** Returns only validated argument field names; raw values never enter UI state. */
+internal fun approvalArgumentNames(arguments: String): List<String>? {
+    if (arguments.length !in 2..2_000) return null
+    val values = runCatching { Json.parseToJsonElement(arguments).jsonObject }.getOrNull()
+        ?: return null
+    if (values.size > 16 || values.keys.any { !it.matches(Regex("^[a-zA-Z0-9_-]{1,64}$")) }) {
+        return null
+    }
+    return values.keys.sorted()
+}
 
 private val approvalBidiControls = setOf(
     0x061C, 0x200E, 0x200F, 0x202A, 0x202B, 0x202C,

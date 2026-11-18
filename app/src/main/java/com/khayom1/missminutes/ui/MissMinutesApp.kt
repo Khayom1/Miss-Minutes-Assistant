@@ -80,6 +80,7 @@ import com.khayom1.missminutes.ai.AiToolExecutionResult
 import com.khayom1.missminutes.ai.AiToolApprovalGate
 import com.khayom1.missminutes.ai.AiToolApprovalPrompt
 import com.khayom1.missminutes.ai.sanitizeApprovalDisplayText
+import com.khayom1.missminutes.ai.approvalArgumentNames
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
@@ -1190,17 +1191,17 @@ fun MissMinutesApp(
                                     descriptor?.requiresConfirmation == true &&
                                     requestGeneration == conversationGeneration
                                 ) {
-                                    val argumentNames = runCatching {
-                                        Json.parseToJsonElement(call.arguments).jsonObject.keys.sorted().take(16)
-                                    }.getOrDefault(emptyList())
-                                    val userApproved = toolApprovalGate.awaitApproval(
-                                        AiToolApprovalPrompt(
-                                            toolName = call.name,
-                                            pluginName = sanitizeApprovalDisplayText(descriptor.pluginName, 128),
-                                            description = sanitizeApprovalDisplayText(descriptor.description, 512),
-                                            argumentNames = argumentNames
+                                    val argumentNames = approvalArgumentNames(call.arguments)
+                                    val userApproved = argumentNames?.let { names ->
+                                        toolApprovalGate.awaitApproval(
+                                            AiToolApprovalPrompt(
+                                                toolName = call.name,
+                                                pluginName = sanitizeApprovalDisplayText(descriptor.pluginName, 128),
+                                                description = sanitizeApprovalDisplayText(descriptor.description, 512),
+                                                argumentNames = names
+                                            )
                                         )
-                                    )
+                                    } ?: false
                                     userApproved && requestGeneration == conversationGeneration
                                 } else {
                                     false

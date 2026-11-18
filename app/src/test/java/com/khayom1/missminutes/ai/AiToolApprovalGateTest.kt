@@ -96,6 +96,23 @@ class AiToolApprovalGateTest {
     }
 
     @Test
+    fun approvalPromptReceivesOnlyValidatedArgumentNames() {
+        val names = approvalArgumentNames("""{"title":"private event","token":"secret-value"}""")
+
+        assertEquals(listOf("title", "token"), names)
+        assertFalse(requireNotNull(names).any { it.contains("secret") })
+    }
+
+    @Test
+    fun approvalArgumentNamesRejectMalformedOrExcessiveArguments() {
+        assertNull(approvalArgumentNames("{invalid"))
+        val tooMany = (1..17).joinToString(prefix = "{", postfix = "}") {
+            "\\\"field$it\\\":$it"
+        }
+        assertNull(approvalArgumentNames(tooMany))
+    }
+
+    @Test
     fun displayTextRemovesControlAndBidiOverrideCharacters() {
         val untrusted = "Calendar" + 0x202E.toChar() + "\nCreate event"
         assertEquals("Calendar Create event", sanitizeApprovalDisplayText(untrusted, 128))
