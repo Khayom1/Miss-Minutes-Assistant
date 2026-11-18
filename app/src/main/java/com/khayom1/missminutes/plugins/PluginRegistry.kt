@@ -413,7 +413,7 @@ class PluginRegistry(
         )
         val PLUGIN_ID = Regex("^[a-z][a-z0-9_.-]{2,63}$")
         val ACTION_ID = Regex("^[a-z][a-z0-9_.-]{1,47}$")
-        val FIELD_ID = Regex("^[a-z][a-z0-9_]{0,31}$")
+        val FIELD_ID = Regex("^[a-z][a-zA-Z0-9_]{0,31}$")
         val VERSION = Regex("^\\d+\\.\\d+\\.\\d+$")
     }
 }

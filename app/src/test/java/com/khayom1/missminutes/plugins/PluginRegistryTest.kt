@@ -433,6 +433,96 @@ class PluginRegistryTest {
         assertEquals(0, calls)
     }
 
+    @Test
+    fun androidCamelCaseArgumentNamesAreAcceptedAndStillValidatedAgainstCompiledSchema() {
+        val argumentSchema = mapOf(
+            "startEpochMillis" to PluginFieldSpec(
+                name = "startEpochMillis",
+                type = PluginValueType.INTEGER,
+                minimum = 1L
+            ),
+            "packageName" to PluginFieldSpec(
+                name = "packageName",
+                type = PluginValueType.STRING,
+                maxLength = 200
+            )
+        )
+        var calls = 0
+        val handler = object : PluginActionHandler {
+            override val actionId = "android_action"
+            override val capability = PluginCapability.DEVICE_INFORMATION
+            override val argumentSchema = argumentSchema
+
+            override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
+                calls++
+                assertEquals(123L, (arguments["startEpochMillis"] as PluginValue.Number).value)
+                assertEquals("com.example.app", (arguments["packageName"] as PluginValue.Text).value)
+                return PluginActionOutput(true, "accepted")
+            }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(handler),
+            consentStore = PluginConsentStore { true },
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker
+        )
+        val manifest = PluginManifest(
+            id = "android_tools",
+            version = "1.0.0",
+            displayName = "Android tools",
+            description = "Android actions with typed camelCase arguments.",
+            capabilities = setOf(PluginCapability.DEVICE_INFORMATION),
+            actions = listOf(
+                PluginActionSpec(
+                    id = "android_action",
+                    capability = PluginCapability.DEVICE_INFORMATION,
+                    arguments = argumentSchema
+                )
+            )
+        )
+
+        assertTrue(registry.install(manifest))
+        val result = registry.execute(
+            PluginExecutionRequest(
+                pluginId = "android_tools",
+                actionId = "android_action",
+                arguments = mapOf(
+                    "startEpochMillis" to PluginValue.Number(123L),
+                    "packageName" to PluginValue.Text("com.example.app")
+                )
+            )
+        )
+
+        assertTrue(result.success)
+        assertEquals("accepted", result.message)
+        assertEquals(1, calls)
+
+        val invalidSchema = argumentSchema + (
+            "InvalidName" to PluginFieldSpec("InvalidName", PluginValueType.STRING)
+        )
+        val invalidRegistry = PluginRegistry(
+            handlers = listOf(object : PluginActionHandler {
+                override val actionId = "invalid_android_action"
+                override val capability = PluginCapability.DEVICE_INFORMATION
+                override val argumentSchema = invalidSchema
+                override fun execute(arguments: Map<String, PluginValue>) = PluginActionOutput(true, "unexpected")
+            }),
+            consentStore = PluginConsentStore { true },
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker
+        )
+        val invalidManifest = manifest.copy(
+            actions = listOf(
+                PluginActionSpec(
+                    id = "invalid_android_action",
+                    capability = PluginCapability.DEVICE_INFORMATION,
+                    arguments = invalidSchema
+                )
+            )
+        )
+        assertTrue(runCatching { invalidRegistry.install(invalidManifest) }.isFailure)
+    }
+
     private fun registry(consented: Boolean, action: () -> PluginActionOutput) = PluginRegistry(
         handlers = listOf(handler(action)),
         consentStore = PluginConsentStore { consented },
