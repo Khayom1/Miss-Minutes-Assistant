@@ -91,13 +91,9 @@ class LocalSmsClassifier(
             "харҷ", "расход", "дебет", "кредит"
         )
         if (hasBankContext && hasFinancialActivity) {
-            val outgoing = containsAny(
-                text, "списан", "сняти", "withdraw", "purchase", "харид",
-                "харҷ", "расход", "дебет"
-            )
             return result(
                 SmsCategory.BANK_TRANSACTION,
-                if (outgoing) SmsPriority.HIGH else SmsPriority.HIGH,
+                SmsPriority.HIGH,
                 94,
                 SmsReason.FINANCIAL_ACTIVITY
             )

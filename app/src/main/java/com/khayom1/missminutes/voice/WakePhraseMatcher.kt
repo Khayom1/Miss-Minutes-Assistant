@@ -10,17 +10,17 @@ object WakePhraseMatcher {
     private val separators = Regex("[^\\p{L}\\p{N}]+")
     private val whitespace = Regex("\\s+")
 
-    private val trailingWakeSeparator = """[\\s,.;:!?—–-]*"""
+    private val trailingWakeSeparator = """[\s,.;:!?—–-]*"""
     private val englishWake = Regex(
-        """^\\s*(?:hey\\s+)?miss[\\s,.;:!?-]+minutes?(?:\\b)?$trailingWakeSeparator(.*)$""",
+        """^\s*(?:hey\s+)?miss[\s,.;:!?-]+minutes?(?:\b)?$trailingWakeSeparator(.*)$""",
         RegexOption.IGNORE_CASE
     )
     private val cyrillicWake = Regex(
-        """^\\s*(?:эй\\s+|hey\\s+)?мисс[\\s,.;:!?-]+минут(?:ка|с|ы)?(?=$|[\\s,.;:!?—–-])$trailingWakeSeparator(.*)$""",
+        """^\s*(?:эй\s+|hey\s+)?мисс[\s,.;:!?-]+минут(?:ка|с|ы)?(?=$|[\s,.;:!?—–-])$trailingWakeSeparator(.*)$""",
         RegexOption.IGNORE_CASE
     )
     private val compactCyrillicWake = Regex(
-        """^\\s*(?:эй\\s+)?мис+с?\\s*минут(?:ка|с|ы)?(?=$|[\\s,.;:!?—–-])$trailingWakeSeparator(.*)$""",
+        """^\s*(?:эй\s+)?мис+с?\s*минут(?:ка|с|ы)?(?=$|[\s,.;:!?—–-])$trailingWakeSeparator(.*)$""",
         RegexOption.IGNORE_CASE
     )
 

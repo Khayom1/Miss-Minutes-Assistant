@@ -23,6 +23,7 @@ class WakePhraseMatcherTest {
     fun extractsCommandsInEnglishRussianAndTajik() {
         assertEquals("open settings", WakePhraseMatcher.parse("Miss Minutes, open settings")?.command)
         assertEquals("открой настройки", WakePhraseMatcher.parse("MISS MINUTES — открой настройки")?.command)
+        assertEquals("открой настройки", WakePhraseMatcher.parse("MISS MINUTES – открой настройки")?.command)
         assertEquals("ҳолати батареяро нишон деҳ", WakePhraseMatcher.parse("Miss Minutes ҳолати батареяро нишон деҳ")?.command)
         assertEquals("ҳолати батареяро нишон деҳ", WakePhraseMatcher.parse("Мисс Минутка ҳолати батареяро нишон деҳ")?.command)
         assertEquals("ҳолати батареяро нишон деҳ", WakePhraseMatcher.parse("мисс минутка ҳолати батареяро нишон деҳ")?.command)
