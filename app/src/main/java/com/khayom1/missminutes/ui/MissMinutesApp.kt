@@ -52,6 +52,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
@@ -347,6 +350,7 @@ fun MissMinutesApp(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val appSettingsStore = remember(context) { AndroidAppSettingsStore(context) }
     var selectedLanguageName by remember(context) {
         mutableStateOf(when (appSettingsStore.loadAppearance().language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name })
@@ -383,6 +387,13 @@ fun MissMinutesApp(
     }
     val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
     val toolApprovalGate = remember { AiToolApprovalGate() }
+    DisposableEffect(lifecycleOwner, toolApprovalGate) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) toolApprovalGate.rejectPending()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val pendingToolApproval by toolApprovalGate.pending.collectAsState()
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
