@@ -107,6 +107,8 @@ The UI renders each event as it arrives. A tool result is a separate visual comp
 
 The model may propose a plan, but the orchestrator validates it before persistence or execution. Plans must have a maximum node count, dependency-cycle detection, deadlines, input/output bounds and an explicit status for each node. Execution is sequential by default; parallelism is introduced only for proven independent read-only operations.
 
+**Current integration gap:** the Compose chat path currently runs AiToolExecutionLoop and dispatches each model tool call directly to the plugin registry with userConfirmed=false. It does not yet persist the conversation's proposed steps as an AgentTaskPlan. This safely blocks registry actions that require confirmation, but there is no interactive just-in-time approval surface in the ordinary chat flow. AgentOrchestrator's approval and durable-task primitives exist, yet are not the planner backing the normal chat turn. P3 must join these paths before consequential chat actions can be enabled. The draft approval-flow PR is a candidate to audit and rebase, not proof that the feature is shipped.
+
 Every mutation requires:
 - A registered typed handler and a valid schema.
 - Current OS permission and capability authorization.
