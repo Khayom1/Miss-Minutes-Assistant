@@ -313,7 +313,12 @@ class MissMinutesWakeWordService : Service() {
         retryBackoff.reset()
         try {
             startForegroundCompat()
-            if (!createOnDeviceRecognizer()) {
+            val recognizerCreated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                createOnDeviceRecognizer()
+            } else {
+                false
+            }
+            if (!recognizerCreated) {
                 failClosed()
                 return
             }
