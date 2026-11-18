@@ -153,7 +153,12 @@ class MissMinutesWakeWordService : Service() {
             mainHandler.removeCallbacks(commandWaitTimeout)
             retryBackoff.reset()
             publishState(true, "Offline wake phrase listening is active.")
-            if (!createOnDeviceRecognizer()) {
+            val recognizerCreated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                createOnDeviceRecognizer()
+            } else {
+                false
+            }
+            if (!recognizerCreated) {
                 failClosed()
                 return START_NOT_STICKY
             }
