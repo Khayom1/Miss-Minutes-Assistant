@@ -62,6 +62,31 @@ class AiProviderTest {
     }
  
     @Test
+    fun localProviderAllowsToolCallsOnlyWhenRuntimeImplementsStructuredExecution() = runBlocking {
+        val schema = Json.parseToJsonElement(
+            """{"type":"object","properties":{},"required":[],"additionalProperties":false}"""
+        ).jsonObject
+        val definition = AiToolDefinition("plugin_status", "Read device status", schema)
+        val expectedCall = AiToolCall("local_call_1", "plugin_status", "{}")
+        val runtime = object : LocalInferenceRuntime {
+            override fun isAvailable(): Boolean = true
+            override suspend fun generate(messages: List<AiMessage>, maxOutputTokens: Int): String =
+                error("Structured requests must use complete(), not generate().")
+
+            override suspend fun complete(request: AiRequest): AiCompletion {
+                assertEquals(listOf(definition), request.tools)
+                return AiCompletion(content = "", model = "local", toolCalls = listOf(expectedCall))
+            }
+        }
+        val result = OptionalLocalAiProvider(runtime).complete(
+            validRequest.copy(tools = listOf(definition))
+        )
+
+        assertEquals(listOf(expectedCall), result.toolCalls)
+        assertEquals("local", result.model)
+    }
+
+    @Test
     fun localProviderRejectsStructuredToolRequestsWithoutCallingRuntime() = runBlocking {
         val schema = Json.parseToJsonElement(
             """{"type":"object","properties":{},"required":[],"additionalProperties":false}"""
