@@ -1187,11 +1187,9 @@ fun MissMinutesApp(
             val request = try {
                 AiRequest(
                     messages = requestMessages,
-                    tools = if (usingLocalModel) {
-                        emptyList()
-                    } else {
-                        PluginToolSchemaFactory.toAiToolDefinitions(agentOrchestrator.availablePluginTools())
-                    }
+                    tools = PluginToolSchemaFactory.toAiToolDefinitions(
+                        agentOrchestrator.availablePluginTools()
+                    )
                 )
             } catch (_: IllegalArgumentException) {
                 chatError = copy.conversationTooLong
@@ -1777,9 +1775,9 @@ private fun ChatScreen(
         Text(
             text = if (usingLocalModel) {
                 when (language) {
-                    AppLanguage.Tajik -> "Чати офлайн фаъол аст. Барои ин модели маҳаллӣ даъвати плагинҳо ҳоло хомӯш аст."
-                    AppLanguage.Russian -> "Работает офлайн-чат. Вызов плагинов для этой локальной модели пока отключён."
-                    AppLanguage.English -> "Offline chat is active. Plugin tool calling is not enabled for this local model yet."
+                    AppLanguage.Tajik -> "Чати офлайн фаъол аст. Модели маҳаллӣ метавонад асбобҳои плагинро пешниҳод кунад; иҷро ҳамеша аз санҷиши иҷозат ва тасдиқи корбар мегузарад."
+                    AppLanguage.Russian -> "Работает офлайн-чат. Совместимая локальная модель может запрашивать плагины; выполнение всегда проходит проверку доступа и подтверждение пользователя."
+                    AppLanguage.English -> "Offline chat is active. A tool-capable local model can request plugins; execution still goes through access checks and user approval."
                 }
             } else copy.gatewayNotice,
             style = MaterialTheme.typography.bodySmall,
@@ -2266,9 +2264,9 @@ private fun SettingsScreen(
             }
             Text(
                 when (language) {
-                    AppLanguage.Tajik -> "Эзоҳ: ҳоло модели маҳаллӣ матнро офлайн тавлид мекунад; истифодаи плагинҳо дар ин режим ҳанӯз дастгирӣ намешавад."
-                    AppLanguage.Russian -> "Примечание: локальная модель пока генерирует текст офлайн; использование плагинов в этом режиме ещё не поддерживается."
-                    AppLanguage.English -> "Note: local inference currently provides offline text generation; plugin use in this mode is not yet supported."
+                    AppLanguage.Tajik -> "Эзоҳ: иҷрои плагинҳои офлайн танҳо бо моделҳои дорои Tool Calling дастрас аст; ҳамаи иҷрошавиҳо аз санҷиши иҷозат ва тасдиқ мегузаранд."
+                    AppLanguage.Russian -> "Примечание: офлайн-плагины доступны только моделям с поддержкой Tool Calling; каждое действие проходит проверки доступа и подтверждение."
+                    AppLanguage.English -> "Note: offline plugin execution requires a tool-capable local model; every action still passes access checks and explicit approval."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
