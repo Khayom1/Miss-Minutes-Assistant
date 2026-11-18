@@ -8,6 +8,6 @@ class ProductIdentityTest {
     fun productIdentityIsStable() {
         assertEquals("Miss Minutes", ProductIdentity.NAME)
         assertEquals("com.khayom1.missminutes", ProductIdentity.APPLICATION_ID)
-        assertEquals("0.1.0", ProductIdentity.VERSION_NAME)
+        assertEquals("0.2.0", ProductIdentity.VERSION_NAME)
     }
 }

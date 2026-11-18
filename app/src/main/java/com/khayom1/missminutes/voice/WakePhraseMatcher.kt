@@ -10,22 +10,18 @@ object WakePhraseMatcher {
     private val separators = Regex("[^\\p{L}\\p{N}]+")
     private val whitespace = Regex("\\s+")
 
-    // English + common spoken variants
+    private val trailingWakeSeparator = """[\\s,.;:!?—–-]*"""
     private val englishWake = Regex(
-        "^\\s*(?:hey\\s+)?miss[\\s,.;:!?-]+minutes?(?:\\b|[,.;:!?—-])?\\s*(.*)$",
+        """^\\s*(?:hey\\s+)?miss[\\s,.;:!?-]+minutes?(?:\\b)?$trailingWakeSeparator(.*)$""",
         RegexOption.IGNORE_CASE
     )
-
-    // Russian / Tajik: Мисс Минутс, Мисс Минутка, Мисс минутка, Мисс Минуты
     private val cyrillicWake = Regex(
-        "^\\s*(?:эй\\s+|hey\\s+)?мисс[\\s,.;:!?-]+минут(?:ка|с|ы)?(?:\\b|[,.;:!?—-])?\\s*(.*)$",
-        setOf(RegexOption.IGNORE_CASE)
+        """^\\s*(?:эй\\s+|hey\\s+)?мисс[\\s,.;:!?-]+минут(?:ка|с|ы)?(?=$|[\\s,.;:!?—–-])$trailingWakeSeparator(.*)$""",
+        RegexOption.IGNORE_CASE
     )
-
-    // Extra tolerant form for common ASR output like "миссминутка" or "мис минутка"
     private val compactCyrillicWake = Regex(
-        "^\\s*(?:эй\\s+)?мис+с?\\s*минут(?:ка|с|ы)?\\s*(.*)$",
-        setOf(RegexOption.IGNORE_CASE)
+        """^\\s*(?:эй\\s+)?мис+с?\\s*минут(?:ка|с|ы)?(?=$|[\\s,.;:!?—–-])$trailingWakeSeparator(.*)$""",
+        RegexOption.IGNORE_CASE
     )
 
     data class Match(val command: String?)
@@ -47,8 +43,7 @@ object WakePhraseMatcher {
 
         val command = match.groupValues.getOrNull(1)
             ?.trim()
-            ?.removePrefix(",")
-            ?.removePrefix(".")
+            ?.trimStart(',', '.', ':', ';', '!', '?', '—', '–', '-')
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
 
