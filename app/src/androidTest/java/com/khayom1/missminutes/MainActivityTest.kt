@@ -1,6 +1,7 @@
 package com.khayom1.missminutes
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertTextContains
@@ -134,6 +135,18 @@ class MainActivityTest {
     private fun assertChatReady() {
         waitForChatScreen()
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+    }
+
+    @Test
+    fun localProviderStaysDisabledUntilAModelIsImported() {
+        composeRule.onNodeWithTag("ai_provider_local")
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("import_local_model")
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
