@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Settings
+import com.khayom1.missminutes.device.DeviceToolCapability
+import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 
 fun interface PluginCredentialChecker {
     fun isConfigured(pluginId: String, capability: PluginCapability): Boolean
@@ -19,6 +21,7 @@ class AndroidPluginAccessChecker(
     private val credentialChecker: PluginCredentialChecker = PluginCredentialChecker { _, _ -> false }
 ) : PluginAccessChecker {
     private val appContext = context.applicationContext
+    private val deviceAuthorization = SharedPreferencesDeviceToolAuthorization(appContext)
 
     override fun inspect(
         pluginId: String,
@@ -46,11 +49,33 @@ class AndroidPluginAccessChecker(
             }
             PluginCapability.DEVICE_INFORMATION,
             PluginCapability.BATTERY_STATUS,
+            PluginCapability.ANDROID_SETTINGS_OPEN,
+            PluginCapability.ANDROID_TEXT_SHARE,
             PluginCapability.CALENDAR_READ,
             PluginCapability.CALENDAR_WRITE,
             PluginCapability.CONTACTS_READ,
             PluginCapability.LOCATION_APPROXIMATE,
             PluginCapability.LOCATION_PRECISE -> Unit
+        }
+
+        val deviceCapability = when (action.id) {
+            "open_wifi_settings" -> DeviceToolCapability.OPEN_WIFI_SETTINGS
+            "open_app_settings" -> DeviceToolCapability.OPEN_APP_SETTINGS
+            "share_text" -> DeviceToolCapability.SHARE_TEXT
+            else -> null
+        }
+        if (deviceCapability != null && !deviceAuthorization.isGranted(deviceCapability)) {
+            val label = when (deviceCapability) {
+                DeviceToolCapability.OPEN_WIFI_SETTINGS -> "Open Wi-Fi settings"
+                DeviceToolCapability.OPEN_APP_SETTINGS -> "Open app settings"
+                DeviceToolCapability.SHARE_TEXT -> "Share text"
+                else -> "Android device action"
+            }
+            return PluginAccessDecision.PermissionRequired(
+                id = "device_tool.\${deviceCapability.name.lowercase()}",
+                label = label,
+                explanation = "Enable '\$label' under Settings → Android tools before using this plugin action."
+            )
         }
 
         val missingPermission = requiredPermissions(action.capability).firstOrNull { permission ->
@@ -88,6 +113,8 @@ class AndroidPluginAccessChecker(
         )
         PluginCapability.DEVICE_INFORMATION,
         PluginCapability.BATTERY_STATUS,
+        PluginCapability.ANDROID_SETTINGS_OPEN,
+        PluginCapability.ANDROID_TEXT_SHARE,
         PluginCapability.NOTIFICATION_READ,
         PluginCapability.GITHUB_REPOSITORY_READ,
         PluginCapability.GITHUB_REPOSITORY_WRITE -> emptyList()
