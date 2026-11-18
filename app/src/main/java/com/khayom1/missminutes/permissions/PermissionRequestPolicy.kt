@@ -5,12 +5,7 @@ internal fun permissionsToRequest(
     requiredPermissions: List<String>,
     isGranted: (String) -> Boolean
 ): Array<String> {
-    val requested = linkedSetOf<String>()
-    requiredPermissions.forEach { permission ->
-        require(permission.isNotBlank())
-        if (requested.add(permission) && !isGranted(permission)) {
-            // The permission is added only once; already-granted entries are removed below.
-        }
-    }
-    return requiredPermissions.distinct().filterNot(isGranted).toTypedArray()
+    val uniquePermissions = requiredPermissions.distinct()
+    require(uniquePermissions.all(String::isNotBlank))
+    return uniquePermissions.filterNot(isGranted).toTypedArray()
 }
