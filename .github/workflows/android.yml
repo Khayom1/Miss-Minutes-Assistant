@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: android-ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Preserve each exact-head validation run; rapid commits must not cancel earlier builds.
+  cancel-in-progress: false
 
 jobs:
   build:
