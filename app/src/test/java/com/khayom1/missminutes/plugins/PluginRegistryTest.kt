@@ -435,7 +435,7 @@ class PluginRegistryTest {
 
     @Test
     fun androidCamelCaseArgumentNamesAreAcceptedAndStillValidatedAgainstCompiledSchema() {
-        val argumentSchema = mapOf(
+        val androidArguments = mapOf(
             "startEpochMillis" to PluginFieldSpec(
                 name = "startEpochMillis",
                 type = PluginValueType.INTEGER,
@@ -451,7 +451,7 @@ class PluginRegistryTest {
         val handler = object : PluginActionHandler {
             override val actionId = "android_action"
             override val capability = PluginCapability.DEVICE_INFORMATION
-            override val argumentSchema = argumentSchema
+            override val argumentSchema = androidArguments
 
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 calls++
@@ -476,7 +476,7 @@ class PluginRegistryTest {
                 PluginActionSpec(
                     id = "android_action",
                     capability = PluginCapability.DEVICE_INFORMATION,
-                    arguments = argumentSchema
+                    arguments = androidArguments
                 )
             )
         )
@@ -497,7 +497,7 @@ class PluginRegistryTest {
         assertEquals("accepted", result.message)
         assertEquals(1, calls)
 
-        val invalidSchema = argumentSchema + (
+        val invalidSchema = androidArguments + (
             "InvalidName" to PluginFieldSpec("InvalidName", PluginValueType.STRING)
         )
         val invalidRegistry = PluginRegistry(
