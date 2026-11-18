@@ -22,7 +22,16 @@ require_match 'VERSION_17' "$gradle_file"
 require_match 'kotlin-gradle-plugin:2[.]4[.]21' "$root_gradle_file"
 require_match 'gradle-version: "9[.]5[.]0"' "$workflow_file"
 require_match 'platforms;android-37[.]0' "$workflow_file"
-require_match 'system-images;android-37[.]0;default;x86_64' "$workflow_file"
+require_match 'cmdline-tools;latest' "$workflow_file"
+require_match 'Pkg[.]Revision' "$workflow_file"
+require_match 'system-images;android-37[.]0;google_apis;x86_64' "$workflow_file"
+require_match 'AVD_TARGET.*android-37[.]0' "$workflow_file"
+require_match 'pidof surfaceflinger' "$workflow_file"
+require_match 'cmd package install-create' "$workflow_file"
+if grep -Eq 'system-images;android-37[.]0;default;x86_64' "$workflow_file"; then
+  echo "Android platform policy failed: API 37 must use the validated Google APIs image." >&2
+  exit 1
+fi
 if grep -Eq 'id\("org[.]jetbrains[.]kotlin[.]android"\)' "$root_gradle_file" "$gradle_file"; then
   echo "Android platform policy failed: use AGP built-in Kotlin, not the legacy Android Kotlin plugin." >&2
   exit 1
