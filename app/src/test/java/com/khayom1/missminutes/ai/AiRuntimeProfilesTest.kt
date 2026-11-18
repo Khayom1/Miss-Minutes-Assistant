@@ -50,6 +50,17 @@ class AiRuntimeProfilesTest {
     }
 
     @Test
+    fun autoIgnoresConnectedToolsWhenProviderCannotExecuteStructuredTools() {
+        val unsupported = AiProviderCapabilities(supportsStructuredTools = false, isLocal = false)
+        val plan = AiRuntimePolicy.resolve(AiRuntimeProfile.AUTO, "Hi", 8, unsupported)
+
+        assertEquals(AiRuntimeProfile.FAST, plan.effectiveProfile)
+        assertFalse(plan.structuredToolsEnabled)
+        assertEquals(1, plan.maxToolRounds)
+        assertEquals(1, plan.maxToolCalls)
+    }
+
+    @Test
     fun providerWithoutStructuredToolsNeverReceivesToolBudget() {
         val local = AiProviderCapabilities(supportsStructuredTools = false, isLocal = true)
         val plan = AiRuntimePolicy.resolve(AiRuntimeProfile.EXTRA, "Long request", 8, local)
