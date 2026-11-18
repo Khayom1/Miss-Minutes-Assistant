@@ -77,6 +77,7 @@ import com.khayom1.missminutes.agent.AgentTaskRuntime
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
+import com.khayom1.missminutes.ai.LocalModelStore
 import com.khayom1.missminutes.ai.AiToolExecutionLoop
 import com.khayom1.missminutes.ai.AiToolExecutor
 import com.khayom1.missminutes.ai.AiToolExecutionResult
@@ -338,6 +339,9 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
 @Composable
 fun MissMinutesApp(
     aiProvider: AiProvider,
+    localAiProvider: AiProvider,
+    localModelStore: LocalModelStore,
+    validateLocalModel: suspend (String) -> Unit,
     ttsProvider: TtsProvider,
     apiKeyStore: DeepSeekApiKeyStore,
     speechInputProvider: SpeechInputProvider,
@@ -380,6 +384,62 @@ fun MissMinutesApp(
         )
     }
     val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
+    var localModelReady by remember(context) {
+        mutableStateOf(localModelStore.currentModelPath() != null)
+    }
+    var usingLocalModel by remember(context) {
+        mutableStateOf(localModelStore.isLocalModelSelected() && localModelReady)
+    }
+    var localModelMessage by remember { mutableStateOf<String?>(null) }
+    var localModelImporting by remember { mutableStateOf(false) }
+
+    val importLocalModelLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            localModelImporting = true
+            localModelMessage = when (language) {
+                AppLanguage.Tajik -> "Модел ба хотираи хусусии барнома нусхабардорӣ мешавад…"
+                AppLanguage.Russian -> "Модель копируется в защищённое хранилище приложения…"
+                AppLanguage.English -> "Copying model into private app storage…"
+            }
+            scope.launch {
+                try {
+                    localModelStore.importModel(
+                        context.contentResolver,
+                        uri,
+                        validateLocalModel
+                    )
+                    localModelReady = localModelStore.currentModelPath() != null
+                    usingLocalModel = localModelReady
+                    localModelMessage = when (language) {
+                        AppLanguage.Tajik -> "Модел ворид шуд. Барои ҷавоби аввал вақти боркунии модел лозим мешавад."
+                        AppLanguage.Russian -> "Модель импортирована. Первый ответ загрузит веса модели."
+                        AppLanguage.English -> "Model validated by LiteRT-LM and imported. The first reply will load it for conversation."
+                    }
+                } catch (error: Exception) {
+                    localModelMessage = error.message ?: when (language) {
+                        AppLanguage.Tajik -> "Ворид кардани модел ноком шуд."
+                        AppLanguage.Russian -> "Не удалось импортировать модель."
+                        AppLanguage.English -> "Model import failed."
+                    }
+                } finally {
+                    localModelImporting = false
+                }
+            }
+        }
+    }
+
+    val changeAiBackend: (Boolean) -> Unit = { selected ->
+        runCatching { localModelStore.selectLocalModel(selected) }
+            .onSuccess {
+                usingLocalModel = selected
+                localModelMessage = null
+            }
+            .onFailure { error ->
+                localModelMessage = error.message
+            }
+    }
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
@@ -1157,7 +1217,9 @@ fun MissMinutesApp(
             val request = try {
                 AiRequest(
                     messages = requestMessages,
-                    tools = PluginToolSchemaFactory.toAiToolDefinitions(agentOrchestrator.availablePluginTools())
+                    tools = PluginToolSchemaFactory.toAiToolDefinitions(
+                        agentOrchestrator.availablePluginTools()
+                    )
                 )
             } catch (_: IllegalArgumentException) {
                 chatError = copy.conversationTooLong
@@ -1196,7 +1258,7 @@ fun MissMinutesApp(
                         }
 
                         val completion: AiCompletion = AiToolExecutionLoop(
-                            provider = aiProvider,
+                            provider = if (usingLocalModel) localAiProvider else aiProvider,
                             executor = AiToolExecutor { call ->
                                 val result = withContext(Dispatchers.IO) {
                                     agentOrchestrator.executePluginTool(call.name, call.arguments, userConfirmed = false)
@@ -1462,6 +1524,7 @@ fun MissMinutesApp(
                         when (screen) {
                             AppScreen.Chat -> ChatScreen(
                                 copy = copy,
+                                language = language,
                                 messages = messages,
                                 draft = draft,
                                 isSending = isSending,
@@ -1474,7 +1537,10 @@ fun MissMinutesApp(
                                 onSpeak = speakMessage,
                                 speechListening = speechListening,
                                 speechError = speechError,
-                                onSpeechInput = requestSpeechInput
+                                onSpeechInput = requestSpeechInput,
+                                usingLocalModel = usingLocalModel,
+                                localModelReady = localModelReady,
+                                onAiBackendChange = changeAiBackend
                             )
                             AppScreen.Dashboard -> DashboardScreen(
                                 copy = copy,
@@ -1517,6 +1583,12 @@ fun MissMinutesApp(
                                 onApiKeyInputChange = { apiKeyInput = it.take(512) },
                                 onSaveApiKey = saveApiKey,
                                 onClearApiKey = clearApiKey,
+                                localModelReady = localModelReady,
+                                usingLocalModel = usingLocalModel,
+                                localModelMessage = localModelMessage,
+                                localModelImporting = localModelImporting,
+                                onImportLocalModel = { importLocalModelLauncher.launch(arrayOf("*/*")) },
+                                onUseLocalModelChange = changeAiBackend,
                                 wakeEnabled = wakeEnabled,
                                 wakeMessage = wakeMessage,
                                 onEnableWakeListening = enableWakeListening,
@@ -1648,6 +1720,7 @@ private fun LoadingScreen() {
 @Composable
 private fun ChatScreen(
     copy: UiCopy,
+    language: AppLanguage,
     messages: List<ChatMessage>,
     draft: String,
     isSending: Boolean,
@@ -1660,7 +1733,10 @@ private fun ChatScreen(
     onSpeak: (ChatMessage) -> Unit,
     speechListening: Boolean,
     speechError: String?,
-    onSpeechInput: () -> Unit
+    onSpeechInput: () -> Unit,
+    usingLocalModel: Boolean,
+    localModelReady: Boolean,
+    onAiBackendChange: (Boolean) -> Unit
 ) { 
     val messageListState = rememberLazyListState()
     LaunchedEffect(messages.lastOrNull()?.id) {
@@ -1675,6 +1751,38 @@ private fun ChatScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = !usingLocalModel,
+                onClick = { onAiBackendChange(false) },
+                label = {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik, AppLanguage.Russian, AppLanguage.English -> "DeepSeek"
+                        }
+                    )
+                },
+                modifier = Modifier.testTag("ai_provider_deepseek")
+            )
+            FilterChip(
+                selected = usingLocalModel,
+                onClick = { if (localModelReady) onAiBackendChange(true) },
+                enabled = localModelReady,
+                label = {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Модели маҳаллӣ"
+                            AppLanguage.Russian -> "Локальная модель"
+                            AppLanguage.English -> "Local model"
+                        }
+                    )
+                },
+                modifier = Modifier.testTag("ai_provider_local")
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = copy.welcomeTitle,
@@ -1708,7 +1816,13 @@ private fun ChatScreen(
             Text(voicePreparing, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Text(
-            text = copy.gatewayNotice,
+            text = if (usingLocalModel) {
+                when (language) {
+                    AppLanguage.Tajik -> "Чати офлайн фаъол аст. Модели маҳаллӣ метавонад асбобҳои плагинро пешниҳод кунад; иҷро ҳамеша аз санҷиши иҷозат ва тасдиқи корбар мегузарад."
+                    AppLanguage.Russian -> "Работает офлайн-чат. Совместимая локальная модель может запрашивать плагины; выполнение всегда проходит проверку доступа и подтверждение пользователя."
+                    AppLanguage.English -> "Offline chat is active. A tool-capable local model can request plugins; execution still goes through access checks and user approval."
+                }
+            } else copy.gatewayNotice,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1966,6 +2080,12 @@ private fun SettingsScreen(
     onApiKeyInputChange: (String) -> Unit,
     onSaveApiKey: () -> Unit,
     onClearApiKey: () -> Unit,
+    localModelReady: Boolean,
+    usingLocalModel: Boolean,
+    localModelMessage: String?,
+    localModelImporting: Boolean,
+    onImportLocalModel: () -> Unit,
+    onUseLocalModelChange: (Boolean) -> Unit,
     wakeEnabled: Boolean,
     wakeMessage: String?,
     onEnableWakeListening: () -> Unit,
@@ -2113,6 +2233,87 @@ private fun SettingsScreen(
                     TextButton(onClick = onClearApiKey, enabled = !isBusy) { Text(removeLabel) }
                 }
             }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Модели маҳаллӣ (офлайн)"
+                    AppLanguage.Russian -> "Локальная модель (офлайн)"
+                    AppLanguage.English -> "Local model (offline)"
+                },
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Файли .litertlm-ро интихоб кун. Модел дар хотираи хусусии барнома нигоҳ дошта мешавад; интернет ва API Key барои ҷавобҳои маҳаллӣ лозим нест."
+                    AppLanguage.Russian -> "Выберите файл .litertlm. Модель хранится в закрытом хранилище приложения; для локальных ответов не нужны интернет и API-ключ."
+                    AppLanguage.English -> "Choose a .litertlm file. The model is copied into private app storage; local replies need neither internet nor an API key."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> if (localModelReady) "Модел ворид шудааст" else "Модел ҳанӯз ворид нашудааст"
+                    AppLanguage.Russian -> if (localModelReady) "Модель импортирована" else "Модель ещё не импортирована"
+                    AppLanguage.English -> if (localModelReady) "Model imported" else "No local model imported"
+                },
+                color = if (localModelReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onImportLocalModel,
+                enabled = !localModelImporting && !isBusy,
+                modifier = Modifier.testTag("import_local_model")
+            ) {
+                Text(
+                    when (language) {
+                        AppLanguage.Tajik -> if (localModelImporting) "Ворид шуда истодааст…" else "Ворид кардани модел"
+                        AppLanguage.Russian -> if (localModelImporting) "Импорт…" else "Импортировать модель"
+                        AppLanguage.English -> if (localModelImporting) "Importing…" else "Import model"
+                    }
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Истифодаи модели маҳаллӣ"
+                            AppLanguage.Russian -> "Использовать локальную модель"
+                            AppLanguage.English -> "Use local model"
+                        }
+                    )
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Танҳо баъди ворид кардани модел фаъол мешавад."
+                            AppLanguage.Russian -> "Доступно после импорта модели."
+                            AppLanguage.English -> "Available after a model is imported."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = usingLocalModel,
+                    onCheckedChange = onUseLocalModelChange,
+                    enabled = localModelReady && !localModelImporting,
+                    modifier = Modifier.testTag("use_local_model")
+                )
+            }
+            if (localModelMessage != null) {
+                Text(localModelMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Эзоҳ: иҷрои плагинҳои офлайн танҳо бо моделҳои дорои Tool Calling дастрас аст; ҳамаи иҷрошавиҳо аз санҷиши иҷозат ва тасдиқ мегузаранд."
+                    AppLanguage.Russian -> "Примечание: офлайн-плагины доступны только моделям с поддержкой Tool Calling; каждое действие проходит проверки доступа и подтверждение."
+                    AppLanguage.English -> "Note: offline plugin execution requires a tool-capable local model; every action still passes access checks and explicit approval."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         val overlayContext = LocalContext.current
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

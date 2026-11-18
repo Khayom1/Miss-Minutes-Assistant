@@ -1,6 +1,7 @@
 package com.khayom1.missminutes
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertTextContains
@@ -21,6 +22,7 @@ import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
+import com.khayom1.missminutes.ai.LocalModelStore
 import kotlinx.coroutines.CompletableDeferred
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.TtsProvider
@@ -50,6 +52,7 @@ class MainActivityTest {
     private lateinit var aiProvider: FakeAiProvider
     private lateinit var apiKeyStore: MemoryApiKeyStore
     private lateinit var conversationStore: LocalConversationStore
+    private lateinit var localModelStore: LocalModelStore
     private lateinit var conversationDatabaseName: String
 
     private class MemoryApiKeyStore : DeepSeekApiKeyStore {
@@ -80,6 +83,8 @@ class MainActivityTest {
         aiProvider = FakeAiProvider()
         apiKeyStore = MemoryApiKeyStore()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.getSharedPreferences("local_model_preferences", 0).edit().clear().commit()
+        localModelStore = LocalModelStore(context)
         context.getSharedPreferences("app_preferences", 0).edit().clear().commit()
         context.getSharedPreferences("plugin_manifest_store", 0).edit().clear().commit()
         context.getSharedPreferences("plugin_user_consent", 0).edit().clear().commit()
@@ -92,6 +97,8 @@ class MainActivityTest {
         composeRule.setContent {
             com.khayom1.missminutes.ui.MissMinutesApp(
                 aiProvider = aiProvider,
+                localAiProvider = aiProvider,
+                localModelStore = localModelStore,
                 apiKeyStore = apiKeyStore,
                 ttsProvider = object : TtsProvider {
                     override fun speak(text: String, onDone: () -> Unit, onError: () -> Unit) = onDone()
@@ -128,6 +135,18 @@ class MainActivityTest {
     private fun assertChatReady() {
         waitForChatScreen()
         composeRule.onNodeWithText("How can I help?").assertIsDisplayed()
+    }
+
+    @Test
+    fun localProviderStaysDisabledUntilAModelIsImported() {
+        composeRule.onNodeWithTag("ai_provider_local")
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("import_local_model")
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
