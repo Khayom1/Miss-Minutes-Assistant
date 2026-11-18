@@ -6,7 +6,8 @@
 - [ ] Android lint passes.
 - [ ] Debug APK builds.
 - [ ] Release APK builds.
-- [ ] API 35 instrumentation tests pass.
+- [ ] API 37 (Android 17) emulator instrumentation tests pass.
+- [ ] API 35 compatibility instrumentation tests pass.
 - [ ] Dependency vulnerability/security checks and secret scanning pass.
 - [ ] Installable APK and release evidence are uploaded.
 - [ ] Package name, versionCode, versionName, minSdk, targetSdk, and signing certificate are verified.
@@ -28,7 +29,7 @@
 
 - [ ] Owner-controlled production keystore is configured outside source control.
 - [ ] Signing certificate fingerprint and repeatable signing procedure are verified.
-- [ ] Real Samsung Galaxy A35 / Android 17 installation and permission UX are tested.
+- [ ] Real Samsung Galaxy A35 / Android 17 installation and permission UX are tested; API 37 emulator evidence is not physical-device evidence.
 - [ ] Background/Force Stop limits, TTS language packs, microphone behavior, overlay, battery and thermal behavior are tested.
 - [ ] A real DeepSeek BYOK request is tested only with a user-supplied key.
 
