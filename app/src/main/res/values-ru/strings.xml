@@ -2,4 +2,16 @@
 <resources>
     <string name="miss_minutes_accessibility_service_label">Управление приложениями Miss Minutes</string>
     <string name="miss_minutes_accessibility_service_description">Позволяет Miss Minutes читать видимый экран приложения и только по вашей команде нажимать доступные элементы и вводить текст. Содержимое экрана может передаваться выбранному вами поставщику ИИ. Пассивный сбор экрана не выполняется.</string>
+
+    <string name="miss_minutes_assistant_label">Miss Minutes</string>
+    <string name="miss_minutes_assistant_role_title">Системный помощник Android</string>
+    <string name="miss_minutes_assistant_role_description">Выберите Miss Minutes в качестве помощника Android. Система сможет поддерживать её облегчённую службу голосового взаимодействия. Это не гарантирует активацию по фразе на каждом телефоне: поддержка аппаратного распознавания зависит от устройства. Содержимое экрана и снимки экрана по умолчанию отключены.</string>
+    <string name="miss_minutes_assistant_role_held">Miss Minutes выбран системным помощником.</string>
+    <string name="miss_minutes_assistant_role_available">Роль помощника доступна на этом устройстве.</string>
+    <string name="miss_minutes_assistant_role_unavailable">Роль помощника Android недоступна на этом устройстве или версии Android.</string>
+    <string name="miss_minutes_assistant_role_request">Выбрать помощником по умолчанию</string>
+    <string name="miss_minutes_assistant_role_not_granted">Android не предоставил роль помощника. Настройки системы не изменены.</string>
+    <string name="miss_minutes_voice_session_title">Miss Minutes готова</string>
+    <string name="miss_minutes_voice_session_body">Системная сессия помощника активна. Содержимое экрана не передаётся, пока вы явно не включите эту функцию.</string>
+    <string name="miss_minutes_voice_session_open">Открыть Miss Minutes</string>
 </resources>

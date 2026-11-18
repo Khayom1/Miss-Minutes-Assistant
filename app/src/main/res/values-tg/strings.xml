@@ -2,4 +2,16 @@
 <resources>
     <string name="miss_minutes_accessibility_service_label">Идоракунии барномаҳо аз ҷониби Miss Minutes</string>
     <string name="miss_minutes_accessibility_service_description">Ба Miss Minutes имкон медиҳад, ки экрани намоёни барномаро хонад ва танҳо бо фармони шумо тугмаҳои дастрасро пахш карда, матн ворид намояд. Мундариҷаи экран метавонад ба провайдери интихобшудаи AI фиристода шавад. Ҷамъоварии пассивии экран иҷро намешавад.</string>
+
+    <string name="miss_minutes_assistant_label">Miss Minutes</string>
+    <string name="miss_minutes_assistant_role_title">Ёвари системавии Android</string>
+    <string name="miss_minutes_assistant_role_description">Miss Minutes-ро ҳамчун ёвари Android интихоб кунед. Система метавонад хидмати сабуки муоширати овозии онро фаъол нигоҳ дорад. Ин бедоршавӣ бо ибораи махсусро дар ҳамаи телефонҳо кафолат намедиҳад: дастгирии микросхемаи шинохти овоз аз дастгоҳ вобаста аст. Мундариҷа ва аксҳои экран пешфарз ғайрифаъоланд.</string>
+    <string name="miss_minutes_assistant_role_held">Miss Minutes ҳамчун ёвари системавӣ интихоб шудааст.</string>
+    <string name="miss_minutes_assistant_role_available">Нақши Assistant дар ин дастгоҳ дастрас аст.</string>
+    <string name="miss_minutes_assistant_role_unavailable">Нақши Assistant-и Android дар ин дастгоҳ ё версия дастрас нест.</string>
+    <string name="miss_minutes_assistant_role_request">Ҳамчун ёвари пешфарз интихоб кардан</string>
+    <string name="miss_minutes_assistant_role_not_granted">Android нақши ёварро надод. Танзимоти система тағйир наёфт.</string>
+    <string name="miss_minutes_voice_session_title">Miss Minutes омода аст</string>
+    <string name="miss_minutes_voice_session_body">Сессияи ёвари системавӣ фаъол аст. Мундариҷаи экран то иҷозати махсуси шумо мубодила намешавад.</string>
+    <string name="miss_minutes_voice_session_open">Кушодани Miss Minutes</string>
 </resources>

@@ -2046,6 +2046,7 @@ private fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(copy.settingsTitle, style = MaterialTheme.typography.headlineMedium)
+        AssistantRoleSettingsPanel()
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(copy.language, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

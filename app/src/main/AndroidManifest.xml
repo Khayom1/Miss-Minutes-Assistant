@@ -42,6 +42,36 @@
             </intent-filter>
         </activity>
         <service
+            android:name=".assistant.MissMinutesVoiceInteractionService"
+            android:label="@string/miss_minutes_assistant_label"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:process=":assistant_interactor"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/miss_minutes_voice_interaction_service" />
+        </service>
+        <service
+            android:name=".assistant.MissMinutesVoiceInteractionSessionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:process=":assistant_session"
+            android:exported="true" />
+        <service
+            android:name=".assistant.MissMinutesRecognitionService"
+            android:label="@string/miss_minutes_assistant_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech"
+                android:resource="@xml/miss_minutes_recognition_service" />
+        </service>
+        <service
             android:name=".voice.MissMinutesWakeWordService"
             android:exported="false"
             android:foregroundServiceType="microphone"

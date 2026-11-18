@@ -2,4 +2,16 @@
 <resources>
     <string name="miss_minutes_accessibility_service_label">Miss Minutes cross-app automation</string>
     <string name="miss_minutes_accessibility_service_description">Lets Miss Minutes inspect the visible app screen and, only when you give a command, tap accessible controls and enter text. Screen content may be sent to your configured AI provider. It does not passively collect screen content.</string>
+
+    <string name="miss_minutes_assistant_label">Miss Minutes</string>
+    <string name="miss_minutes_assistant_role_title">Android system Assistant</string>
+    <string name="miss_minutes_assistant_role_description">Select Miss Minutes as your Android Assistant. Android can then keep its lightweight voice-interaction service available. This does not guarantee a wake phrase on every phone: hardware hotword support is device-dependent. Foreground screen content and screenshots remain disabled by default.</string>
+    <string name="miss_minutes_assistant_role_held">Miss Minutes is the selected system Assistant.</string>
+    <string name="miss_minutes_assistant_role_available">The Assistant role is available on this device.</string>
+    <string name="miss_minutes_assistant_role_unavailable">The Android Assistant role is unavailable on this device or Android version.</string>
+    <string name="miss_minutes_assistant_role_request">Set as default Assistant</string>
+    <string name="miss_minutes_assistant_role_not_granted">Android did not grant the Assistant role. No system setting was changed.</string>
+    <string name="miss_minutes_voice_session_title">Miss Minutes is ready</string>
+    <string name="miss_minutes_voice_session_body">The system Assistant session is active. Screen content is not shared unless you explicitly enable that feature.</string>
+    <string name="miss_minutes_voice_session_open">Open Miss Minutes</string>
 </resources>
