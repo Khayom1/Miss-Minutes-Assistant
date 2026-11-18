@@ -11,9 +11,10 @@ permissions:
   contents: read
 
 concurrency:
+  # Keep only the newest commit's validation for each ref. Every job in the
+  # selected run still executes; superseded commits are never reported as passed.
   group: android-ci-${{ github.ref }}
-  # Preserve each exact-head validation run; rapid commits must not cancel earlier builds.
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
