@@ -40,9 +40,7 @@ internal fun AssistantRoleSettingsPanel() {
         ActivityResultContracts.StartActivityForResult()
     ) {
         refreshRoleState()
-        resultMessage = if (held) null else context.getString(
-            roleNotGrantedMessage
-        )
+        resultMessage = if (held) null else roleNotGrantedMessage
     }
 
     val status = when {
@@ -83,9 +81,7 @@ internal fun AssistantRoleSettingsPanel() {
                     val requestIntent = AndroidAssistantRole.createRequestIntent(context)
                     if (requestIntent == null) {
                         refreshRoleState()
-                        if (!held) resultMessage = context.getString(
-                            roleNotGrantedMessage
-                        )
+                        if (!held) resultMessage = roleNotGrantedMessage
                     } else {
                         roleLauncher.launch(requestIntent)
                     }
