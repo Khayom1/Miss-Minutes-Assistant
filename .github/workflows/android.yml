@@ -180,20 +180,28 @@ jobs:
             exit 1
           fi
           adb shell df -h /data
-          echo "API 37 framework service state before instrumentation:"
-          adb shell getprop init.svc.system_server
-          adb shell service check package
-          adb shell service check activity
-          if ! gradle --no-daemon connectedDebugAndroidTest; then
-            echo "API 37 instrumentation failed; collecting framework and emulator diagnostics." >&2
+          collect_api37_diagnostics() {
             adb shell getprop init.svc.system_server || true
             adb shell service list | grep -E 'package|activity' || true
             adb logcat -b all -d | grep -Ei 'system_server|PackageManager|FATAL EXCEPTION|Watchdog|lowmemorykiller|OutOfMemory|Killing .*system_server' | tail -300 || adb logcat -b all -d | tail -300
             tail -200 "$EMULATOR_LOG" || true
+          }
+          echo "API 37 framework service state before instrumentation:"
+          if ! adb shell service check package || ! adb shell service check activity; then
+            echo "API 37 framework services disappeared before instrumentation." >&2
+            collect_api37_diagnostics
             exit 1
           fi
-          adb shell service check package
-          adb shell service check activity
+          if ! gradle --no-daemon connectedDebugAndroidTest; then
+            echo "API 37 instrumentation failed; collecting framework and emulator diagnostics." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          if ! adb shell service check package || ! adb shell service check activity; then
+            echo "API 37 framework services disappeared after instrumentation." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
 
       - name: Run Android instrumentation tests (API 35 compatibility)
         uses: reactivecircus/android-emulator-runner@v2
