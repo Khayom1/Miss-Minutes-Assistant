@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,6 +77,8 @@ import com.khayom1.missminutes.ai.AiProvider
 import com.khayom1.missminutes.ai.AiToolExecutionLoop
 import com.khayom1.missminutes.ai.AiToolExecutor
 import com.khayom1.missminutes.ai.AiToolExecutionResult
+import com.khayom1.missminutes.ai.AiToolApprovalGate
+import com.khayom1.missminutes.ai.AiToolApprovalPrompt
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
@@ -112,6 +115,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import com.khayom1.missminutes.ai.SpeechInputProvider
 import java.util.Locale
 import java.io.ByteArrayOutputStream
@@ -375,6 +380,8 @@ fun MissMinutesApp(
         )
     }
     val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
+    val toolApprovalGate = remember { AiToolApprovalGate() }
+    val pendingToolApproval by toolApprovalGate.pending.collectAsState()
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
@@ -1171,8 +1178,29 @@ fun MissMinutesApp(
                         val completion: AiCompletion = AiToolExecutionLoop(
                             provider = aiProvider,
                             executor = AiToolExecutor { call ->
+                                val descriptor = agentOrchestrator.availablePluginTools()
+                                    .firstOrNull { it.toolName == call.name }
+                                val approved = if (descriptor?.requiresConfirmation == true) {
+                                    val argumentNames = runCatching {
+                                        Json.parseToJsonElement(call.arguments).jsonObject.keys.sorted().take(16)
+                                    }.getOrDefault(emptyList())
+                                    toolApprovalGate.awaitApproval(
+                                        AiToolApprovalPrompt(
+                                            toolName = call.name,
+                                            pluginName = descriptor.pluginName,
+                                            description = descriptor.description,
+                                            argumentNames = argumentNames
+                                        )
+                                    )
+                                } else {
+                                    false
+                                }
                                 val result = withContext(Dispatchers.IO) {
-                                    agentOrchestrator.executePluginTool(call.name, call.arguments, userConfirmed = false)
+                                    agentOrchestrator.executePluginTool(
+                                        call.name,
+                                        call.arguments,
+                                        userConfirmed = approved
+                                    )
                                 }
                                 AiToolExecutionResult(result.status.name + ": " + result.message)
                             }
@@ -1589,6 +1617,73 @@ fun MissMinutesApp(
                         }
                     }
                 }
+            }
+            pendingToolApproval?.let { approval ->
+                AlertDialog(
+                    onDismissRequest = { toolApprovalGate.resolve(approved = false) },
+                    title = {
+                        Text(
+                            when (language) {
+                                AppLanguage.Tajik -> "Тасдиқи амали плагин"
+                                AppLanguage.Russian -> "Подтверждение действия плагина"
+                                AppLanguage.English -> "Approve plugin action"
+                            }
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(approval.pluginName, fontWeight = FontWeight.SemiBold)
+                            Text(approval.description)
+                            if (approval.argumentNames.isNotEmpty()) {
+                                Text(
+                                    when (language) {
+                                        AppLanguage.Tajik -> "Майдонҳои дархост: " + approval.argumentNames.joinToString()
+                                        AppLanguage.Russian -> "Поля запроса: " + approval.argumentNames.joinToString()
+                                        AppLanguage.English -> "Requested fields: " + approval.argumentNames.joinToString()
+                                    },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Text(
+                                when (language) {
+                                    AppLanguage.Tajik -> "Ин амал танҳо як бор, баъди иҷозати ту иҷро мешавад. Арзишҳои махфии параметрҳо нишон дода намешаванд."
+                                    AppLanguage.Russian -> "Действие будет выполнено один раз только после вашего разрешения. Секретные значения параметров не отображаются."
+                                    AppLanguage.English -> "This action runs once only after your approval. Sensitive argument values are not displayed."
+                                },
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = { toolApprovalGate.resolve(approved = true) },
+                            modifier = Modifier.testTag("approve_plugin_tool")
+                        ) {
+                            Text(
+                                when (language) {
+                                    AppLanguage.Tajik -> "Иҷозат додан"
+                                    AppLanguage.Russian -> "Разрешить"
+                                    AppLanguage.English -> "Approve once"
+                                }
+                            )
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { toolApprovalGate.resolve(approved = false) },
+                            modifier = Modifier.testTag("reject_plugin_tool")
+                        ) {
+                            Text(
+                                when (language) {
+                                    AppLanguage.Tajik -> "Рад кардан"
+                                    AppLanguage.Russian -> "Отклонить"
+                                    AppLanguage.English -> "Reject"
+                                }
+                            )
+                        }
+                    }
+                )
             }
         }
     }
