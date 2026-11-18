@@ -1,12 +1,18 @@
 package com.khayom1.missminutes.ai
 
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.OpenApiTool
+import com.google.ai.edge.litertlm.ToolCall
+import com.google.ai.edge.litertlm.tool
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -19,34 +25,27 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import org.json.JSONObject
 
 /**
- * LiteRT-LM text generation on CPU. All Engine and Conversation operations are
- * confined to one worker thread, and model weights stay outside the APK.
+ * LiteRT-LM text and structured-tool inference on CPU.
  *
- * The Local AI provider deliberately rejects structured tool requests until
- * model tool calls use the same approval-gated dispatcher as cloud models.
+ * All Engine/Conversation operations are confined to one worker thread. Model
+ * tool calls are returned to the app rather than auto-executed by the SDK, so
+ * the shared AiToolExecutionLoop and user approval gate remain authoritative.
  */
-internal fun buildLiteRtLmPrompt(
-    messages: List<AiMessage>,
-    maxCharacters: Int = 18_000
-): String {
-    require(maxCharacters > 0)
-    return messages
-        .filter { it.role != AiRole.SYSTEM }
-        .joinToString("\n\n") { message ->
-            val role = when (message.role) {
-                AiRole.USER -> "User"
-                AiRole.ASSISTANT -> "Assistant"
-                AiRole.TOOL -> "Tool result (${message.name.orEmpty()})"
-                AiRole.SYSTEM -> "System"
-            }
-            "$role:\n${message.content}"
-        }
-        .takeLast(maxCharacters)
-        .ifBlank { throw IllegalArgumentException("The local model prompt is empty.") }
-}
-
 class LiteRtLmInferenceRuntime(
     private val modelPath: () -> String?,
     private val cacheDirectory: File
@@ -72,54 +71,148 @@ class LiteRtLmInferenceRuntime(
     override suspend fun generate(
         messages: List<AiMessage>,
         maxOutputTokens: Int
-    ): String = withContext(dispatcher) {
-        check(!closed.get()) { "Local inference runtime is closed." }
-        require(maxOutputTokens in 1..2_048)
-        require(messages.isNotEmpty()) { "A local model request needs messages." }
+    ): String = complete(
+        AiRequest(messages = messages, maxOutputTokens = maxOutputTokens)
+    ).content
 
-        mutex.withLock {
+    override suspend fun complete(request: AiRequest): AiCompletion =
+        withContext(dispatcher) {
             check(!closed.get()) { "Local inference runtime is closed." }
-            val path = modelPath()?.takeIf { it.isNotBlank() }
-                ?: throw IOException("Import a .litertlm model in Settings first.")
-            val modelFile = File(path)
-            if (!modelFile.isFile || modelFile.length() <= 0L) {
-                throw IOException("The selected local model file is missing or empty.")
-            }
-            ensureEngine(path)
+            require(request.maxOutputTokens in 1..768)
+            require(request.messages.isNotEmpty())
 
-            val systemInstruction = messages
-                .filter { it.role == AiRole.SYSTEM }
-                .joinToString("\n") { it.content }
-                .ifBlank { DEFAULT_SYSTEM_INSTRUCTION }
-            val prompt = buildLiteRtLmPrompt(messages)
-
-            val conversation = checkNotNull(engine).createConversation(
-                ConversationConfig(
-                    systemInstruction = Contents.of(systemInstruction),
-                    maxOutputToken = maxOutputTokens
-                )
-            )
-            val output = StringBuilder()
-            try {
-                conversation.sendMessageAsync(prompt).collect { chunk ->
-                    val part = chunk.toString()
-                    if (output.length + part.length > MAX_OUTPUT_CHARACTERS) {
-                        throw IOException("Local model response exceeded the output limit.")
-                    }
-                    output.append(part)
+            mutex.withLock {
+                check(!closed.get()) { "Local inference runtime is closed." }
+                val path = modelPath()?.takeIf { it.isNotBlank() }
+                    ?: throw IOException("Import a .litertlm model in Settings first.")
+                val modelFile = File(path)
+                if (!modelFile.isFile || modelFile.length() <= 0L) {
+                    throw IOException("The selected local model file is missing or empty.")
                 }
-            } catch (error: CancellationException) {
-                runCatching { conversation.cancelProcess() }
-                throw error
-            } finally {
-                conversation.close()
-            }
+                ensureEngine(path)
 
-            output.toString().trim().ifBlank {
-                throw IOException("The local model returned an empty response.")
+                val systemInstruction = request.messages
+                    .filter { it.role == AiRole.SYSTEM }
+                    .joinToString("\n") { it.content }
+                    .ifBlank { DEFAULT_SYSTEM_INSTRUCTION }
+                val conversationHistory = request.messages.dropLast(1).map(::toRuntimeMessage)
+                val toolAdapters = request.tools.map { definition ->
+                    tool(RegistryOpenApiTool(definition))
+                }
+                val conversation = checkNotNull(engine).createConversation(
+                    ConversationConfig(
+                        systemInstruction = Contents.of(systemInstruction),
+                        initialMessages = conversationHistory,
+                        tools = toolAdapters,
+                        automaticToolCalling = false,
+                        maxOutputToken = request.maxOutputTokens
+                    )
+                )
+
+                try {
+                    val lastMessage = request.messages.last()
+                    val modelResponse = if (lastMessage.role == AiRole.USER) {
+                        conversation.sendMessageAsync(lastMessage.content)
+                    } else {
+                        conversation.sendMessageAsync(
+                            Message.tool(
+                                Contents.of(
+                                    Content.ToolResponse(
+                                        lastMessage.name.orEmpty(),
+                                        parseToolResponse(lastMessage.content)
+                                    )
+                                )
+                            )
+                        )
+                    }
+
+                    val output = StringBuilder()
+                    var finalMessage: Message? = null
+                    try {
+                        modelResponse.collect { chunk ->
+                            finalMessage = chunk
+                            val part = chunk.toString()
+                            if (output.length + part.length > MAX_OUTPUT_CHARACTERS) {
+                                throw IOException("Local model response exceeded the output limit.")
+                            }
+                            output.append(part)
+                        }
+                    } catch (error: CancellationException) {
+                        runCatching { conversation.cancelProcess() }
+                        throw error
+                    }
+
+                    val responseMessage = finalMessage
+                        ?: throw IOException("The local model returned no response.")
+                    val toolCalls = responseMessage.toolCalls.map { call ->
+                        AiToolCall(
+                            id = "local_\${UUID.randomUUID().toString().replace("-", "")}",
+                            name = call.name,
+                            arguments = JSONObject(call.arguments).toString()
+                        )
+                    }
+                    if (toolCalls.isNotEmpty() &&
+                        (request.tools.isEmpty() ||
+                            toolCalls.size > 4 ||
+                            toolCalls.any { call -> request.tools.none { it.name == call.name } })
+                    ) {
+                        throw AiProviderException.InvalidResponse()
+                    }
+
+                    AiCompletion(
+                        content = output.toString().trim(),
+                        model = "local",
+                        toolCalls = toolCalls
+                    )
+                } finally {
+                    conversation.close()
+                }
             }
         }
+
+    private fun toRuntimeMessage(message: AiMessage): Message =
+        when (message.role) {
+            AiRole.SYSTEM -> Message.system(message.content)
+            AiRole.USER -> Message.user(message.content)
+            AiRole.ASSISTANT -> Message.model(
+                Contents.of(message.content),
+                message.toolCalls.map { call ->
+                    ToolCall(
+                        name = call.name,
+                        arguments = parseArguments(call.arguments)
+                    )
+                }
+            )
+            AiRole.TOOL -> Message.tool(
+                Contents.of(
+                    Content.ToolResponse(
+                        message.name.orEmpty(),
+                        parseToolResponse(message.content)
+                    )
+                )
+            )
+        }
+
+    private fun parseArguments(raw: String): Map<String, Any?> {
+        val parsed = Json.parseToJsonElement(raw)
+        val objectValue = parsed as? JsonObject
+            ?: throw AiProviderException.InvalidResponse()
+        return objectValue.mapValues { (_, value) -> value.toNativeValue() }
     }
+
+    private fun parseToolResponse(raw: String): Any =
+        runCatching { JSONObject(raw) }.getOrElse { raw }
+
+    private fun JsonElement.toNativeValue(): Any? =
+        when (this) {
+            is JsonObject -> entries.associate { (key, value) -> key to value.toNativeValue() }
+            is JsonArray -> map { it.toNativeValue() }
+            JsonNull -> null
+            is JsonPrimitive -> booleanOrNull
+                ?: longOrNull
+                ?: doubleOrNull
+                ?: content
+        }
 
     private fun ensureEngine(path: String) {
         if (loadedPath == path && engine != null) return
@@ -152,6 +245,21 @@ class LiteRtLmInferenceRuntime(
             dispatcher.close()
             runtimeScope.cancel()
         }
+    }
+
+    private class RegistryOpenApiTool(
+        private val definition: AiToolDefinition
+    ) : OpenApiTool {
+        override fun getToolDescriptionJsonString(): String =
+            buildJsonObject {
+                put("name", definition.name)
+                put("description", definition.description)
+                put("parameters", definition.parameters)
+            }.toString()
+
+        /** Never called: automaticToolCalling=false is mandatory for app-side approval. */
+        override fun execute(paramsJsonString: String): String =
+            throw IllegalStateException("Plugin tools must be executed by the application.")
     }
 
     private companion object {
