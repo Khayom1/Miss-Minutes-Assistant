@@ -103,6 +103,7 @@ import com.khayom1.missminutes.plugins.AndroidPluginAccessChecker
 import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
+import com.khayom1.missminutes.voice.PendingVoiceCommandStore
 import com.khayom1.missminutes.memory.ConversationSummary
 import com.khayom1.missminutes.memory.ConversationLimitReachedException
 import com.khayom1.missminutes.memory.LocalConversationStore
@@ -383,12 +384,17 @@ fun MissMinutesApp(
     }
     var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
     var wakeMessage by remember { mutableStateOf<String?>(null) }
+    var pendingVoiceCommand by remember { mutableStateOf(PendingVoiceCommandStore.consume(context)) }
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(receiverContext: android.content.Context?, intent: Intent?) {
                 if (intent?.action == MissMinutesWakeWordService.ACTION_STATE_CHANGED) {
                     wakeEnabled = intent.getBooleanExtra(MissMinutesWakeWordService.EXTRA_ENABLED, false)
                     wakeMessage = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_MESSAGE)
+                    val capturedCommand = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_COMMAND)
+                    if (!capturedCommand.isNullOrBlank()) {
+                        pendingVoiceCommand = PendingVoiceCommandStore.consume(context) ?: capturedCommand
+                    }
                 }
             }
         }
@@ -1112,8 +1118,8 @@ fun MissMinutesApp(
         }
     }
 
-    val submitMessage: () -> Unit = {
-        val value = draft.trim()
+    val submitMessage: (String?) -> Unit = { voiceCommand ->
+        val value = (voiceCommand ?: draft).trim()
         if (value.isNotEmpty() && value.length <= 8_000 && !isSending) {
             val requestMessages = buildAiContextMessages(
                 history = messages.map { message ->
@@ -1241,6 +1247,15 @@ fun MissMinutesApp(
                     }
                 }
             }
+        }
+    }
+
+    LaunchedEffect(pendingVoiceCommand, isRestoring, isSending, currentOwnerId) {
+        val command = pendingVoiceCommand
+        if (!command.isNullOrBlank() && !isRestoring && !isSending && currentOwnerId != null) {
+            pendingVoiceCommand = null
+            selectedScreenName = AppScreen.Chat.name
+            submitMessage(command)
         }
     }
 
@@ -1427,7 +1442,7 @@ fun MissMinutesApp(
                                 isSending = isSending,
                                 error = chatError,
                                 onDraftChange = { draft = it },
-                                onSend = submitMessage,
+                                onSend = { submitMessage(null) },
                                 speakingMessageId = speakingMessageId,
                                 voiceError = voiceError,
                                 voicePreparing = copy.voicePreparing,
