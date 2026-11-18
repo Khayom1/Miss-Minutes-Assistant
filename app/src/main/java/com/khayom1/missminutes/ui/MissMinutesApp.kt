@@ -2339,6 +2339,11 @@ private fun SettingsScreen(
                     AppLanguage.Russian -> "Меню отправки открыто."
                     AppLanguage.English -> "Android share sheet opened."
                 }
+                else -> when (language) {
+                    AppLanguage.Tajik -> "Амал иҷро шуд: ${result.message}"
+                    AppLanguage.Russian -> "Действие выполнено: ${result.message}"
+                    AppLanguage.English -> "Action completed: ${result.message}"
+                }
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2415,6 +2420,11 @@ private fun SettingsScreen(
                         AppLanguage.Tajik -> "Иҷозати мубодилаи матн"
                         AppLanguage.Russian -> "Разрешить обмен текстом"
                         AppLanguage.English -> "Text sharing permission"
+                    }
+                    else -> when (language) {
+                        AppLanguage.Tajik -> capability.name
+                        AppLanguage.Russian -> capability.name
+                        AppLanguage.English -> capability.name.replace('_', ' ').lowercase()
                     }
                 }
                 Row(
