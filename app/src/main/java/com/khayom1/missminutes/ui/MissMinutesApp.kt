@@ -40,6 +40,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.collectAsState
+import com.khayom1.missminutes.ai.AiToolApprovalGate
+import com.khayom1.missminutes.ai.AiToolApprovalPrompt
+import com.khayom1.missminutes.ai.approvalArgumentPreview
+import com.khayom1.missminutes.ai.sanitizeApprovalDisplayText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -384,6 +389,8 @@ fun MissMinutesApp(
         )
     }
     val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
+    val toolApprovalGate = remember { AiToolApprovalGate() }
+    val pendingToolApproval by toolApprovalGate.pending.collectAsState()
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
@@ -419,6 +426,7 @@ fun MissMinutesApp(
         val lifecycle = (context as? LifecycleOwner)?.lifecycle
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             isAppResumed = event == Lifecycle.Event.ON_RESUME
+            if (event == Lifecycle.Event.ON_STOP) toolApprovalGate.rejectPending()
         }
         lifecycle?.addObserver(lifecycleObserver)
         onDispose {
@@ -519,6 +527,7 @@ fun MissMinutesApp(
     var draft by rememberSaveable { mutableStateOf("") }
     var isRestoring by remember { mutableStateOf(true) }
     var conversationGeneration by remember { mutableStateOf(0L) }
+    LaunchedEffect(conversationGeneration) { toolApprovalGate.rejectPending() }
     var userEmail by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
@@ -1210,8 +1219,36 @@ fun MissMinutesApp(
                         val completion: AiCompletion = AiToolExecutionLoop(
                             provider = aiProvider,
                             executor = AiToolExecutor { call ->
+                                val descriptor = agentOrchestrator.availablePluginTools()
+                                    .firstOrNull { it.toolName == call.name }
+                                val approved = if (
+                                    descriptor?.requiresConfirmation == true &&
+                                    requestGeneration == conversationGeneration
+                                ) {
+                                    val preview = approvalArgumentPreview(call.arguments, descriptor.arguments)
+                                    val userApproved = preview?.let { safePreview ->
+                                        val safePluginName = sanitizeApprovalDisplayText(descriptor.pluginName, 128)
+                                            .ifBlank { "Plugin" }
+                                        toolApprovalGate.awaitApproval(
+                                            AiToolApprovalPrompt(
+                                                toolName = sanitizeApprovalDisplayText(descriptor.actionId, 64),
+                                                pluginName = safePluginName,
+                                                description = sanitizeApprovalDisplayText(descriptor.description, 512),
+                                                argumentPreview = safePreview
+                                            ),
+                                            isCurrent = { requestGeneration == conversationGeneration }
+                                        )
+                                    } ?: false
+                                    userApproved && requestGeneration == conversationGeneration
+                                } else {
+                                    false
+                                }
                                 val result = withContext(Dispatchers.IO) {
-                                    agentOrchestrator.executePluginTool(call.name, call.arguments, userConfirmed = false)
+                                    agentOrchestrator.executePluginTool(
+                                        call.name,
+                                        call.arguments,
+                                        userConfirmed = approved
+                                    )
                                 }
                                 AiToolExecutionResult(result.status.name + ": " + result.message)
                             }
@@ -1650,6 +1687,14 @@ fun MissMinutesApp(
                     }
                 }
             }
+        }
+        pendingToolApproval?.let { approval ->
+            AiToolApprovalDialog(
+                approval = approval,
+                language = language,
+                onApprove = { toolApprovalGate.resolve(approval.requestId, approved = true) },
+                onReject = { toolApprovalGate.resolve(approval.requestId, approved = false) }
+            )
         }
     }
 }
