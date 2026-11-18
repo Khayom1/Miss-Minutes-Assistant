@@ -317,4 +317,16 @@ class LocalPluginPackageManagerTest {
             }.isFailure
         )
     }
+
+    @Test
+    fun builtInDevicePluginExposesOnlyReadOnlyActionsUntilApprovalUiIsIntegrated() {
+        val manifest = AndroidDeviceStatusPlugin.manifest()
+
+        assertEquals(
+            setOf(PluginCapability.DEVICE_INFORMATION, PluginCapability.BATTERY_STATUS),
+            manifest.capabilities
+        )
+        assertEquals(listOf("device_info", "battery_status"), manifest.actions.map { it.id })
+        assertTrue(manifest.actions.none { it.requiresConfirmation })
+    }
 }
