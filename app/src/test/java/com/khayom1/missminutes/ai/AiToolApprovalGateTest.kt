@@ -106,8 +106,15 @@ class AiToolApprovalGateTest {
     @Test
     fun approvalArgumentNamesRejectMalformedOrExcessiveArguments() {
         assertNull(approvalArgumentNames("{invalid"))
-        val tooMany = (1..17).joinToString(prefix = "{", postfix = "}") {
-            "\\\"field$it\\\":$it"
+        val tooMany = buildString {
+            append('{')
+            repeat(17) { index ->
+                if (index > 0) append(',')
+                val field = index + 1
+                append('"').append("field").append(field).append('"')
+                append(':').append(field)
+            }
+            append('}')
         }
         assertNull(approvalArgumentNames(tooMany))
     }
