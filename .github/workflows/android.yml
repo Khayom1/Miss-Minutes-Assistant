@@ -97,7 +97,7 @@ jobs:
 
       - name: Install pinned emulator packages
         run: |
-          sdkmanager --channel=3 --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "platforms;android-37.0" "system-images;android-37.0;google_apis;x86_64" "emulator" "platform-tools"
+          sdkmanager --channel=3 --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "platforms;android-37.0" "system-images;android-37.0;default;x86_64" "emulator" "platform-tools"
 
       - name: Run Android instrumentation tests (API 37.0)
         id: api37_instrumentation
@@ -106,7 +106,7 @@ jobs:
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           export ANDROID_SDK_HOME="$HOME/.android"
           mkdir -p "$ANDROID_AVD_HOME"
-          AVD_OUTPUT="$(printf 'no\n' | avdmanager create avd --force -n android17-api37 -k "system-images;android-37.0;google_apis;x86_64" -d "pixel_6" -p "$ANDROID_AVD_HOME/android17-api37.avd" 2>&1)" || {
+          AVD_OUTPUT="$(printf 'no\n' | avdmanager create avd --force -n android17-api37 -k "system-images;android-37.0;default;x86_64" -d "pixel_6" -p "$ANDROID_AVD_HOME/android17-api37.avd" 2>&1)" || {
             printf '%s\n' "$AVD_OUTPUT"
             avdmanager list avd
             exit 1
@@ -151,8 +151,12 @@ jobs:
             PACKAGE_LIST="$(adb shell cmd package list packages 2>/dev/null || true)"
             CURRENT_USER="$(adb shell cmd activity get-current-user 2>/dev/null | tr -d '\r' || true)"
             SYSTEM_SERVER="$(adb shell getprop init.svc.system_server 2>/dev/null | tr -d '\r' || true)"
+            MOUNT_SERVICE="$(adb shell service check mount 2>&1 || true)"
+            MOUNT_DUMP="$(adb shell dumpsys mount 2>/dev/null || true)"
             if printf '%s\n' "$PACKAGE_LIST" | grep '^package:' >/dev/null &&
-               [ "$CURRENT_USER" = "0" ] && [ "$SYSTEM_SERVER" = "running" ]; then
+               [ "$CURRENT_USER" = "0" ] && [ "$SYSTEM_SERVER" = "running" ] &&
+               printf '%s\n' "$MOUNT_SERVICE" | grep -q 'found' &&
+               printf '%s\n' "$MOUNT_DUMP" | grep -Eqi 'StorageManagerService|VolumeInfo|mVolumes'; then
               STABLE_SERVICE_CHECKS=$((STABLE_SERVICE_CHECKS + 1))
               if [ "$STABLE_SERVICE_CHECKS" -ge 12 ]; then
                 SERVICES_READY=1
@@ -184,17 +188,33 @@ jobs:
           adb shell df -h /data
           collect_api37_diagnostics() {
             adb shell getprop init.svc.system_server || true
-            adb shell service list | grep -E 'package|activity' || true
+            adb shell service list | grep -E 'package|activity|mount' || true
+            adb shell service check mount || true
+            adb shell dumpsys mount || true
             adb logcat -b all -d > "$RUNNER_TEMP/android17-api37-logcat.txt" 2>/dev/null || true
             grep -Ei 'system_server|PackageManager|FATAL EXCEPTION|Watchdog|lowmemorykiller|OutOfMemory|Killing .*system_server' "$RUNNER_TEMP/android17-api37-logcat.txt" | tail -300 || tail -300 "$RUNNER_TEMP/android17-api37-logcat.txt"
             tail -200 "$EMULATOR_LOG" || true
           }
           echo "API 37 framework service state before instrumentation:"
-          if ! adb shell service check package || ! adb shell service check activity; then
+          if ! adb shell service check package || ! adb shell service check activity || ! adb shell service check mount; then
             echo "API 37 framework services disappeared before instrumentation." >&2
             collect_api37_diagnostics
             exit 1
           fi
+          INSTALL_PROBE="$(adb shell cmd package install-create -r -t -S 1024 2>&1)" || {
+            printf '%s\n' "$INSTALL_PROBE"
+            echo "API 37 PackageInstaller preflight failed before the test APK was installed." >&2
+            collect_api37_diagnostics
+            exit 1
+          }
+          printf '%s\n' "$INSTALL_PROBE"
+          INSTALL_SESSION="$(printf '%s\n' "$INSTALL_PROBE" | sed -n 's/.*session \[\([0-9][0-9]*\)\].*/\1/p')"
+          if [ -z "$INSTALL_SESSION" ]; then
+            echo "API 37 PackageInstaller did not return a valid session id." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          adb shell cmd package install-abandon "$INSTALL_SESSION"
           if ! gradle --no-daemon connectedDebugAndroidTest; then
             echo "API 37 instrumentation failed; collecting framework and emulator diagnostics." >&2
             collect_api37_diagnostics
@@ -213,13 +233,13 @@ jobs:
         with:
           name: android17-api37-diagnostics
           path: |
-            \${{ runner.temp }}/android17-api37-emulator.log
-            \${{ runner.temp }}/android17-api37-logcat.txt
+            ${{ runner.temp }}/android17-api37-emulator.log
+            ${{ runner.temp }}/android17-api37-logcat.txt
           if-no-files-found: ignore
           retention-days: 14
 
       - name: Run Android instrumentation tests (API 35 compatibility)
-        if: \${{ always() && steps.build_validation.outcome == 'success' }}
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           disable-linux-hw-accel: false
@@ -232,6 +252,7 @@ jobs:
           script: gradle --no-daemon connectedDebugAndroidTest
 
       - name: Verify APK package, version and signature metadata
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
         run: |
           set -euo pipefail
           BUILD_TOOLS="$ANDROID_SDK_ROOT/build-tools/37.0.0"
@@ -272,10 +293,12 @@ jobs:
           } > app/build/release-evidence/apk-metadata.txt
 
       - name: Generate APK checksums
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
         run: |
           sha256sum app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk > app/build/release-evidence/SHA256SUMS.txt
 
       - name: Upload release evidence
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: miss-minutes-p8-release-candidates
