@@ -52,16 +52,16 @@ jobs:
             rm -rf "$CLT/latest"
             mv "$CLT/latest-2" "$CLT/latest"
           fi
-          TOOLS_VERSION="$("$CLT/latest/bin/sdkmanager" --version | tail -n1 | tr -d '\r')"
+          TOOLS_VERSION="$(awk -F= '$1 == "Pkg.Revision" { print $2; exit }' "$CLT/latest/source.properties")"
           printf 'cmdline-tools=%s\n' "$TOOLS_VERSION"
-          if [ "$(printf '%s\n' "20.0" "$TOOLS_VERSION" | sort -V | head -n1)" != "20.0" ]; then
+          printf '%s\n' "$TOOLS_VERSION" > "$RUNNER_TEMP/cmdline-tools-version.txt"
+          if [ -z "$TOOLS_VERSION" ] || [ "$(printf '%s\n' "20.0" "$TOOLS_VERSION" | sort -V | head -n1)" != "20.0" ]; then
             echo "Android cmdline-tools 20.0+ is required to parse android-37.0 AVD targets." >&2
             exit 1
           fi
           test -x "$CLT/latest/bin/android"
-          "$CLT/latest/bin/android" --version
+          "$CLT/latest/bin/android" --version 2>&1 | tee "$RUNNER_TEMP/android-cli-version.txt"
           "$CLT/latest/bin/avdmanager" list device >/dev/null
-          printf '%s\n' "$TOOLS_VERSION" > "$RUNNER_TEMP/cmdline-tools-version.txt"
           echo "$CLT/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK/emulator" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
@@ -295,6 +295,7 @@ jobs:
             ${{ runner.temp }}/android17-api37-services.txt
             ${{ runner.temp }}/android17-api37-avd-target.txt
             ${{ runner.temp }}/cmdline-tools-version.txt
+            ${{ runner.temp }}/android-cli-version.txt
           if-no-files-found: ignore
           retention-days: 14
 
