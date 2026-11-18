@@ -13,7 +13,7 @@ object AndroidAccessibilityAutomationPlugin {
         id = PLUGIN_ID,
         version = "1.0.0",
         displayName = "Cross-app accessibility automation",
-        description = "Inspect the active app screen, tap one uniquely labeled visible control, type into a focused or labeled field, scroll, and go back. Works across apps that expose accessible UI controls. Password fields and dangerous destructive, financial, or account-security controls are blocked.",
+        description = "Inspect accessible foreground UI, tap visible controls, enter text, scroll, and go back. Support depends on app-exposed controls; password fields and high-risk destructive, financial, or account-security actions are blocked.",
         capabilities = setOf(PluginCapability.ACCESSIBILITY_AUTOMATION),
         actions = listOf(
             PluginActionSpec("inspect_screen", PluginCapability.ACCESSIBILITY_AUTOMATION),

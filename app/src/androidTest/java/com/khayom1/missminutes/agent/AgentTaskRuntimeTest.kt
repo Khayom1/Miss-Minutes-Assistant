@@ -19,6 +19,26 @@ class AgentTaskRuntimeTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     @Test
+    fun shippedPluginManifestsRespectRuntimeValidationLimits() {
+        val accessibility = com.khayom1.missminutes.plugins.AndroidAccessibilityAutomationPlugin.manifest()
+        val device = AndroidDeviceStatusPlugin.manifest()
+
+        assertTrue(accessibility.description.length <= 240)
+        assertTrue(device.description.length <= 240)
+        assertTrue(accessibility.actions.isNotEmpty())
+        assertTrue(device.actions.isNotEmpty())
+
+        val registry = AgentTaskRuntime.createPluginRegistry(context)
+        val installedIds = registry.installedPlugins().map { it.id }.toSet()
+        assertTrue(installedIds.contains(AndroidDeviceStatusPlugin.PLUGIN_ID))
+        assertTrue(installedIds.contains(com.khayom1.missminutes.plugins.AndroidAccessibilityAutomationPlugin.PLUGIN_ID))
+        assertTrue(registry.toolCatalog().any { it.pluginId == AndroidDeviceStatusPlugin.PLUGIN_ID })
+        assertTrue(registry.toolCatalog().any {
+            it.pluginId == com.khayom1.missminutes.plugins.AndroidAccessibilityAutomationPlugin.PLUGIN_ID
+        })
+    }
+
+    @Test
     fun runtimeIsRebuiltForEachUiOrWorkerEntry() {
         val first = AgentTaskRuntime.get(context)
         val second = AgentTaskRuntime.get(context)
