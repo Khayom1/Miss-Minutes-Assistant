@@ -94,7 +94,10 @@ internal object VoiceActionIntentPolicy {
             val prefixTokens = prefix.trim().split(' ').filter(String::isNotBlank)
             val isDirectRequest = prefixTokens.size <= 3 &&
                 prefixTokens.all { it in allowedRequestPrefixTokens }
-            val isNegated = negations.any { negation -> prefix.contains(" $negation ") }
+            val prefixWithTokenBoundary = "$prefix "
+            val isNegated = negations.any { negation ->
+                prefixWithTokenBoundary.contains(" $negation ")
+            }
             if (isDirectRequest && !isNegated) return true
             searchFrom = index + needle.length
         }
