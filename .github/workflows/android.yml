@@ -239,6 +239,7 @@ jobs:
           retention-days: 14
 
       - name: Run Android instrumentation tests (API 35 compatibility)
+        id: api35_instrumentation
         if: ${{ always() && steps.build_validation.outcome == 'success' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -297,11 +298,22 @@ jobs:
         run: |
           sha256sum app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk > app/build/release-evidence/SHA256SUMS.txt
 
-      - name: Upload release evidence
+      - name: Record CI validation outcomes
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
+        run: |
+          mkdir -p app/build/release-evidence
+          {
+            echo "build_validation=${{ steps.build_validation.outcome }}"
+            echo "api37_instrumentation=${{ steps.api37_instrumentation.outcome }}"
+            echo "api35_compatibility=${{ steps.api35_instrumentation.outcome }}"
+            echo "release_signing=unsigned; owner-controlled key required"
+          } > app/build/release-evidence/validation-status.txt
+
+      - name: Upload CI test-build evidence
         if: ${{ always() && steps.build_validation.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: miss-minutes-p8-release-candidates
+          name: miss-minutes-p8-ci-test-builds
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/release/app-release-unsigned.apk
