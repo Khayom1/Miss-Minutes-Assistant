@@ -16,7 +16,8 @@ The project should be continued and refactored, not replaced. The main branch co
 - Android Assistant Role helper, VoiceInteractionService, VoiceInteractionSessionService and recognition service declarations.
 - DeepSeek provider abstraction, bounded AI tool-call loop, native speech input and TTS.
 - User-started on-device SpeechRecognizer wake service with foreground microphone notification.
-- Bounded agent task graph, encrypted durable task state, WorkManager worker and recovery-required state.
+- Bounded agent task graph, encrypted durable task state, WorkManager worker and recovery-required state. The ordinary chat tool-call loop is not yet backed by that persisted task graph.
+- The main Compose chat currently dispatches model tool calls through AiToolExecutionLoop and always passes userConfirmed=false. This fails closed for consequential actions, but there is no interactive just-in-time approval dialog in the ordinary chat path on this baseline. Draft PR #49 proposes an approval UI and must be rebased/audited before integration.
 - Closed-world plugin registry with compiled device-status and Accessibility handlers.
 - Device info, battery, time, calendar summary/create reminder, contacts summary, alarm and app launch actions.
 - Accessibility inspect/click/type/scroll/back actions with guardrails.
