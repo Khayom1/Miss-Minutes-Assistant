@@ -135,6 +135,7 @@ interface AiHttpTransport {
  * local runtime exposes a structured tool-call contract.
  */
 interface LocalInferenceRuntime {
+    /** True only when a compatible on-device runtime and model are installed and ready. */
     fun isAvailable(): Boolean
 
     suspend fun generate(
@@ -146,10 +147,14 @@ interface LocalInferenceRuntime {
 class OptionalLocalAiProvider(
     private val runtime: LocalInferenceRuntime
 ) : AiProvider {
-    override val capabilities = AiProviderCapabilities(supportsStructuredTools = false, isLocal = true)
+    override val capabilities: AiProviderCapabilities
+        get() = AiProviderCapabilities(
+            supportsStructuredTools = false,
+            isLocal = isRuntimeAvailable()
+        )
 
     override suspend fun complete(request: AiRequest): AiCompletion {
-        if (!runtime.isAvailable() || request.tools.isNotEmpty() ||
+        if (!isRuntimeAvailable() || request.tools.isNotEmpty() ||
             request.messages.any { it.role == AiRole.TOOL || it.toolCalls.isNotEmpty() }
         ) {
             throw AiProviderException.Unavailable()
@@ -164,6 +169,9 @@ class OptionalLocalAiProvider(
         if (output.isEmpty()) throw AiProviderException.InvalidResponse()
         return AiCompletion(content = output, model = "local")
     }
+
+    private fun isRuntimeAvailable(): Boolean =
+        runCatching { runtime.isAvailable() }.getOrDefault(false)
 }
 
 /**
