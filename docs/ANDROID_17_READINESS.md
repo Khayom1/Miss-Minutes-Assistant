@@ -9,6 +9,12 @@
 - Kotlin Gradle plugin 2.4.21 is pinned explicitly as AGP's built-in Kotlin runtime dependency. The legacy `org.jetbrains.kotlin.android` application plugin is no longer applied; Compose and serialization compiler plugins remain.
 - API 37 is currently delivered through the Android Cinnamon Bun Preview SDK channel; CI explicitly installs preview-channel API 37.0 platform and emulator packages. CI runs the complete instrumentation suite on API 37.0 and retains an API 35 compatibility run. This is preview validation, not a Play-ready stable SDK claim.
 
+## Emulator toolchain
+
+- Ubuntu 24.04 runners ship Android command-line tools 12.0, which silently write `target=android-0` for `android-37.0` packages. CI upgrades to cmdline-tools 22.0 and verifies the generated AVD target is exactly `android-37.0` before boot.
+- The API 37 emulator uses the Google APIs x86_64 image and software GPU. CI requires 12 consecutive checks with stable PackageManager, ActivityManager, mount service, system_server and SurfaceFlinger process identity before PackageInstaller preflight and instrumentation.
+- Emulator diagnostics preserve service state, mount state, SurfaceFlinger identity, logcat and emulator startup logs on failure. See [runner-images issue #14484](https://github.com/actions/runner-images/issues/14484) for the cmdline-tools Major.Minor package parsing defect.
+
 ## Android 17 behavior audit
 
 ### Background audio and speech
