@@ -4,27 +4,27 @@ import java.util.Locale
 
 /**
  * Parses a wake phrase and an optional command spoken in the same utterance.
- * Supports English, Russian and Tajik wake variants.
+ * Supports English, Russian and Tajik wake variants, including “Мисс минутка”.
  */
 object WakePhraseMatcher {
     private val separators = Regex("[^\\p{L}\\p{N}]+")
     private val whitespace = Regex("\\s+")
 
-    // English + common spoken variants ("Miss Minutes", "hey Miss Minutes", "Miss Minute")
+    // English + common spoken variants
     private val englishWake = Regex(
         "^\\s*(?:hey\\s+)?miss[\\s,.;:!?-]+minutes?(?:\\b|[,.;:!?—-])?\\s*(.*)$",
         RegexOption.IGNORE_CASE
     )
 
-    // Russian: "Мисс Минутс", "Мисс Минутка", "Мисс Минуты"
-    private val russianWake = Regex(
-        "^\\s*(?:эй\\s+)?мисс[\\s,.;:!?-]+минут(?:с|ка|ы)?(?:\\b|[,.;:!?—-])?\\s*(.*)$",
+    // Russian / Tajik: Мисс Минутс, Мисс Минутка, Мисс минутка, Мисс Минуты
+    private val cyrillicWake = Regex(
+        "^\\s*(?:эй\\s+|hey\\s+)?мисс[\\s,.;:!?-]+минут(?:ка|с|ы)?(?:\\b|[,.;:!?—-])?\\s*(.*)$",
         setOf(RegexOption.IGNORE_CASE)
     )
 
-    // Tajik: "Мисс Минутка", "Мисс Минутс"
-    private val tajikWake = Regex(
-        "^\\s*(?:эй\\s+)?мисс[\\s,.;:!?-]+минут(?:ка|с)?(?:\\b|[,.;:!?—-])?\\s*(.*)$",
+    // Extra tolerant form for common ASR output like "миссминутка" or "мис минутка"
+    private val compactCyrillicWake = Regex(
+        "^\\s*(?:эй\\s+)?мис+с?\\s*минут(?:ка|с|ы)?\\s*(.*)$",
         setOf(RegexOption.IGNORE_CASE)
     )
 
@@ -41,8 +41,8 @@ object WakePhraseMatcher {
         if (trimmed.isEmpty()) return null
 
         val match = englishWake.matchEntire(trimmed)
-            ?: russianWake.matchEntire(trimmed)
-            ?: tajikWake.matchEntire(trimmed)
+            ?: cyrillicWake.matchEntire(trimmed)
+            ?: compactCyrillicWake.matchEntire(trimmed)
             ?: return null
 
         val command = match.groupValues.getOrNull(1)
@@ -57,7 +57,6 @@ object WakePhraseMatcher {
 
     fun matches(transcript: String): Boolean = parse(transcript) != null
 
-    /** Only the primary hypothesis may trigger a command. */
     fun parseRecognitionCandidates(candidates: List<String>): Match? =
         candidates.firstOrNull()?.let(::parse)
 
