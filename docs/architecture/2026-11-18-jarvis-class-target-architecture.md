@@ -236,8 +236,14 @@ A capability is not complete because a setting, prompt or button exists. It is c
 
 A green emulator run is not a physical-device acceptance test. A unit test is not proof that Android grants a capability on every OEM.
 
-## 11. Platform truth
+## 11. Platform truth and Android references
 
 Android intentionally protects microphone, camera, notifications, SMS, contacts, other apps' private data and secure surfaces. Role selection does not silently grant every permission. Hardware hotwording depends on platform and device support. Some actions must open Android's own confirmation or settings UI.
+
+The Android implementation must follow the current platform contracts:
+- [VoiceInteractionService API](https://developer.android.com/reference/android/service/voice/VoiceInteractionService) says the selected service is kept running by the system to support background hotwording, must remain lightweight, and should delegate heavyweight UI/operations to VoiceInteractionSessionService.
+- [RoleManager API](https://developer.android.com/reference/android/app/role/RoleManager) defines ROLE_ASSISTANT and the user-consent request flow; role-specific privileges are revoked when the app loses the role.
+- [Foreground-service start restrictions](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start) describe background-start and while-in-use restrictions for microphone/camera/location services and the limited VoiceInteractionService-related exemptions.
+- [Foreground-service type requirements](https://developer.android.com/about/versions/14/changes/fgs-types-required) specify runtime prerequisites for microphone and MediaProjection service types.
 
 Therefore Miss Minutes must state capability limits honestly. It can orchestrate supported phone operations and connected systems; it cannot become an unrestricted fictional Iron Man suit, silently observe everything, bypass OS controls or guarantee operation on every Android device.
