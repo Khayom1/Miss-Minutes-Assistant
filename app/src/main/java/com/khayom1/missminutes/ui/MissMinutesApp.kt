@@ -1720,9 +1720,7 @@ private fun ChatScreen(
                 label = {
                     Text(
                         when (language) {
-                            "Тоҷикӣ" -> "DeepSeek"
-                            "Русский" -> "DeepSeek"
-                            else -> "DeepSeek"
+                            AppLanguage.Tajik, AppLanguage.Russian, AppLanguage.English -> "DeepSeek"
                         }
                     )
                 },
@@ -1735,9 +1733,9 @@ private fun ChatScreen(
                 label = {
                     Text(
                         when (language) {
-                            "Тоҷикӣ" -> "Модели маҳаллӣ"
-                            "Русский" -> "Локальная модель"
-                            else -> "Local model"
+                            AppLanguage.Tajik -> "Модели маҳаллӣ"
+                            AppLanguage.Russian -> "Локальная модель"
+                            AppLanguage.English -> "Local model"
                         }
                     )
                 },
@@ -1779,9 +1777,9 @@ private fun ChatScreen(
         Text(
             text = if (usingLocalModel) {
                 when (language) {
-                    "Тоҷикӣ" -> "Чати офлайн фаъол аст. Барои ин модели маҳаллӣ даъвати плагинҳо ҳоло хомӯш аст."
-                    "Русский" -> "Работает офлайн-чат. Вызов плагинов для этой локальной модели пока отключён."
-                    else -> "Offline chat is active. Plugin tool calling is not enabled for this local model yet."
+                    AppLanguage.Tajik -> "Чати офлайн фаъол аст. Барои ин модели маҳаллӣ даъвати плагинҳо ҳоло хомӯш аст."
+                    AppLanguage.Russian -> "Работает офлайн-чат. Вызов плагинов для этой локальной модели пока отключён."
+                    AppLanguage.English -> "Offline chat is active. Plugin tool calling is not enabled for this local model yet."
                 }
             } else copy.gatewayNotice,
             style = MaterialTheme.typography.bodySmall,
