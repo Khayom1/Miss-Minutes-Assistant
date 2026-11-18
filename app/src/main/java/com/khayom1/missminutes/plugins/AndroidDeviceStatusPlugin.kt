@@ -4,6 +4,11 @@ import com.khayom1.missminutes.device.DeviceToolCommand
 import com.khayom1.missminutes.device.DeviceToolEngine
 import com.khayom1.missminutes.device.DeviceToolRequest
 
+/**
+ * The currently exposed built-in plugin surface is read-only.
+ * Settings launches and sharing remain absent until the fresh, request-bound
+ * approval UI is integrated into the same mainline execution path.
+ */
 object AndroidDeviceStatusPlugin {
     const val PLUGIN_ID = "android_device_status"
 
@@ -12,7 +17,10 @@ object AndroidDeviceStatusPlugin {
         version = "1.0.0",
         displayName = "Android device status",
         description = "Read-only device and battery information using existing Android permissions.",
-        capabilities = setOf(PluginCapability.DEVICE_INFORMATION, PluginCapability.BATTERY_STATUS),
+        capabilities = setOf(
+            PluginCapability.DEVICE_INFORMATION,
+            PluginCapability.BATTERY_STATUS
+        ),
         actions = listOf(
             PluginActionSpec("device_info", PluginCapability.DEVICE_INFORMATION),
             PluginActionSpec("battery_status", PluginCapability.BATTERY_STATUS)

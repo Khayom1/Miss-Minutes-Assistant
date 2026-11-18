@@ -10,7 +10,9 @@ enum class PluginCapability(val requiresConfirmation: Boolean = false) {
     LOCATION_PRECISE,
     NOTIFICATION_READ,
     GITHUB_REPOSITORY_READ,
-    GITHUB_REPOSITORY_WRITE(true)
+    GITHUB_REPOSITORY_WRITE(true),
+    ANDROID_SETTINGS_OPEN(true),
+    ANDROID_TEXT_SHARE(true)
 }
 
 enum class PluginValueType {

@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.khayom1.missminutes.backup.BackupArchive
 import com.khayom1.missminutes.memory.RestoreConflictPolicy
+import com.khayom1.missminutes.plugins.PluginActionSpec
 import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.plugins.PluginManifest
 
@@ -47,6 +48,8 @@ internal fun BackupRestorePanel(
     pluginManifests: List<PluginManifest>,
     pluginConsentStates: Map<String, Boolean>,
     onPluginConsentChange: (String, Boolean) -> Unit,
+    compiledActions: List<PluginActionSpec>,
+    onCreatePlugin: (String, String, String, List<String>) -> Unit,
     onExportPlugin: (String) -> Unit,
     onImportPluginPackage: () -> Unit,
     onExportPluginPackage: (String) -> Unit,
@@ -104,6 +107,120 @@ internal fun BackupRestorePanel(
                 else if (isRussian) "Импортировать плагин из файла"
                 else "Import plugin package"
             )
+        }
+        var newPluginId by remember { mutableStateOf("") }
+        var newPluginName by remember { mutableStateOf("") }
+        var newPluginDescription by remember { mutableStateOf("") }
+        var selectedActionIds by remember { mutableStateOf(emptySet<String>()) }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when {
+                    isTajik -> "Сохтани плагини маҳаллӣ"
+                    isRussian -> "Создать локальный плагин"
+                    else -> "Create a local plugin"
+                },
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                when {
+                    isTajik -> "Танҳо амалҳои санҷидашудаи дарунсохти барнома интихоб мешаванд. Плагин код ё скрипт иҷро намекунад ва баъди сохтани он хомӯш мемонад."
+                    isRussian -> "Доступны только проверенные встроенные действия приложения. Плагин не исполняет код или скрипты и после создания остаётся отключённым."
+                    else -> "Only verified actions compiled into the app can be selected. Plugins cannot execute custom code or scripts and remain disconnected after creation."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedTextField(
+                value = newPluginId,
+                onValueChange = { value ->
+                    newPluginId = value.lowercase().filter { it.isLetterOrDigit() || it == '_' || it == '-' }.take(48)
+                },
+                modifier = Modifier.fillMaxWidth().testTag("new_plugin_id"),
+                label = {
+                    Text(when {
+                        isTajik -> "ID-и плагин (масалан, my_device_tools)"
+                        isRussian -> "ID плагина (например, my_device_tools)"
+                        else -> "Plugin id (for example, my_device_tools)"
+                    })
+                },
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = newPluginName,
+                onValueChange = { newPluginName = it.take(64) },
+                modifier = Modifier.fillMaxWidth().testTag("new_plugin_name"),
+                label = { Text(if (isTajik) "Номи плагин" else if (isRussian) "Название плагина" else "Plugin name") },
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = newPluginDescription,
+                onValueChange = { newPluginDescription = it.take(240) },
+                modifier = Modifier.fillMaxWidth().testTag("new_plugin_description"),
+                label = { Text(if (isTajik) "Тавсиф" else if (isRussian) "Описание" else "Description") },
+                maxLines = 3
+            )
+            Text(
+                when {
+                    isTajik -> "Амалҳои дастгиришаванда"
+                    isRussian -> "Доступные встроенные действия"
+                    else -> "Available compiled actions"
+                },
+                style = MaterialTheme.typography.labelLarge
+            )
+            compiledActions.forEach { action ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = action.id in selectedActionIds,
+                        onCheckedChange = { checked ->
+                            selectedActionIds = if (checked) {
+                                selectedActionIds + action.id
+                            } else {
+                                selectedActionIds - action.id
+                            }
+                        },
+                        enabled = !busy,
+                        modifier = Modifier.testTag("plugin_action_\${action.id}")
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            when (action.id) {
+                                "device_info" -> if (isTajik) "Маълумоти дастгоҳ" else if (isRussian) "Информация об устройстве" else "Device information"
+                                "battery_status" -> if (isTajik) "Ҳолати батарея" else if (isRussian) "Состояние батареи" else "Battery status"
+                                else -> action.id
+                            }
+                        )
+                        if (action.requiresConfirmation || action.capability.requiresConfirmation) {
+                            Text(
+                                when {
+                                    isTajik -> "Тасдиқи алоҳида лозим аст"
+                                    isRussian -> "Требуется отдельное подтверждение"
+                                    else -> "Requires explicit confirmation"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            Button(
+                onClick = {
+                    onCreatePlugin(newPluginId, newPluginName, newPluginDescription, selectedActionIds.toList())
+                    newPluginId = ""
+                    newPluginName = ""
+                    newPluginDescription = ""
+                    selectedActionIds = emptySet()
+                },
+                enabled = !busy && newPluginId.matches(Regex("^[a-z][a-z0-9_-]{2,47}$")) &&
+                    newPluginName.isNotBlank() && newPluginDescription.isNotBlank() &&
+                    selectedActionIds.isNotEmpty(),
+                modifier = Modifier.testTag("create_local_plugin")
+            ) {
+                Text(if (isTajik) "Сохтани плагин" else if (isRussian) "Создать плагин" else "Create plugin")
+            }
         }
         Text(
             if (isTajik) "Бастаи плагин танҳо метамаълумот дорад. Код, калидҳо, иҷозатҳои Android ва розигӣ ворид намешаванд."

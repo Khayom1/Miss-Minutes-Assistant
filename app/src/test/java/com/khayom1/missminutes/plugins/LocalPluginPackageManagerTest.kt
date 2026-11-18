@@ -83,6 +83,86 @@ class LocalPluginPackageManagerTest {
     }
 
     @Test
+    fun localPluginCanBeComposedOnlyFromCompiledActionsAndStartsDisconnected() {
+        val fixture = fixture()
+
+        val created = fixture.manager.createLocalPlugin(
+            id = "khayom_device_tools",
+            version = "1.0.0",
+            displayName = "My device tools",
+            description = "Read device information with built-in safe actions.",
+            actionIds = listOf("read_info")
+        )
+
+        assertEquals(listOf("read_info"), created.actions.map { it.id })
+        assertEquals(setOf(PluginCapability.DEVICE_INFORMATION), created.capabilities)
+        assertEquals(created, fixture.registry.installedPlugins().single())
+        assertEquals(listOf(created), fixture.store.load())
+        assertFalse(fixture.consent.isGranted(created.id))
+        assertTrue(created.actions.none { it.requiresConfirmation })
+    }
+
+    @Test
+    fun localPluginComposerRejectsUnknownOrUncompiledActions() {
+        val fixture = fixture()
+
+        val error = runCatching {
+            fixture.manager.createLocalPlugin(
+                id = "khayom_calendar",
+                version = "1.0.0",
+                displayName = "Calendar tools",
+                description = "Calendar operations.",
+                actionIds = listOf("calendar_write")
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(fixture.registry.installedPlugins().isEmpty())
+        assertTrue(fixture.store.load().isEmpty())
+        assertFalse(fixture.consent.isGranted("khayom_calendar"))
+    }
+
+    @Test
+    fun localPluginComposerRejectsEmptyOrDuplicateActionSelection() {
+        val fixture = fixture()
+
+        assertTrue(runCatching {
+            fixture.manager.createLocalPlugin(
+                "empty_plugin", "1.0.0", "Empty", "No actions", emptyList()
+            )
+        }.exceptionOrNull() is IllegalArgumentException)
+
+        assertTrue(runCatching {
+            fixture.manager.createLocalPlugin(
+                "duplicate_plugin", "1.0.0", "Duplicate", "Repeated actions",
+                listOf("read_info", "read_info")
+            )
+        }.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(fixture.registry.installedPlugins().isEmpty())
+    }
+
+    @Test
+    fun failedLocalPluginPersistenceRollsBackManifestAndConnection() {
+        val fixture = fixture()
+        fixture.store.failNextReplace = true
+
+        val error = runCatching {
+            fixture.manager.createLocalPlugin(
+                id = "rollback_plugin",
+                version = "1.0.0",
+                displayName = "Rollback plugin",
+                description = "A test plugin.",
+                actionIds = listOf("read_info")
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalStateException)
+        assertTrue(fixture.registry.installedPlugins().isEmpty())
+        assertTrue(fixture.store.load().isEmpty())
+        assertFalse(fixture.consent.isGranted("rollback_plugin"))
+    }
+
+    @Test
     fun exportContainsOnlyDeclarativeManifestMetadata() {
         val fixture = fixture(listOf(manifest()))
         val exported = fixture.manager.exportPackage("local_test_plugin")
@@ -236,5 +316,17 @@ class LocalPluginPackageManagerTest {
                 fixture.manager.previewImport(ByteArray(LocalPluginPackageManager.MAX_PACKAGE_BYTES + 1))
             }.isFailure
         )
+    }
+
+    @Test
+    fun builtInDevicePluginExposesOnlyReadOnlyActionsUntilApprovalUiIsIntegrated() {
+        val manifest = AndroidDeviceStatusPlugin.manifest()
+
+        assertEquals(
+            setOf(PluginCapability.DEVICE_INFORMATION, PluginCapability.BATTERY_STATUS),
+            manifest.capabilities
+        )
+        assertEquals(listOf("device_info", "battery_status"), manifest.actions.map { it.id })
+        assertTrue(manifest.actions.none { it.requiresConfirmation })
     }
 }

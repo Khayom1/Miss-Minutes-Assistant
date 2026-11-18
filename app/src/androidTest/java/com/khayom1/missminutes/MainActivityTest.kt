@@ -150,6 +150,35 @@ class MainActivityTest {
     }
 
     @Test
+    fun userCanCreateDisconnectedPluginFromCompiledActions() {
+        composeRule.onNodeWithText("Settings").performClick()
+
+        composeRule.onNodeWithTag("new_plugin_id").performScrollTo()
+            .performTextInput("khayom_test_tools")
+        composeRule.onNodeWithTag("new_plugin_name").performScrollTo()
+            .performTextInput("Test device tools")
+        composeRule.onNodeWithTag("new_plugin_description").performScrollTo()
+            .performTextInput("Verified local device actions")
+        composeRule.onNodeWithTag("plugin_action_device_info")
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithTag("create_local_plugin")
+            .performScrollTo()
+            .performClick()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("plugin_consent_khayom_test_tools")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("plugin_consent_khayom_test_tools")
+            .performScrollTo()
+            .assertIsOff()
+        composeRule.onNodeWithText("Test device tools")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
     fun guestWorkspaceOpensAssistantWithoutAccount() {
         waitForChatScreen()
 

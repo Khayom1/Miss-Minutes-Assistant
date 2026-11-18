@@ -139,6 +139,25 @@ class PluginRegistry(
             }
         }
 
+    /**
+     * Catalogue of actions implemented by the installed app binary. A local
+     * plugin authoring UI can compose manifests from this list only; imported
+     * metadata can never introduce a new executable handler.
+     */
+    @Synchronized
+    fun compiledActionCatalog(): List<PluginActionSpec> =
+        handlersById.values
+            .sortedBy { it.actionId }
+            .map { handler ->
+                PluginActionSpec(
+                    id = handler.actionId,
+                    capability = handler.capability,
+                    arguments = handler.argumentSchema.toMap(),
+                    requiresConfirmation = handler.requiresConfirmation ||
+                        handler.capability.requiresConfirmation
+                )
+            }
+
     /** Connected tools are discovered automatically; callers do not pick plugins per message. */
     @Synchronized
     fun connectedTools(): List<PluginToolDescriptor> =

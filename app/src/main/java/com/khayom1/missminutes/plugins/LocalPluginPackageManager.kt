@@ -29,6 +29,61 @@ class LocalPluginPackageManager(
     private val persistence: PluginManifestPersistence,
     private val json: Json = Json
 ) {
+    /**
+     * Creates a metadata-only plugin from executable actions already compiled
+     * into this app. It is never connected implicitly and never contains code.
+     */
+    @Synchronized
+    fun createLocalPlugin(
+        id: String,
+        version: String,
+        displayName: String,
+        description: String,
+        actionIds: Collection<String>
+    ): PluginManifest {
+        val selectedIds = actionIds.toList()
+        require(selectedIds.isNotEmpty()) { "Select at least one verified action." }
+        require(selectedIds.size <= 16 && selectedIds.distinct().size == selectedIds.size) {
+            "Plugin actions must be unique and within the 16-action limit."
+        }
+        require(id !in registry.installedPlugins().map { it.id }) {
+            "A plugin with this id is already installed."
+        }
+
+        val compiled = registry.compiledActionCatalog().associateBy { it.id }
+        val actions = selectedIds.map { actionId ->
+            compiled[actionId] ?: throw IllegalArgumentException(
+                "Action '$actionId' is not implemented by this app version."
+            )
+        }
+        val manifest = PluginManifest(
+            id = id.trim(),
+            version = version.trim(),
+            displayName = displayName.trim(),
+            description = description.trim(),
+            capabilities = actions.map { it.capability }.toSet(),
+            actions = actions,
+            maxCallsPerMinute = 6,
+            maxExecutionMillis = 1_500L
+        )
+
+        // Validate and register the closed-world manifest before persisting it.
+        val previous = registry.installedPlugins()
+        consentStore.setGranted(manifest.id, false)
+        try {
+            check(registry.install(manifest)) { "Plugin id is already installed." }
+            persistence.replace(registry.installedPlugins())
+        } catch (error: Exception) {
+            runCatching { registry.uninstall(manifest.id) }
+            runCatching { persistence.replace(previous) }
+            throw IllegalStateException(
+                "Plugin creation failed; no connected plugin was created.",
+                error
+            )
+        }
+        return manifest
+    }
+
     fun exportPackage(pluginId: String): ByteArray {
         val manifest = registry.installedPlugins().firstOrNull { it.id == pluginId }
             ?: throw IllegalArgumentException("The selected plugin is not installed.")

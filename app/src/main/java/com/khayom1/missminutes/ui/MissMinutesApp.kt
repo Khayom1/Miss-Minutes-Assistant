@@ -885,6 +885,36 @@ fun MissMinutesApp(
         }
     }
 
+    val createLocalPlugin: (String, String, String, List<String>) -> Unit = { id, name, description, actionIds ->
+        backupBusy = true
+        backupError = null
+        scope.launch {
+            try {
+                val created = withContext(Dispatchers.IO) {
+                    pluginPackageManager.createLocalPlugin(
+                        id = id,
+                        version = "1.0.0",
+                        displayName = name,
+                        description = description,
+                        actionIds = actionIds
+                    )
+                }
+                pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
+                    it.id to pluginConsentStore.isGranted(it.id)
+                }
+                backupStatus = when (language) {
+                    AppLanguage.Tajik -> "Плагини «${created.displayName}» сохта шуд. Барои истифода онро алоҳида пайваст кун."
+                    AppLanguage.Russian -> "Плагин «${created.displayName}» создан. Подключите его отдельно перед использованием."
+                    AppLanguage.English -> "Plugin “${created.displayName}” created. Connect it separately before use."
+                }
+            } catch (error: Exception) {
+                backupError = error.message ?: "Plugin could not be created safely."
+            } finally {
+                backupBusy = false
+            }
+        }
+    }
+
     val exportPluginPackage: (String) -> Unit = { pluginId ->
         backupBusy = true
         backupError = null
@@ -1631,6 +1661,8 @@ fun MissMinutesApp(
                                     it.id != AndroidDeviceStatusPlugin.PLUGIN_ID
                                 },
                                 pluginConsentStates = pluginConsentSnapshot,
+                                compiledPluginActions = pluginRegistry.compiledActionCatalog(),
+                                onCreateLocalPlugin = createLocalPlugin,
                                 onDeclarativePluginConsentChange = { pluginId, granted ->
                                     val updated = if (granted) pluginRegistry.connect(pluginId) else pluginRegistry.revokeConsent(pluginId)
                                     if (updated) pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to pluginConsentStore.isGranted(pluginId))
@@ -2082,6 +2114,8 @@ private fun SettingsScreen(
     backupBusy: Boolean,
     pluginManifests: List<com.khayom1.missminutes.plugins.PluginManifest>,
     pluginConsentStates: Map<String, Boolean>,
+    compiledPluginActions: List<com.khayom1.missminutes.plugins.PluginActionSpec>,
+    onCreateLocalPlugin: (String, String, String, List<String>) -> Unit,
     onDeclarativePluginConsentChange: (String, Boolean) -> Unit,
     onExportPlugin: (String) -> Unit,
     onImportPluginPackage: () -> Unit,
@@ -2800,6 +2834,8 @@ private fun SettingsScreen(
             pluginManifests = pluginManifests,
             pluginConsentStates = pluginConsentStates,
             onPluginConsentChange = onDeclarativePluginConsentChange,
+            compiledActions = compiledPluginActions,
+            onCreatePlugin = onCreateLocalPlugin,
             onExportPlugin = onExportPlugin,
             onImportPluginPackage = onImportPluginPackage,
             onExportPluginPackage = onExportPluginPackage,
