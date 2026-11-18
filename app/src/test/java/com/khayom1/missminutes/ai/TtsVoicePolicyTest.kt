@@ -30,6 +30,16 @@ class TtsVoicePolicyTest {
     }
 
     @Test
+    fun missingTajikOfflineVoiceDoesNotFallBackToEnglishOrRussian() {
+        val candidates = listOf(
+            TtsVoiceCandidate("en-offline", "en-US", 400, false),
+            TtsVoiceCandidate("ru-offline", "ru-RU", 400, false)
+        )
+
+        assertNull(selectBestOfflineTtsVoice(candidates, AppLanguage.Tajik.speechLocale))
+    }
+
+    @Test
     fun refusesNetworkOnlyOrWrongLanguageVoices() {
         val candidates = listOf(
             TtsVoiceCandidate("en-network", "en-US", 500, true),
