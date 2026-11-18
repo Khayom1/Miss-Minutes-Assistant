@@ -18,9 +18,9 @@ Miss Minutes is a standalone, offline-first Android assistant with a lightweight
 2. **AI provider layer:** direct user-owned DeepSeek BYOK and an optional local-inference adapter seam.
 3. **Local persistence:** encrypted conversations and memory, local preferences, app-private plugin metadata, and bounded audit records.
 4. **Android adapters:** typed, allowlisted device actions with runtime permission checks and user-visible controls.
-5. **Plugin registry:** local manifest/consent/revocation lifecycle with compiled handler validation. Connected tool schemas must be discovered automatically for each request; the user must not manually choose a plugin per task.
+5. **Plugin registry and tool dispatch:** local manifest/consent/revocation lifecycle, compiled handler validation, connected-tool schema discovery, and bounded dispatch are present in the mainline path. The Plugin Builder and complete voice-to-tool path remain incomplete.
 6. **Agent runtime:** bounded task state and WorkManager scheduling within Android lifecycle limits. Voice and typed chat must share the same execution path.
-7. **Voice session runtime (required, incomplete):** a lifecycle-aware foreground session that separates wake phrase detection from the following command, securely hands commands to the shared agent runtime, supports cancellation/approval, and reports recoverable service state.
+7. **Voice session runtime (required, incomplete):** the current wake listener accepts an exact wake phrase and then stops with a notification; it does not yet capture the following command and dispatch it to the agent. The target runtime must add a lifecycle-aware foreground session, secure command handoff, cancellation/approval, and recoverable service state.
 8. **Floating launcher:** a user-started overlay shortcut. It must not silently bypass microphone permissions or Android background-start restrictions.
 
 ## Security boundaries
@@ -34,4 +34,4 @@ Miss Minutes is a standalone, offline-first Android assistant with a lightweight
 
 ## Current release gaps
 
-Distinct Fast/Standard/Max/Extra/Auto runtime profiles, a bundled local inference runtime, end-to-end model tool schemas/dispatch, plugin import and missing-permission UX, shared voice-to-agent execution, wake-phrase-plus-command capture, physical lock-screen acceptance, owner-controlled signing, and a signed Release APK remain open.
+Distinct Fast/Standard/Max/Extra/Auto runtime profiles, a bundled local inference runtime, Plugin Builder, voice wake-phrase-plus-command capture, voice-to-agent execution, consequential-action approval, physical lock-screen acceptance, owner-controlled signing, and a signed Release APK remain open.
