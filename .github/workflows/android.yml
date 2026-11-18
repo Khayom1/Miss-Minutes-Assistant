@@ -104,7 +104,7 @@ jobs:
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           export ANDROID_SDK_HOME="$HOME/.android"
           mkdir -p "$ANDROID_AVD_HOME"
-          AVD_OUTPUT="$(printf 'no\n' | avdmanager create avd --force -n android17-api37 -k "system-images;android-37.0;google_apis;x86_64" -d "pixel_2" -p "$ANDROID_AVD_HOME/android17-api37.avd" 2>&1)" || {
+          AVD_OUTPUT="$(printf 'no\n' | avdmanager create avd --force -n android17-api37 -k "system-images;android-37.0;google_apis;x86_64" -d "pixel_6" -p "$ANDROID_AVD_HOME/android17-api37.avd" 2>&1)" || {
             printf '%s\n' "$AVD_OUTPUT"
             avdmanager list avd
             exit 1
@@ -116,18 +116,18 @@ jobs:
             avdmanager list avd
             exit 1
           fi
-          # The default Pixel 2 data partition is too small for the current
-          # debug + instrumentation APK split. Give API 37 a clean 4 GiB userdata.
+          # Use a current device profile with enough RAM and userdata for API 37
+          # system services plus the debug and instrumentation APK splits.
           AVD_CONFIG="$ANDROID_AVD_HOME/android17-api37.avd/config.ini"
           sed -i '/^disk.dataPartition.size=/d; /^hw.ramSize=/d; /^vm.heapSize=/d; /^hw.cpu.ncore=/d' "$AVD_CONFIG"
-          printf '\ndisk.dataPartition.size=4G\nhw.ramSize=3072\nvm.heapSize=512\nhw.cpu.ncore=4\n' >> "$AVD_CONFIG"
+          printf '\ndisk.dataPartition.size=4G\nhw.ramSize=4096\nvm.heapSize=512\nhw.cpu.ncore=4\n' >> "$AVD_CONFIG"
           grep -F 'disk.dataPartition.size=4G' "$AVD_CONFIG"
-          grep -F 'hw.ramSize=3072' "$AVD_CONFIG"
+          grep -F 'hw.ramSize=4096' "$AVD_CONFIG"
           grep -F 'vm.heapSize=512' "$AVD_CONFIG"
           grep -F 'hw.cpu.ncore=4' "$AVD_CONFIG"
           emulator -list-avds | grep -Fx "android17-api37"
           EMULATOR_LOG="$RUNNER_TEMP/android17-api37-emulator.log"
-          emulator -avd android17-api37 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-snapshot-save -wipe-data > "$EMULATOR_LOG" 2>&1 &
+          emulator -avd android17-api37 -memory 4096 -cores 4 -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-snapshot-save -wipe-data > "$EMULATOR_LOG" 2>&1 &
           EMULATOR_PID=$!
           trap 'adb emu kill >/dev/null 2>&1 || kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
           timeout 240 adb wait-for-device
@@ -144,12 +144,20 @@ jobs:
           fi
           # sys.boot_completed may precede PackageManager/ActivityManager readiness.
           SERVICES_READY=0
-          for attempt in $(seq 1 60); do
+          STABLE_SERVICE_CHECKS=0
+          for attempt in $(seq 1 72); do
             PACKAGE_LIST="$(adb shell cmd package list packages 2>/dev/null || true)"
             CURRENT_USER="$(adb shell cmd activity get-current-user 2>/dev/null | tr -d '\r' || true)"
-            if printf '%s\n' "$PACKAGE_LIST" | grep '^package:' >/dev/null && [ "$CURRENT_USER" = "0" ]; then
-              SERVICES_READY=1
-              break
+            SYSTEM_SERVER="$(adb shell getprop init.svc.system_server 2>/dev/null | tr -d '\r' || true)"
+            if printf '%s\n' "$PACKAGE_LIST" | grep '^package:' >/dev/null &&
+               [ "$CURRENT_USER" = "0" ] && [ "$SYSTEM_SERVER" = "running" ]; then
+              STABLE_SERVICE_CHECKS=$((STABLE_SERVICE_CHECKS + 1))
+              if [ "$STABLE_SERVICE_CHECKS" -ge 12 ]; then
+                SERVICES_READY=1
+                break
+              fi
+            else
+              STABLE_SERVICE_CHECKS=0
             fi
             sleep 5
           done
@@ -172,7 +180,20 @@ jobs:
             exit 1
           fi
           adb shell df -h /data
-          gradle --no-daemon connectedDebugAndroidTest
+          echo "API 37 framework service state before instrumentation:"
+          adb shell getprop init.svc.system_server
+          adb shell service check package
+          adb shell service check activity
+          if ! gradle --no-daemon connectedDebugAndroidTest; then
+            echo "API 37 instrumentation failed; collecting framework and emulator diagnostics." >&2
+            adb shell getprop init.svc.system_server || true
+            adb shell service list | grep -E 'package|activity' || true
+            adb logcat -b all -d | grep -Ei 'system_server|PackageManager|FATAL EXCEPTION|Watchdog|lowmemorykiller|OutOfMemory|Killing .*system_server' | tail -300 || adb logcat -b all -d | tail -300
+            tail -200 "$EMULATOR_LOG" || true
+            exit 1
+          fi
+          adb shell service check package
+          adb shell service check activity
 
       - name: Run Android instrumentation tests (API 35 compatibility)
         uses: reactivecircus/android-emulator-runner@v2
