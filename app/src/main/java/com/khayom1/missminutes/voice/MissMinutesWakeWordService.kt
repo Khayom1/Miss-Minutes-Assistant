@@ -37,6 +37,7 @@ class MissMinutesWakeWordService : Service() {
     private var recognizer: SpeechRecognizer? = null
     private var active = false
     private var wakeHandled = false
+    private var recognitionLanguageTag = Locale.US.toLanguageTag()
     private val retryBackoff = RecognitionRetryBackoff()
 
     private val restartListening = Runnable {
@@ -87,6 +88,12 @@ class MissMinutesWakeWordService : Service() {
             return START_NOT_STICKY
         }
         if (active) return START_NOT_STICKY
+        recognitionLanguageTag = intent
+            ?.getStringExtra(EXTRA_RECOGNITION_LANGUAGE)
+            ?.let(Locale::forLanguageTag)
+            ?.takeIf { it.language.isNotBlank() }
+            ?.toLanguageTag()
+            ?: Locale.US.toLanguageTag()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             publishState(false, "On-device speech recognition requires Android 12 or later.")
@@ -176,7 +183,7 @@ class MissMinutesWakeWordService : Service() {
         if (!active || wakeHandled) return
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.US.toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, recognitionLanguageTag)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
@@ -338,6 +345,7 @@ class MissMinutesWakeWordService : Service() {
         const val EXTRA_ENABLED = "wake_enabled"
         const val EXTRA_MESSAGE = "wake_message"
         const val EXTRA_COMMAND = "wake_command"
+        const val EXTRA_RECOGNITION_LANGUAGE = "recognition_language"
         const val CHANNEL_ID = "miss_minutes_wake_phrase"
         const val NOTIFICATION_ID = 7301
         private const val STATUS_NOTIFICATION_ID = 7302
