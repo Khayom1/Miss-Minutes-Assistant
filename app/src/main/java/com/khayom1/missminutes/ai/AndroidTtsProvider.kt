@@ -57,12 +57,9 @@ class AndroidTtsProvider(
                     requiresNetwork = voice.isNetworkConnectionRequired
                 )
             }
+            // Do not silently speak in a different language when the requested
+            // language has no installed offline voice.
             val selectedCandidate = selectBestOfflineTtsVoice(candidates, locale)
-                ?: if (locale != Locale.getDefault()) {
-                    selectBestOfflineTtsVoice(candidates, Locale.getDefault())
-                } else {
-                    null
-                }
             val selectedVoice = selectedCandidate?.let { candidate ->
                 installedVoices.firstOrNull { it.name == candidate.name }
             }
