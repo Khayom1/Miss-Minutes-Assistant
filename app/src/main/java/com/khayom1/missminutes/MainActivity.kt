@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
                 aiProvider = aiProvider,
                 localAiProvider = localAiProvider,
                 localModelStore = localModelStore,
+                validateLocalModel = localRuntime::validateModel,
                 apiKeyStore = apiKeyStore,
                 ttsProvider = offlineTts,
                 speechInputProvider = speechInput,
