@@ -58,6 +58,9 @@ object AndroidDeviceStatusPlugin {
         maxExecutionMillis = 2_500L
     )
 
+    private fun argumentsFor(actionId: String): Map<String, PluginFieldSpec> =
+        manifest().actions.first { it.id == actionId }.arguments
+
     fun handlers(engine: DeviceToolEngine): List<PluginActionHandler> = listOf(
         object : PluginActionHandler {
             override val actionId = "device_info"
@@ -93,6 +96,7 @@ object AndroidDeviceStatusPlugin {
         },
         object : PluginActionHandler {
             override val actionId = "create_reminder"
+            override val argumentSchema = argumentsFor("create_reminder")
             override val capability = PluginCapability.CALENDAR_WRITE
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 val title = (arguments["title"] as? PluginValue.Text)?.value?.takeIf { it.isNotBlank() }
@@ -119,6 +123,7 @@ object AndroidDeviceStatusPlugin {
         },
         object : PluginActionHandler {
             override val actionId = "set_alarm"
+            override val argumentSchema = argumentsFor("set_alarm")
             override val capability = PluginCapability.CALENDAR_WRITE
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 val hour = (arguments["hour"] as? PluginValue.Number)?.value?.toInt()
@@ -137,6 +142,7 @@ object AndroidDeviceStatusPlugin {
         },
         object : PluginActionHandler {
             override val actionId = "open_app"
+            override val argumentSchema = argumentsFor("open_app")
             override val capability = PluginCapability.DEVICE_INFORMATION
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 val packageName = (arguments["packageName"] as? PluginValue.Text)?.value?.takeIf { it.isNotBlank() }
