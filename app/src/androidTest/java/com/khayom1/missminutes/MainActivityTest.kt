@@ -314,13 +314,14 @@ class MainActivityTest {
         assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
         composeRule.onNodeWithTag("deepseek_api_key")
+            .performScrollTo()
             .performTextInput("sk-user-owned-test-key-123456")
-        composeRule.onNodeWithText("Save API key").performClick()
+        composeRule.onNodeWithText("Save API key").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) {
             apiKeyStore.key == "sk-user-owned-test-key-123456"
         }
         composeRule.onNodeWithText("Key is stored securely on this device.").assertIsDisplayed()
-        composeRule.onNodeWithText("Remove key").performClick()
+        composeRule.onNodeWithText("Remove key").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) { apiKeyStore.key == null }
         assertEquals(null, apiKeyStore.key)
     }
@@ -377,8 +378,10 @@ class MainActivityTest {
         assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
         val themeSwitch = composeRule.onNodeWithTag("dark_mode_switch")
+        themeSwitch.performScrollTo()
         themeSwitch.assertIsOff()
         themeSwitch.performClick()
+        composeRule.waitForIdle()
         themeSwitch.assertIsOn()
     }
 
@@ -387,13 +390,19 @@ class MainActivityTest {
         assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
 
-        composeRule.onNodeWithText("Русский").performClick()
+        composeRule.onNodeWithText("Русский").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 2_000) {
+            composeRule.onAllNodesWithText("Настройки приложения").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onAllNodesWithText("Настройки приложения").get(0).assertIsDisplayed()
-        composeRule.onNodeWithText("Язык").assertIsDisplayed()
+        composeRule.onNodeWithText("Язык").performScrollTo().assertIsDisplayed()
 
-        composeRule.onNodeWithText("Тоҷикӣ").performClick()
+        composeRule.onNodeWithText("Тоҷикӣ").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 2_000) {
+            composeRule.onAllNodesWithText("Танзимоти барнома").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onAllNodesWithText("Танзимоти барнома").get(0).assertIsDisplayed()
-        composeRule.onNodeWithText("Забон").assertIsDisplayed()
+        composeRule.onNodeWithText("Забон").performScrollTo().assertIsDisplayed()
     }
 
     @Test

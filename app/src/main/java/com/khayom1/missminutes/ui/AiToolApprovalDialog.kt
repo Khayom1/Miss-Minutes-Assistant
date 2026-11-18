@@ -37,9 +37,10 @@ internal fun AiToolApprovalDialog(
                 Text(approval.pluginName, fontWeight = FontWeight.SemiBold)
                 Text(approval.toolName, style = MaterialTheme.typography.labelMedium)
                 Text(approval.description)
-                if (approval.argumentPreview.isNotEmpty()) {
+                approval.argumentPreview.forEachIndexed { index, line ->
                     Text(
-                        approval.argumentPreview.joinToString(separator = "\n"),
+                        line,
+                        modifier = Modifier.testTag("approval_argument_preview_$index"),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

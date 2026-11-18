@@ -28,9 +28,12 @@ class SmsTriageManifestTest {
 
         val registrations = packageManager.queryBroadcastReceivers(
             Intent(Telephony.Sms.Intents.SMS_RECEIVED_ACTION),
-            PackageManager.MATCH_DEFAULT_ONLY
+            0
         )
-        assertTrue(registrations.any { it.activityInfo?.name == IncomingSmsReceiver::class.java.name })
+        assertTrue(
+            "The manifest SMS_RECEIVED receiver must be discoverable without a CATEGORY_DEFAULT requirement.",
+            registrations.any { it.activityInfo?.name == IncomingSmsReceiver::class.java.name }
+        )
 
         val packageInfo = packageManager.getPackageInfo(
             context.packageName,
