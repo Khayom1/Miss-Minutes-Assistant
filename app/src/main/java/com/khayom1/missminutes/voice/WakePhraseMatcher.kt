@@ -12,19 +12,19 @@ object WakePhraseMatcher {
 
     // English + common spoken variants
     private val englishWake = Regex(
-        "^\\s*(?:hey\\s+)?miss[\\s,.;:!?-]+minutes?(?:\\b|[,.;:!?—-])?\\s*(.*)$",
+        "^\\s*(?:hey\\s+)?miss[\\s,.;:!?-]+minutes?(?=$|[\\s,.;:!?—–-])[\\s,.;:!?—–-]*(.*)$",
         RegexOption.IGNORE_CASE
     )
 
     // Russian / Tajik: Мисс Минутс, Мисс Минутка, Мисс минутка, Мисс Минуты
     private val cyrillicWake = Regex(
-        "^\\s*(?:эй\\s+|hey\\s+)?мисс[\\s,.;:!?-]+минут(?:ка|с|ы)?(?:\\b|[,.;:!?—-])?\\s*(.*)$",
+        "^\\s*(?:эй\\s+|hey\\s+)?мисс[\\s,.;:!?-]+минут(?:ка|с|ы)?(?=$|[\\s,.;:!?—–-])[\\s,.;:!?—–-]*(.*)$",
         setOf(RegexOption.IGNORE_CASE)
     )
 
     // Extra tolerant form for common ASR output like "миссминутка" or "мис минутка"
     private val compactCyrillicWake = Regex(
-        "^\\s*(?:эй\\s+)?мис+с?\\s*минут(?:ка|с|ы)?\\s*(.*)$",
+        "^\\s*(?:эй\\s+)?мис+с?\\s*минут(?:ка|с|ы)?(?=$|[\\s,.;:!?—–-])[\\s,.;:!?—–-]*(.*)$",
         setOf(RegexOption.IGNORE_CASE)
     )
 
