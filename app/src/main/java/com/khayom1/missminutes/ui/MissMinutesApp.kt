@@ -41,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +53,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
@@ -80,6 +84,10 @@ import com.khayom1.missminutes.ai.AiProvider
 import com.khayom1.missminutes.ai.AiToolExecutionLoop
 import com.khayom1.missminutes.ai.AiToolExecutor
 import com.khayom1.missminutes.ai.AiToolExecutionResult
+import com.khayom1.missminutes.ai.AiToolApprovalGate
+import com.khayom1.missminutes.ai.AiToolApprovalPrompt
+import com.khayom1.missminutes.ai.sanitizeApprovalDisplayText
+import com.khayom1.missminutes.ai.approvalArgumentNames
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
@@ -117,6 +125,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import com.khayom1.missminutes.ai.SpeechInputProvider
 import java.util.Locale
 import java.io.ByteArrayOutputStream
@@ -345,6 +355,7 @@ fun MissMinutesApp(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val appSettingsStore = remember(context) { AndroidAppSettingsStore(context) }
     var selectedLanguageName by remember(context) {
         mutableStateOf(when (appSettingsStore.loadAppearance().language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name })
@@ -380,6 +391,15 @@ fun MissMinutesApp(
         )
     }
     val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
+    val toolApprovalGate = remember { AiToolApprovalGate() }
+    DisposableEffect(lifecycleOwner, toolApprovalGate) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) toolApprovalGate.rejectPending()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val pendingToolApproval by toolApprovalGate.pending.collectAsState()
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
@@ -507,6 +527,10 @@ fun MissMinutesApp(
     var draft by rememberSaveable { mutableStateOf("") }
     var isRestoring by remember { mutableStateOf(true) }
     var conversationGeneration by remember { mutableStateOf(0L) }
+    val invalidateConversationApproval: () -> Unit = {
+        conversationGeneration += 1
+        toolApprovalGate.rejectPending()
+    }
     var userEmail by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
@@ -702,6 +726,7 @@ fun MissMinutesApp(
     val copy = copyFor(language)
 
     suspend fun loadConversation(ownerId: String, preferredConversationId: String? = null) {
+        invalidateConversationApproval()
         val snapshot = withContext(Dispatchers.IO) {
             conversationStore.pruneExpired(ownerId)
             val initial = conversationStore.listConversations(ownerId)
@@ -1198,8 +1223,34 @@ fun MissMinutesApp(
                         val completion: AiCompletion = AiToolExecutionLoop(
                             provider = aiProvider,
                             executor = AiToolExecutor { call ->
+                                val descriptor = agentOrchestrator.availablePluginTools()
+                                    .firstOrNull { it.toolName == call.name }
+                                val approved = if (
+                                    descriptor?.requiresConfirmation == true &&
+                                    requestGeneration == conversationGeneration
+                                ) {
+                                    val argumentNames = approvalArgumentNames(call.arguments)
+                                    val userApproved = argumentNames?.let { names ->
+                                        toolApprovalGate.awaitApproval(
+                                            AiToolApprovalPrompt(
+                                                toolName = call.name,
+                                                pluginName = sanitizeApprovalDisplayText(descriptor.pluginName, 128),
+                                                description = sanitizeApprovalDisplayText(descriptor.description, 512),
+                                                argumentNames = names
+                                            ),
+                                            isCurrent = { requestGeneration == conversationGeneration }
+                                        )
+                                    } ?: false
+                                    userApproved && requestGeneration == conversationGeneration
+                                } else {
+                                    false
+                                }
                                 val result = withContext(Dispatchers.IO) {
-                                    agentOrchestrator.executePluginTool(call.name, call.arguments, userConfirmed = false)
+                                    agentOrchestrator.executePluginTool(
+                                        call.name,
+                                        call.arguments,
+                                        userConfirmed = approved
+                                    )
                                 }
                                 AiToolExecutionResult(result.status.name + ": " + result.message)
                             }
@@ -1295,6 +1346,7 @@ fun MissMinutesApp(
     }
     val startNewConversation: () -> Unit = {
         currentOwnerId?.let { owner ->
+            invalidateConversationApproval()
             scope.launch {
                 val id = withContext(Dispatchers.IO) { conversationStore.createConversation(owner) }
                 loadConversation(owner, id)
@@ -1304,6 +1356,7 @@ fun MissMinutesApp(
     }
     val deleteConversation: (String) -> Unit = { id ->
         currentOwnerId?.let { owner ->
+            if (activeConversationId == id) invalidateConversationApproval()
             scope.launch {
                 withContext(Dispatchers.IO) { conversationStore.deleteConversation(owner, id) }
                 pendingDeleteConversationId = null
@@ -1336,6 +1389,7 @@ fun MissMinutesApp(
     }
     val deleteAllLocalData: () -> Unit = {
         currentOwnerId?.let { owner ->
+            invalidateConversationApproval()
             scope.launch {
                 withContext(Dispatchers.IO) { conversationStore.deleteAll(owner) }
                 confirmDeleteAll = false
@@ -1630,6 +1684,14 @@ fun MissMinutesApp(
                     }
                 }
             }
+        }
+        pendingToolApproval?.let { approval ->
+            AiToolApprovalDialog(
+                approval = approval,
+                language = language,
+                onApprove = { toolApprovalGate.resolve(approval.requestId, approved = true) },
+                onReject = { toolApprovalGate.resolve(approval.requestId, approved = false) }
+            )
         }
     }
 }
