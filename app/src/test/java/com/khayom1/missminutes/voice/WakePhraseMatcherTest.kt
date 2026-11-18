@@ -40,4 +40,19 @@ class WakePhraseMatcherTest {
         ))
         assertFalse(WakePhraseMatcher.matchesRecognitionCandidates(emptyList()))
     }
+
+    @Test
+    fun stripsPunctuationBetweenWakePhraseAndCommand() {
+        val command = "open settings"
+        listOf(
+            "Miss Minutes, $command",
+            "Miss Minutes: $command",
+            "Miss Minutes - $command",
+            "Miss Minutes — $command",
+            "Miss Minutes – $command",
+            "Miss Minutes $command"
+        ).forEach { transcript ->
+            assertEquals(command, WakePhraseMatcher.parse(transcript)?.command)
+        }
+    }
 }
