@@ -91,6 +91,17 @@ class AiProviderTest {
     }
 
     @Test
+    fun localProviderMapsInferenceRuntimeFailuresToUnavailable() = runBlocking {
+        val runtime = object : LocalInferenceRuntime {
+            override fun isAvailable(): Boolean = true
+            override suspend fun generate(messages: List<AiMessage>, maxOutputTokens: Int): String =
+                error("Local inference runtime failed")
+        }
+        val error = runCatching { OptionalLocalAiProvider(runtime).complete(validRequest) }.exceptionOrNull()
+        assertTrue(error is AiProviderException.Unavailable)
+    }
+
+    @Test
     fun localProviderRejectsBlankOutput() = runBlocking {
         val runtime = object : LocalInferenceRuntime {
             override fun isAvailable(): Boolean = true
