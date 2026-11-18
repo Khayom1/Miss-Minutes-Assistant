@@ -20,10 +20,41 @@ interface SpeechInputProvider {
     fun close()
 }
 
+/**
+ * Rejects callbacks from a recognizer session after it has been stopped,
+ * replaced, or completed. SpeechRecognizer may deliver cancellation callbacks
+ * asynchronously, so destroying the recognizer alone is not a session boundary.
+ */
+internal class SpeechInputSession {
+    private var generation = 0L
+    private var activeGeneration: Long? = null
+
+    @Synchronized
+    fun begin(): Long {
+        generation += 1
+        activeGeneration = generation
+        return generation
+    }
+
+    @Synchronized
+    fun finish(sessionId: Long): Boolean {
+        if (activeGeneration != sessionId) return false
+        activeGeneration = null
+        return true
+    }
+
+    @Synchronized
+    fun cancel() {
+        generation += 1
+        activeGeneration = null
+    }
+}
+
 class AndroidSpeechInputProvider(
     context: Context
 ) : SpeechInputProvider {
     private val appContext = context.applicationContext
+    private val session = SpeechInputSession()
     private var recognizer: SpeechRecognizer? = null
     private var closed = false
 
@@ -38,8 +69,12 @@ class AndroidSpeechInputProvider(
             onError()
             return
         }
+
+        val sessionId = session.begin()
+        var created: SpeechRecognizer? = null
         try {
             val instance = createRecognizer()
+            created = instance
             recognizer = instance
             instance.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) = Unit
@@ -51,16 +86,18 @@ class AndroidSpeechInputProvider(
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
                 override fun onResults(results: Bundle?) {
+                    if (!session.finish(sessionId)) return
                     val transcript = results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull { it.isNotBlank() }
                         ?.trim()
-                    releaseRecognizer()
+                    releaseRecognizer(instance)
                     if (transcript.isNullOrEmpty()) onError() else onResult(transcript)
                 }
 
                 override fun onError(error: Int) {
-                    releaseRecognizer()
+                    if (!session.finish(sessionId)) return
+                    releaseRecognizer(instance)
                     onError()
                 }
             })
@@ -73,11 +110,15 @@ class AndroidSpeechInputProvider(
             }
             instance.startListening(intent)
         } catch (_: SecurityException) {
-            releaseRecognizer()
-            onError()
+            if (session.finish(sessionId)) {
+                created?.let(::releaseRecognizer)
+                onError()
+            }
         } catch (_: RuntimeException) {
-            releaseRecognizer()
-            onError()
+            if (session.finish(sessionId)) {
+                created?.let(::releaseRecognizer)
+                onError()
+            }
         }
     }
 
@@ -90,20 +131,20 @@ class AndroidSpeechInputProvider(
         SpeechRecognizer.createOnDeviceSpeechRecognizer(appContext)
 
     override fun stop() {
+        session.cancel()
         releaseRecognizer()
     }
 
     override fun close() {
         if (closed) return
         closed = true
-        releaseRecognizer()
+        stop()
     }
 
-    private fun releaseRecognizer() {
-        recognizer?.let { current ->
-            runCatching { current.cancel() }
-            runCatching { current.destroy() }
-        }
-        recognizer = null
+    private fun releaseRecognizer(expected: SpeechRecognizer? = null) {
+        val current = expected ?: recognizer ?: return
+        if (recognizer === current) recognizer = null
+        runCatching { current.cancel() }
+        runCatching { current.destroy() }
     }
 }
