@@ -15,20 +15,44 @@ object AndroidDeviceStatusPlugin {
         capabilities = setOf(
             PluginCapability.DEVICE_INFORMATION,
             PluginCapability.BATTERY_STATUS,
-            PluginCapability.CALENDAR,
-            PluginCapability.CONTACTS,
-            PluginCapability.ALARM,
-            PluginCapability.APP_LAUNCH
+            PluginCapability.CALENDAR_READ,
+            PluginCapability.CALENDAR_WRITE,
+            PluginCapability.CONTACTS_READ
         ),
         actions = listOf(
             PluginActionSpec("device_info", PluginCapability.DEVICE_INFORMATION),
             PluginActionSpec("battery_status", PluginCapability.BATTERY_STATUS),
             PluginActionSpec("current_time", PluginCapability.DEVICE_INFORMATION),
-            PluginActionSpec("calendar_summary", PluginCapability.CALENDAR),
-            PluginActionSpec("create_reminder", PluginCapability.CALENDAR),
-            PluginActionSpec("contacts_summary", PluginCapability.CONTACTS),
-            PluginActionSpec("set_alarm", PluginCapability.ALARM),
-            PluginActionSpec("open_app", PluginCapability.APP_LAUNCH)
+            PluginActionSpec("calendar_summary", PluginCapability.CALENDAR_READ),
+            PluginActionSpec(
+                "create_reminder",
+                PluginCapability.CALENDAR_WRITE,
+                arguments = mapOf(
+                    "title" to PluginFieldSpec("title", PluginValueType.STRING, required = true, maxLength = 200),
+                    "description" to PluginFieldSpec("description", PluginValueType.STRING, required = false, maxLength = 500),
+                    "startEpochMillis" to PluginFieldSpec("startEpochMillis", PluginValueType.INTEGER, required = true)
+                ),
+                requiresConfirmation = true
+            ),
+            PluginActionSpec("contacts_summary", PluginCapability.CONTACTS_READ),
+            PluginActionSpec(
+                "set_alarm",
+                PluginCapability.CALENDAR_WRITE,
+                arguments = mapOf(
+                    "hour" to PluginFieldSpec("hour", PluginValueType.INTEGER, required = true, minimum = 0, maximum = 23),
+                    "minute" to PluginFieldSpec("minute", PluginValueType.INTEGER, required = true, minimum = 0, maximum = 59),
+                    "message" to PluginFieldSpec("message", PluginValueType.STRING, required = false, maxLength = 100)
+                ),
+                requiresConfirmation = true
+            ),
+            PluginActionSpec(
+                "open_app",
+                PluginCapability.DEVICE_INFORMATION,
+                arguments = mapOf(
+                    "packageName" to PluginFieldSpec("packageName", PluginValueType.STRING, required = true, maxLength = 200)
+                ),
+                requiresConfirmation = true
+            )
         ),
         maxCallsPerMinute = 10,
         maxExecutionMillis = 2_500L
@@ -61,7 +85,7 @@ object AndroidDeviceStatusPlugin {
         },
         object : PluginActionHandler {
             override val actionId = "calendar_summary"
-            override val capability = PluginCapability.CALENDAR
+            override val capability = PluginCapability.CALENDAR_READ
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 val result = engine.execute(DeviceToolRequest(DeviceToolCommand.ReadCalendarSummary))
                 return PluginActionOutput(result.success, result.message)
@@ -69,17 +93,17 @@ object AndroidDeviceStatusPlugin {
         },
         object : PluginActionHandler {
             override val actionId = "create_reminder"
-            override val capability = PluginCapability.CALENDAR
+            override val capability = PluginCapability.CALENDAR_WRITE
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
-                val title = arguments["title"]?.asString()?.takeIf { it.isNotBlank() }
+                val title = (arguments["title"] as? PluginValue.Text)?.value?.takeIf { it.isNotBlank() }
                     ?: return PluginActionOutput(false, "title is required")
-                val description = arguments["description"]?.asString().orEmpty()
-                val start = arguments["startEpochMillis"]?.asLong()
+                val description = (arguments["description"] as? PluginValue.Text)?.value.orEmpty()
+                val start = (arguments["startEpochMillis"] as? PluginValue.Number)?.value
                     ?: return PluginActionOutput(false, "startEpochMillis is required")
                 val result = engine.execute(
                     DeviceToolRequest(
                         DeviceToolCommand.CreateReminder(title, description, start),
-                        userConfirmed = true // agent path already gates confirmation
+                        userConfirmed = true
                     )
                 )
                 return PluginActionOutput(result.success, result.message)
@@ -87,7 +111,7 @@ object AndroidDeviceStatusPlugin {
         },
         object : PluginActionHandler {
             override val actionId = "contacts_summary"
-            override val capability = PluginCapability.CONTACTS
+            override val capability = PluginCapability.CONTACTS_READ
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 val result = engine.execute(DeviceToolRequest(DeviceToolCommand.ReadContactsSummary))
                 return PluginActionOutput(result.success, result.message)
@@ -95,11 +119,13 @@ object AndroidDeviceStatusPlugin {
         },
         object : PluginActionHandler {
             override val actionId = "set_alarm"
-            override val capability = PluginCapability.ALARM
+            override val capability = PluginCapability.CALENDAR_WRITE
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
-                val hour = arguments["hour"]?.asInt() ?: return PluginActionOutput(false, "hour is required")
-                val minute = arguments["minute"]?.asInt() ?: return PluginActionOutput(false, "minute is required")
-                val message = arguments["message"]?.asString() ?: "Miss Minutes reminder"
+                val hour = (arguments["hour"] as? PluginValue.Number)?.value?.toInt()
+                    ?: return PluginActionOutput(false, "hour is required")
+                val minute = (arguments["minute"] as? PluginValue.Number)?.value?.toInt()
+                    ?: return PluginActionOutput(false, "minute is required")
+                val message = (arguments["message"] as? PluginValue.Text)?.value ?: "Miss Minutes reminder"
                 val result = engine.execute(
                     DeviceToolRequest(
                         DeviceToolCommand.SetAlarm(hour, minute, message),
@@ -111,9 +137,9 @@ object AndroidDeviceStatusPlugin {
         },
         object : PluginActionHandler {
             override val actionId = "open_app"
-            override val capability = PluginCapability.APP_LAUNCH
+            override val capability = PluginCapability.DEVICE_INFORMATION
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
-                val packageName = arguments["packageName"]?.asString()?.takeIf { it.isNotBlank() }
+                val packageName = (arguments["packageName"] as? PluginValue.Text)?.value?.takeIf { it.isNotBlank() }
                     ?: return PluginActionOutput(false, "packageName is required")
                 val result = engine.execute(
                     DeviceToolRequest(
