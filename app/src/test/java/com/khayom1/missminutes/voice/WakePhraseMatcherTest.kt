@@ -14,6 +14,9 @@ class WakePhraseMatcherTest {
         assertTrue(WakePhraseMatcher.matches("  Miss   Minutes... "))
         assertTrue(WakePhraseMatcher.matches("Miss Minute"))
         assertTrue(WakePhraseMatcher.matches("hey Miss Minutes"))
+        assertTrue(WakePhraseMatcher.matches("Мисс минутка"))
+        assertTrue(WakePhraseMatcher.matches("мисс минутка"))
+        assertTrue(WakePhraseMatcher.matches("Мисс Минутка"))
     }
 
     @Test
@@ -22,6 +25,7 @@ class WakePhraseMatcherTest {
         assertEquals("открой настройки", WakePhraseMatcher.parse("MISS MINUTES — открой настройки")?.command)
         assertEquals("ҳолати батареяро нишон деҳ", WakePhraseMatcher.parse("Miss Minutes ҳолати батареяро нишон деҳ")?.command)
         assertEquals("ҳолати батареяро нишон деҳ", WakePhraseMatcher.parse("Мисс Минутка ҳолати батареяро нишон деҳ")?.command)
+        assertEquals("ҳолати батареяро нишон деҳ", WakePhraseMatcher.parse("мисс минутка ҳолати батареяро нишон деҳ")?.command)
         assertEquals("открой настройки", WakePhraseMatcher.parse("Мисс Минутс, открой настройки")?.command)
         assertEquals("create a reminder", WakePhraseMatcher.parse("hey Miss Minutes create a reminder")?.command)
     }
