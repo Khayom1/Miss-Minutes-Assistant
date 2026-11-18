@@ -6,6 +6,9 @@ import androidx.activity.compose.setContent
 import com.khayom1.missminutes.ai.AndroidDeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.AndroidSpeechInputProvider
 import com.khayom1.missminutes.ai.AndroidTtsProvider
+import com.khayom1.missminutes.ai.LocalModelStore
+import com.khayom1.missminutes.ai.LiteRtLmInferenceRuntime
+import com.khayom1.missminutes.ai.OptionalLocalAiProvider
 import com.khayom1.missminutes.ai.DeepSeekApiKeySource
 import com.khayom1.missminutes.ai.DirectDeepSeekProvider
 import com.khayom1.missminutes.ai.OkHttpAiHttpTransport
@@ -19,6 +22,7 @@ class MainActivity : ComponentActivity() {
     private var ttsProvider: TtsProvider? = null
     private var speechInputProvider: SpeechInputProvider? = null
     private var conversationStore: LocalConversationStore? = null
+    private var localInferenceRuntime: LiteRtLmInferenceRuntime? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,6 +33,13 @@ class MainActivity : ComponentActivity() {
             keySource = DeepSeekApiKeySource { apiKeyStore.load() },
             transport = transport
         )
+        val localModelStore = LocalModelStore(applicationContext)
+        val localRuntime = LiteRtLmInferenceRuntime(
+            modelPath = localModelStore::currentModelPath,
+            cacheDirectory = cacheDir
+        )
+        localInferenceRuntime = localRuntime
+        val localAiProvider = OptionalLocalAiProvider(localRuntime)
         val offlineTts = AndroidTtsProvider(applicationContext)
         val speechInput = AndroidSpeechInputProvider(applicationContext)
         val localConversationStore = LocalConversationStore(
@@ -43,6 +54,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             MissMinutesApp(
                 aiProvider = aiProvider,
+                localAiProvider = localAiProvider,
+                localModelStore = localModelStore,
                 apiKeyStore = apiKeyStore,
                 ttsProvider = offlineTts,
                 speechInputProvider = speechInput,
@@ -58,6 +71,8 @@ class MainActivity : ComponentActivity() {
         speechInputProvider = null
         conversationStore?.close()
         conversationStore = null
+        localInferenceRuntime?.close()
+        localInferenceRuntime = null
         super.onDestroy()
     }
 }
