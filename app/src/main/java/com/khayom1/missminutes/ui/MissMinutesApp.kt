@@ -84,6 +84,7 @@ import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.buildAiContextMessages
 import com.khayom1.missminutes.ai.TtsProvider
 import com.khayom1.missminutes.ai.TtsBackgroundPlaybackGuard
+import com.khayom1.missminutes.ai.SpeechInputBackgroundGuard
 import com.khayom1.missminutes.device.AndroidDeviceToolHost
 import com.khayom1.missminutes.device.DeviceToolCapability
 import com.khayom1.missminutes.device.DeviceToolCommand
@@ -499,6 +500,20 @@ fun MissMinutesApp(
     var voiceError by remember { mutableStateOf<String?>(null) }
     var speechError by remember { mutableStateOf<String?>(null) }
     var speechListening by remember { mutableStateOf(false) }
+    DisposableEffect(lifecycleOwner, speechInputProvider) {
+        val guard = SpeechInputBackgroundGuard(
+            stopListening = speechInputProvider::stop,
+            onStopped = {
+                speechListening = false
+                speechError = null
+            }
+        )
+        lifecycleOwner.lifecycle.addObserver(guard)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(guard)
+            speechInputProvider.stop()
+        }
+    }
     var apiKeyConfigured by remember { mutableStateOf(false) }
     var apiKeySaving by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
