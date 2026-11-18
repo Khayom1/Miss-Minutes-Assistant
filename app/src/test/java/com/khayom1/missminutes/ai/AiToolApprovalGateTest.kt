@@ -167,4 +167,17 @@ class AiToolApprovalGateTest {
         assertTrue(second.await())
         assertNull(gate.pending.value)
     }
+
+    @Test
+    fun approvalExpiresAndClearsPendingPrompt() = runBlocking {
+        val gate = AiToolApprovalGate(approvalTimeoutMillis = 100L)
+        val result = async(start = CoroutineStart.UNDISPATCHED) {
+            gate.awaitApproval(prompt)
+        }
+        val requestId = requireNotNull(gate.pending.value).requestId
+
+        assertFalse(result.await())
+        assertNull(gate.pending.value)
+        assertFalse(gate.resolve(requestId, approved = true))
+    }
 }
