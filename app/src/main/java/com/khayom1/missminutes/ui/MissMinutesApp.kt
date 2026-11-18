@@ -130,10 +130,10 @@ private enum class AppScreen(val symbol: String) {
     Settings("⚙")
 }
 
-internal enum class AppLanguage(val nativeName: String) {
-    English("English"),
-    Russian("Русский"),
-    Tajik("Тоҷикӣ")
+internal enum class AppLanguage(val nativeName: String, val speechLocale: Locale) {
+    English("English", Locale.ENGLISH),
+    Russian("Русский", Locale.forLanguageTag("ru")),
+    Tajik("Тоҷикӣ", Locale.forLanguageTag("tg"))
 }
 
 private data class ChatMessage(
@@ -1420,6 +1420,7 @@ fun MissMinutesApp(
                 voiceError = null
                 ttsProvider.speak(
                     text = message.text,
+                    locale = language.speechLocale,
                     onDone = { speakingMessageId = null },
                     onError = {
                         speakingMessageId = null
