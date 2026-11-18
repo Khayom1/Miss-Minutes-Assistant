@@ -2,10 +2,16 @@ package com.khayom1.missminutes.voice
 
 import java.util.Locale
 
-/** Exact phrase gate. Extra words (including "Hey") are intentionally rejected. */
+/** Parses a wake phrase and an optional command spoken in the same utterance. */
 object WakePhraseMatcher {
     private val separators = Regex("[^\\p{L}\\p{N}]+")
     private val whitespace = Regex("\\s+")
+    private val wakePrefix = Regex(
+        "^\\s*miss[\\s,.;:!?-]+minutes(?:\\b|[,.;:!?—-])?\\s*(.*)$",
+        RegexOption.IGNORE_CASE
+    )
+
+    data class Match(val command: String?)
 
     fun normalize(transcript: String): String = transcript
         .lowercase(Locale.ROOT)
@@ -13,9 +19,22 @@ object WakePhraseMatcher {
         .trim()
         .replace(whitespace, " ")
 
-    fun matches(transcript: String): Boolean = normalize(transcript) == "miss minutes"
+    fun parse(transcript: String): Match? {
+        val match = wakePrefix.matchEntire(transcript) ?: return null
+        val command = match.groupValues[1]
+            .trim()
+            .removePrefix(",")
+            .trim()
+            .takeIf { it.isNotEmpty() }
+        return Match(command)
+    }
 
-    /** Use only the recognizer's best hypothesis; alternatives must not override a rejected phrase. */
+    fun matches(transcript: String): Boolean = parse(transcript) != null
+
+    /** Only the primary hypothesis may trigger a command. */
+    fun parseRecognitionCandidates(candidates: List<String>): Match? =
+        candidates.firstOrNull()?.let(::parse)
+
     fun matchesRecognitionCandidates(candidates: List<String>): Boolean =
-        candidates.firstOrNull()?.let(::matches) == true
+        parseRecognitionCandidates(candidates) != null
 }
