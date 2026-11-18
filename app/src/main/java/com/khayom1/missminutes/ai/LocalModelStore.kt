@@ -7,7 +7,11 @@ import android.provider.OpenableColumns
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val LOCAL_MODEL_EXTENSION = ".litertlm"
 
@@ -16,41 +20,84 @@ internal fun localModelTemporaryFile(directory: File, id: UUID): File =
 
 internal fun localModelDestinationFile(directory: File, id: UUID): File =
     File(directory, "$id$LOCAL_MODEL_EXTENSION")
-/** Stores imported model weights in app-private storage, separate from secrets and backups. */
+
+/** Resolve only a direct child of the private model directory; canonical paths reject traversal and symlinks. */
+internal fun canonicalLocalModelFile(directory: File, path: String): File? = runCatching {
+    val root = directory.canonicalFile
+    val candidate = File(path).canonicalFile
+    candidate.takeIf {
+        it.parentFile == root &&
+            it.name.endsWith(LOCAL_MODEL_EXTENSION, ignoreCase = true)
+    }
+}.getOrNull()
+
+/** A model is ready only while its validated file still matches the imported size and timestamp. */
+internal fun validatedLocalModelFile(
+    directory: File,
+    path: String,
+    expectedSize: Long,
+    expectedLastModified: Long
+): File? {
+    if (expectedSize <= 0L || expectedLastModified < 0L) return null
+    val file = canonicalLocalModelFile(directory, path) ?: return null
+    return file.takeIf {
+        it.isFile &&
+            it.length() == expectedSize &&
+            it.lastModified() == expectedLastModified
+    }
+}
+
+/** Stores validated model weights in app-private storage, separate from secrets and backups. */
 class LocalModelStore(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val modelDirectory = File(appContext.noBackupFilesDir, MODEL_DIRECTORY)
 
-    fun currentModelPath(): String? = preferences.getString(KEY_MODEL_PATH, null)
-        ?.takeIf { path -> File(path).let { it.isFile && it.length() > 0L } }
+    fun currentModelPath(): String? {
+        val path = preferences.getString(KEY_MODEL_PATH, null) ?: return null
+        return validatedLocalModelFile(
+            directory = modelDirectory,
+            path = path,
+            expectedSize = preferences.getLong(KEY_MODEL_SIZE, -1L),
+            expectedLastModified = preferences.getLong(KEY_MODEL_MODIFIED, -1L)
+        )?.absolutePath
+    }
 
-    fun isLocalModelSelected(): Boolean = preferences.getBoolean(KEY_USE_LOCAL_MODEL, false)
+    fun isLocalModelSelected(): Boolean =
+        preferences.getBoolean(KEY_USE_LOCAL_MODEL, false) && currentModelPath() != null
 
     @Synchronized
     fun selectLocalModel(selected: Boolean) {
         require(!selected || currentModelPath() != null) {
-            "Import a supported .litertlm model before selecting local inference."
+            "Import and validate a compatible .litertlm model before selecting local inference."
         }
         check(preferences.edit().putBoolean(KEY_USE_LOCAL_MODEL, selected).commit()) {
             "Local model selection could not be saved."
         }
     }
 
-    /** Copies the selected SAF document into private storage; no URI grant is retained. */
+    /**
+     * Copies a SAF document into private storage, initializes the exact staged file
+     * through LiteRT-LM, then atomically activates it. A failed validation or commit
+     * leaves the previously selected model and its file untouched.
+     */
     @Synchronized
-    @Throws(IOException::class)
-    fun importModel(contentResolver: ContentResolver, uri: Uri): String {
+    suspend fun importModel(
+        contentResolver: ContentResolver,
+        uri: Uri,
+        validateModel: suspend (String) -> Unit
+    ): String = withContext(Dispatchers.IO) {
         if (!modelDirectory.exists() && !modelDirectory.mkdirs()) {
             throw IOException("Model storage is unavailable.")
         }
         val displayName = queryDisplayName(contentResolver, uri).orEmpty()
-        if (displayName.isBlank() || !displayName.lowercase(java.util.Locale.ROOT).endsWith(MODEL_EXTENSION)) {
+        if (displayName.isBlank() || !displayName.lowercase(Locale.ROOT).endsWith(LOCAL_MODEL_EXTENSION)) {
             throw IOException("Select a .litertlm model file.")
         }
 
         val temporary = localModelTemporaryFile(modelDirectory, UUID.randomUUID())
         val destination = localModelDestinationFile(modelDirectory, UUID.randomUUID())
+        var activated = false
         var totalBytes = 0L
         try {
             val input = contentResolver.openInputStream(uri)
@@ -74,22 +121,40 @@ class LocalModelStore(context: Context) {
             if (!temporary.renameTo(destination)) {
                 throw IOException("The model file could not be moved into private storage.")
             }
-            val oldPath = preferences.getString(KEY_MODEL_PATH, null)
+
+            val stagedFile = canonicalLocalModelFile(modelDirectory, destination.absolutePath)
+                ?: throw IOException("The staged model path is outside private storage.")
+            validateModel(stagedFile.absolutePath)
+
+            val oldPath = currentModelPath()
+            val validatedSize = stagedFile.length()
+            val validatedLastModified = stagedFile.lastModified()
+            if (validatedSize <= 0L) throw IOException("The validated model file is empty.")
+
             val committed = preferences.edit()
-                .putString(KEY_MODEL_PATH, destination.absolutePath)
+                .putString(KEY_MODEL_PATH, stagedFile.absolutePath)
+                .putLong(KEY_MODEL_SIZE, validatedSize)
+                .putLong(KEY_MODEL_MODIFIED, validatedLastModified)
                 .putBoolean(KEY_USE_LOCAL_MODEL, true)
                 .commit()
             if (!committed) {
-                destination.delete()
-                throw IOException("The imported model path could not be saved.")
+                throw IOException("The validated model could not be activated.")
             }
-            oldPath?.takeIf { it != destination.absolutePath }?.let { File(it).delete() }
-            return destination.absolutePath
+            activated = true
+
+            oldPath?.takeIf { it != stagedFile.absolutePath }?.let { old ->
+                canonicalLocalModelFile(modelDirectory, old)?.delete()
+            }
+            stagedFile.absolutePath
+        } catch (error: CancellationException) {
+            temporary.delete()
+            if (!activated) destination.delete()
+            throw error
         } catch (error: Exception) {
             temporary.delete()
-            destination.delete()
+            if (!activated) destination.delete()
             if (error is IOException) throw error
-            throw IOException("The selected model could not be imported.", error)
+            throw IOException("The selected model is not a compatible LiteRT-LM model.", error)
         }
     }
 
@@ -106,8 +171,9 @@ class LocalModelStore(context: Context) {
         private const val PREFERENCES_NAME = "local_model_preferences"
         private const val MODEL_DIRECTORY = "local-models"
         private const val KEY_MODEL_PATH = "active_model_path"
+        private const val KEY_MODEL_SIZE = "validated_model_size"
+        private const val KEY_MODEL_MODIFIED = "validated_model_modified"
         private const val KEY_USE_LOCAL_MODEL = "use_local_model"
-        private const val MODEL_EXTENSION = LOCAL_MODEL_EXTENSION
         private const val COPY_BUFFER_BYTES = 1024 * 1024
         private const val MAX_MODEL_BYTES = 4L * 1024L * 1024L * 1024L
     }
