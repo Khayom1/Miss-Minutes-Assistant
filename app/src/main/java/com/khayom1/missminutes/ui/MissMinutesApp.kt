@@ -68,6 +68,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.ProductIdentity
+import com.khayom1.missminutes.accessibility.AccessibilityAutomationService
 import com.khayom1.missminutes.backup.AndroidAppSettingsStore
 import com.khayom1.missminutes.backup.BackupArchive
 import com.khayom1.missminutes.backup.BackupPayloadAdapters
@@ -94,6 +95,7 @@ import com.khayom1.missminutes.device.DeviceToolResult
 import com.khayom1.missminutes.device.FileDeviceToolAuditLog
 import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
+import com.khayom1.missminutes.plugins.AndroidAccessibilityAutomationPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
 import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.LocalPluginPackageManager
@@ -362,12 +364,14 @@ fun MissMinutesApp(
     val pluginManifestStore = remember(context) { AndroidPluginManifestStore(context) }
     val pluginRegistry = remember(context, deviceToolEngine, pluginManifestStore) {
         PluginRegistry(
-            handlers = AndroidDeviceStatusPlugin.handlers(deviceToolEngine),
+            handlers = AndroidDeviceStatusPlugin.handlers(deviceToolEngine) +
+                AndroidAccessibilityAutomationPlugin.handlers(),
             consentStore = pluginConsentStore,
             auditLog = FilePluginAuditLog(context),
             accessChecker = AndroidPluginAccessChecker(context)
         ).apply {
             install(AndroidDeviceStatusPlugin.manifest())
+            install(AndroidAccessibilityAutomationPlugin.manifest())
             pluginManifestStore.load().forEach { manifest -> runCatching { install(manifest) } }
         }
     }
@@ -388,6 +392,9 @@ fun MissMinutesApp(
     }
     var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
     var wakeMessage by remember { mutableStateOf<String?>(null) }
+    var accessibilityEnabled by remember {
+        mutableStateOf(AccessibilityAutomationService.isServiceEnabled(context))
+    }
     var pendingVoiceCommand by remember { mutableStateOf(PendingVoiceCommandStore.peek(context)) }
     var isAppResumed by remember { mutableStateOf(false) }
     DisposableEffect(context) {
@@ -417,6 +424,11 @@ fun MissMinutesApp(
         onDispose {
             lifecycle?.removeObserver(lifecycleObserver)
             context.unregisterReceiver(receiver)
+        }
+    }
+    LaunchedEffect(isAppResumed) {
+        if (isAppResumed) {
+            accessibilityEnabled = AccessibilityAutomationService.isServiceEnabled(context)
         }
     }
     val wakePermissions = remember {
@@ -1519,6 +1531,13 @@ fun MissMinutesApp(
                                 onClearApiKey = clearApiKey,
                                 wakeEnabled = wakeEnabled,
                                 wakeMessage = wakeMessage,
+                                accessibilityEnabled = accessibilityEnabled,
+                                onOpenAccessibilitySettings = {
+                                    context.startActivity(
+                                        Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                },
                                 onEnableWakeListening = enableWakeListening,
                                 onDisableWakeListening = disableWakeListening,
                                 onLanguageChange = {
@@ -1596,7 +1615,8 @@ fun MissMinutesApp(
                                 backupError = backupError,
                                 backupBusy = backupBusy,
                                 pluginManifests = pluginRegistry.installedPlugins().filter {
-                                    it.id != AndroidDeviceStatusPlugin.PLUGIN_ID
+                                    it.id != AndroidDeviceStatusPlugin.PLUGIN_ID &&
+                                        it.id != AndroidAccessibilityAutomationPlugin.PLUGIN_ID
                                 },
                                 pluginConsentStates = pluginConsentSnapshot,
                                 onDeclarativePluginConsentChange = { pluginId, granted ->
@@ -1968,6 +1988,8 @@ private fun SettingsScreen(
     onClearApiKey: () -> Unit,
     wakeEnabled: Boolean,
     wakeMessage: String?,
+    accessibilityEnabled: Boolean,
+    onOpenAccessibilitySettings: () -> Unit,
     onEnableWakeListening: () -> Unit,
     onDisableWakeListening: () -> Unit,
     onLanguageChange: (AppLanguage) -> Unit,
@@ -2231,6 +2253,11 @@ private fun SettingsScreen(
                 Text(if (wakeEnabled) wakeStop else wakeStart)
             }
         }
+        AccessibilityAutomationSettingsPanel(
+            language = language,
+            enabled = accessibilityEnabled,
+            onOpenSettings = onOpenAccessibilitySettings
+        )
         var pendingDeviceCommand by remember { mutableStateOf<DeviceToolCommand?>(null) }
         var deviceToolMessage by remember { mutableStateOf<String?>(null) }
         var shareTextDraft by rememberSaveable { mutableStateOf("") }
@@ -2265,7 +2292,8 @@ private fun SettingsScreen(
                 PluginCapability.LOCATION_PRECISE,
                 PluginCapability.NOTIFICATION_READ,
                 PluginCapability.GITHUB_REPOSITORY_READ,
-                PluginCapability.GITHUB_REPOSITORY_WRITE -> when (language) {
+                PluginCapability.GITHUB_REPOSITORY_WRITE,
+                PluginCapability.ACCESSIBILITY_AUTOMATION -> when (language) {
                     AppLanguage.Tajik -> "Амал иҷро шуд: ${result.message}"
                     AppLanguage.Russian -> "Действие выполнено: ${result.message}"
                     AppLanguage.English -> "Action completed: ${result.message}"

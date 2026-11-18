@@ -9,6 +9,7 @@ enum class PluginCapability(val requiresConfirmation: Boolean = false) {
     LOCATION_APPROXIMATE,
     LOCATION_PRECISE,
     NOTIFICATION_READ,
+    ACCESSIBILITY_AUTOMATION,
     GITHUB_REPOSITORY_READ,
     GITHUB_REPOSITORY_WRITE(true)
 }

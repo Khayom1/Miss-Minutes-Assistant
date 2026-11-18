@@ -25,6 +25,14 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.khayom1.missminutes.MainActivity
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * User-started, on-device-only wake phrase service.
@@ -40,6 +48,9 @@ class MissMinutesWakeWordService : Service() {
     private var awaitingCommand = false
     private var recognitionLanguageTag = Locale.US.toLanguageTag()
     private val retryBackoff = RecognitionRetryBackoff()
+    private val executionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var executionJob: Job? = null
+    private var resumeAfterCommand = false
 
     private val restartListening = Runnable {
         if (active && !wakeHandled) startListening()
@@ -185,8 +196,7 @@ class MissMinutesWakeWordService : Service() {
         return microphoneGranted && notificationsGranted && notificationsEnabled && channelEnabled
     }
 
-    private fun startForegroundCompat() {
-        val notification = buildForegroundNotification()
+    private fun startForegroundCompat(notification: Notification = buildForegroundNotification()) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -228,25 +238,122 @@ class MissMinutesWakeWordService : Service() {
         mainHandler.removeCallbacks(commandWaitTimeout)
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
-        if (!command.isNullOrBlank()) PendingVoiceCommandStore.save(this, command)
-        val message = if (command.isNullOrBlank()) {
-            "Miss Minutes heard. Tap to open the assistant."
-        } else {
-            "Voice command captured. Unlock and tap to execute it."
-        }
-        publishState(false, message)
         if (!command.isNullOrBlank()) {
-            sendBroadcast(
-                Intent(ACTION_STATE_CHANGED)
-                    .setPackage(packageName)
-                    .putExtra(EXTRA_ENABLED, false)
-                    .putExtra(EXTRA_MESSAGE, message)
-                    .putExtra(EXTRA_COMMAND, command)
-            )
+            resumeAfterCommand = true
+            executeCapturedCommand(command)
+            return
         }
+        val message = "Miss Minutes heard. Tap to open the assistant."
+        publishState(false, message)
         stopForeground(STOP_FOREGROUND_REMOVE)
         postStatusNotification(message)
         stopSelf()
+    }
+
+    private fun executeCapturedCommand(command: String) {
+        publishState(false, "Miss Minutes is working in the app currently visible on your screen.")
+        try {
+            startForegroundCompat(buildWorkingNotification())
+        } catch (_: Exception) {
+            publishPendingCommand(
+                command,
+                "Voice command saved. Android did not allow the background automation session to start."
+            )
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+
+        executionJob?.cancel()
+        executionJob = executionScope.launch {
+            try {
+                val outcome = withContext(Dispatchers.IO) {
+                    BackgroundVoiceCommandExecutor.execute(applicationContext, command)
+                }
+                when (outcome) {
+                    is BackgroundVoiceCommandExecutor.Outcome.NeedsSetup -> {
+                        resumeAfterCommand = false
+                        publishPendingCommand(command, outcome.message)
+                        postStatusNotification(outcome.message)
+                    }
+                    is BackgroundVoiceCommandExecutor.Outcome.Completed -> {
+                        PendingVoiceCommandStore.acknowledge(this@MissMinutesWakeWordService)
+                        postStatusNotification(outcome.message)
+                    }
+                }
+            } catch (error: CancellationException) {
+                resumeAfterCommand = false
+                throw error
+            } catch (_: Exception) {
+                PendingVoiceCommandStore.acknowledge(this@MissMinutesWakeWordService)
+                postStatusNotification("Miss Minutes could not complete the background command.")
+            } finally {
+                if (resumeAfterCommand) {
+                    resumeWakeListeningAfterCommand()
+                } else {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+                executionJob = null
+            }
+        }
+    }
+
+    private fun resumeWakeListeningAfterCommand() {
+        resumeAfterCommand = false
+        active = true
+        wakeHandled = false
+        awaitingCommand = false
+        mainHandler.removeCallbacks(commandWaitTimeout)
+        retryBackoff.reset()
+        try {
+            startForegroundCompat()
+            if (!createOnDeviceRecognizer()) {
+                failClosed()
+                return
+            }
+            publishState(true, "Request finished. Offline wake phrase listening is active again.")
+            startListening()
+        } catch (_: Exception) {
+            failClosed()
+        }
+    }
+
+    private fun publishPendingCommand(command: String, message: String) {
+        PendingVoiceCommandStore.save(this, command)
+        publishState(false, message)
+        sendBroadcast(
+            Intent(ACTION_STATE_CHANGED)
+                .setPackage(packageName)
+                .putExtra(EXTRA_ENABLED, false)
+                .putExtra(EXTRA_MESSAGE, message)
+                .putExtra(EXTRA_COMMAND, command)
+        )
+    }
+
+    private fun buildWorkingNotification(): Notification {
+        val openApp = PendingIntent.getActivity(
+            this,
+            OPEN_REQUEST_CODE,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val stopService = PendingIntent.getService(
+            this,
+            STOP_REQUEST_CODE,
+            Intent(this, MissMinutesWakeWordService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setContentTitle("Miss Minutes is working")
+            .setContentText("Controlling the app currently visible on your screen.")
+            .setContentIntent(openApp)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .addAction(0, "Stop", stopService)
+            .build()
     }
 
     private fun failClosed() {
@@ -266,6 +373,10 @@ class MissMinutesWakeWordService : Service() {
         active = false
         wakeHandled = true
         awaitingCommand = false
+        resumeAfterCommand = false
+        executionJob?.cancel()
+        executionJob = null
+        PendingVoiceCommandStore.acknowledge(this)
         mainHandler.removeCallbacks(commandWaitTimeout)
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
@@ -356,6 +467,9 @@ class MissMinutesWakeWordService : Service() {
     override fun onDestroy() {
         active = false
         awaitingCommand = false
+        resumeAfterCommand = false
+        executionJob?.cancel()
+        executionScope.cancel()
         mainHandler.removeCallbacks(commandWaitTimeout)
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miss_minutes_accessibility_service_label">Управление приложениями Miss Minutes</string>
+    <string name="miss_minutes_accessibility_service_description">Позволяет Miss Minutes читать видимый экран приложения и только по вашей команде нажимать доступные элементы и вводить текст. Содержимое экрана может передаваться выбранному вами поставщику ИИ. Пассивный сбор экрана не выполняется.</string>
+</resources>

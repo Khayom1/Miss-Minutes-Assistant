@@ -7,6 +7,7 @@ import com.khayom1.missminutes.device.FileDeviceToolAuditLog
 import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import com.khayom1.missminutes.memory.AndroidKeystoreConversationCipher
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
+import com.khayom1.missminutes.plugins.AndroidAccessibilityAutomationPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
 import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.AndroidPluginAccessChecker
@@ -40,12 +41,14 @@ internal object AgentTaskRuntime {
         )
         val consentStore = AndroidPluginConsentStore(appContext)
         return PluginRegistry(
-            handlers = AndroidDeviceStatusPlugin.handlers(deviceEngine),
+            handlers = AndroidDeviceStatusPlugin.handlers(deviceEngine) +
+                AndroidAccessibilityAutomationPlugin.handlers(),
             consentStore = consentStore,
             auditLog = FilePluginAuditLog(appContext),
             accessChecker = AndroidPluginAccessChecker(appContext)
         ).apply {
             install(AndroidDeviceStatusPlugin.manifest())
+            install(AndroidAccessibilityAutomationPlugin.manifest())
             // Imported manifests remain declarative and can only bind to compiled
             // handlers. A persisted manifest never restores a user's consent grant.
             AndroidPluginManifestStore(appContext).load().forEach { manifest ->

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miss_minutes_accessibility_service_label">Miss Minutes cross-app automation</string>
+    <string name="miss_minutes_accessibility_service_description">Lets Miss Minutes inspect the visible app screen and, only when you give a command, tap accessible controls and enter text. Screen content may be sent to your configured AI provider. It does not passively collect screen content.</string>
+</resources>

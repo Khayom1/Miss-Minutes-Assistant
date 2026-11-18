@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Settings
+import com.khayom1.missminutes.accessibility.AccessibilityAutomationService
 
 fun interface PluginCredentialChecker {
     fun isConfigured(pluginId: String, capability: PluginCapability): Boolean
@@ -41,6 +42,21 @@ class AndroidPluginAccessChecker(
                         label = "Notification access",
                         explanation = "Miss Minutes needs Notification Access to read notifications you choose to share.",
                         settingsAction = Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
+                    )
+                }
+            }
+            PluginCapability.ACCESSIBILITY_AUTOMATION -> {
+                if (!AccessibilityAutomationService.isServiceEnabled(appContext)) {
+                    return PluginAccessDecision.PermissionRequired(
+                        id = "android.accessibility_service",
+                        label = "Accessibility service",
+                        explanation = "Enable Miss Minutes cross-app automation in Android Accessibility Settings.",
+                        settingsAction = Settings.ACTION_ACCESSIBILITY_SETTINGS
+                    )
+                }
+                if (!AccessibilityAutomationService.isConnected()) {
+                    return PluginAccessDecision.Unavailable(
+                        "Android Accessibility is enabled, but the service has not connected yet."
                     )
                 }
             }
@@ -89,6 +105,7 @@ class AndroidPluginAccessChecker(
         PluginCapability.DEVICE_INFORMATION,
         PluginCapability.BATTERY_STATUS,
         PluginCapability.NOTIFICATION_READ,
+        PluginCapability.ACCESSIBILITY_AUTOMATION,
         PluginCapability.GITHUB_REPOSITORY_READ,
         PluginCapability.GITHUB_REPOSITORY_WRITE -> emptyList()
     }

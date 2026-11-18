@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miss_minutes_accessibility_service_label">Идоракунии барномаҳо аз ҷониби Miss Minutes</string>
+    <string name="miss_minutes_accessibility_service_description">Ба Miss Minutes имкон медиҳад, ки экрани намоёни барномаро хонад ва танҳо бо фармони шумо тугмаҳои дастрасро пахш карда, матн ворид намояд. Мундариҷаи экран метавонад ба провайдери интихобшудаи AI фиристода шавад. Ҷамъоварии пассивии экран иҷро намешавад.</string>
+</resources>

@@ -69,6 +69,7 @@ internal fun BackupRestorePanel(
             PluginCapability.LOCATION_APPROXIMATE -> if (isTajik) "Ҷойгиршавии тахминӣ" else if (isRussian) "Приблизительное местоположение" else "Approximate location"
             PluginCapability.LOCATION_PRECISE -> if (isTajik) "Ҷойгиршавии дақиқ" else if (isRussian) "Точное местоположение" else "Precise location"
             PluginCapability.NOTIFICATION_READ -> if (isTajik) "Хондани огоҳиномаҳо" else if (isRussian) "Чтение уведомлений" else "Read notifications"
+            PluginCapability.ACCESSIBILITY_AUTOMATION -> if (isTajik) "Идоракунии барномаҳо" else if (isRussian) "Управление приложениями" else "Cross-app automation"
             PluginCapability.GITHUB_REPOSITORY_READ -> if (isTajik) "Хондани GitHub" else if (isRussian) "Чтение репозитория GitHub" else "Read GitHub repository"
             PluginCapability.GITHUB_REPOSITORY_WRITE -> if (isTajik) "Тағйири GitHub" else if (isRussian) "Изменение репозитория GitHub" else "Modify GitHub repository"
         }
