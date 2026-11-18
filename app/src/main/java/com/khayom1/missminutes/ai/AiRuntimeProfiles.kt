@@ -34,8 +34,11 @@ object AiRuntimePolicy {
         require(userMessage.isNotBlank())
         require(connectedToolCount >= 0)
 
+        val usableToolCount = if (
+            providerCapabilities.supportsStructuredTools && !providerCapabilities.isLocal
+        ) connectedToolCount else 0
         val effective = if (requestedProfile == AiRuntimeProfile.AUTO) {
-            chooseAutomatically(userMessage, connectedToolCount, providerCapabilities)
+            chooseAutomatically(userMessage, usableToolCount, providerCapabilities)
         } else requestedProfile
 
         val base = when (effective) {
