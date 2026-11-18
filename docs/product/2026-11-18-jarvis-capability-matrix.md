@@ -72,4 +72,11 @@ These are real foundations, not proof that the full film capability set is compl
 
 ## 4. Reference basis
 
-The MCU portrayal is summarized at a high level from Disney's official MCU overview, which describes J.A.R.V.I.S. as Stark's information and facility assistant and as a controller associated with the Iron Legion. Specific in-film depictions also include suit HUD/telemetry and system diagnostics. This is a product inspiration map, not a claim that every scene is a technically reproducible software feature.
+The MCU portrayal is summarized at a high level from these sources:
+
+- [D23 — MCU Robot Roundup](https://d23.com/mcu-robot-roundup/) describes J.A.R.V.I.S. securing Tony Stark's mansion and Stark Tower, supporting Stark Industries and serving as a source of information for the Avengers; it also describes a J.A.R.V.I.S.-controlled second Iron Legion.
+- [Iron Man (2008) screenplay transcript](https://www.springfieldspringfield.co.uk/movie_script.php?movie=iron-man) includes the HUD, virtual walkaround, control-surface checks, diagnostics, weather/air-traffic checks and flight-test calculations.
+- [VFX Blog — The original Iron Man HUD](https://vfxblog.com/ironman/) discusses the film HUD's diagnostic, flight, power, radar and navigation modes and how information is presented visually and verbally.
+- [VICE — Inside Iron Man's suit in Age of Ultron](https://www.vice.com/en/article/take-an-exclusive-look-inside-iron-mans-suit-from-marvels-avengers-age-of-ultron/) describes diagnostic displays and maintenance/updates for the suit and Iron Legion.
+
+The film examples describe a fictional system integrated with specialized armor, facilities, sensors and robotics. They are product inspiration, not a claim that an Android phone can reproduce those physical systems or bypass platform security.
