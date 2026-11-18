@@ -333,7 +333,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           # Reuse the canary emulator revision installed for API 37; stable would downgrade it.
-          channel: 3
+          channel: canary
           script: gradle --no-daemon connectedDebugAndroidTest
 
       - name: Verify APK package, version and signature metadata
