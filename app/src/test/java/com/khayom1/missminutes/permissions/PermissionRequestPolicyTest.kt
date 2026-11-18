@@ -1,6 +1,7 @@
 package com.khayom1.missminutes.permissions
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PermissionRequestPolicyTest {
@@ -22,6 +23,15 @@ class PermissionRequestPolicyTest {
         )
 
         assertArrayEquals(arrayOf("permission.one"), requested)
+    }
+
+    @Test
+    fun rejectsBlankPermissionNames() {
+        val failure = runCatching {
+            permissionsToRequest(listOf(" "), isGranted = { false })
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
     }
 
     @Test
