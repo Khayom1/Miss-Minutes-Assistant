@@ -27,4 +27,4 @@ The floating overlay is a lightweight, user-controlled launcher for Miss Minutes
 - Requires Android's special Display over other apps permission.
 - Uses the specialUse foreground-service type on Android 14+ and a low-importance persistent notification.
 - Android may still stop the service under force-stop, permission revocation or system resource pressure.
-- This component is a floating launcher surface, not the animated 3D character renderer. The 3D avatar remains an independent rendering milestone.
+- This component is only a user-started floating launcher surface. Character/avatar rendering is outside the approved product scope.
