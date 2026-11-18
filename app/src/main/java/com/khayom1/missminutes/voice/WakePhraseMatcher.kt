@@ -7,7 +7,7 @@ object WakePhraseMatcher {
     private val separators = Regex("[^\\p{L}\\p{N}]+")
     private val whitespace = Regex("\\s+")
     private val wakePrefix = Regex(
-        "^\\s*miss[\\s,.;:!?-]+minutes(?:\\b|[,.;:!?—-])?\\s*(.*)$",
+        "^\\s*miss[\\s,.;:!?-]+minutes\\b[\\s,.;:!?—–-]*(.*)$",
         RegexOption.IGNORE_CASE
     )
 
