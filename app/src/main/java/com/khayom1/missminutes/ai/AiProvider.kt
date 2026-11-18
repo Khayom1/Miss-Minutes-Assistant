@@ -2,6 +2,7 @@ package com.khayom1.missminutes.ai
 
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -104,7 +105,15 @@ sealed class AiProviderException(message: String, cause: Throwable? = null) :
         AiProviderException("The AI service returned an invalid response.", cause)
 }
 
+data class AiProviderCapabilities(
+    val supportsStructuredTools: Boolean = false,
+    val isLocal: Boolean = false
+)
+
 interface AiProvider {
+    val capabilities: AiProviderCapabilities
+        get() = AiProviderCapabilities()
+
     suspend fun complete(request: AiRequest): AiCompletion
 }
 
@@ -127,6 +136,10 @@ interface AiHttpTransport {
  * local runtime exposes a structured tool-call contract.
  */
 interface LocalInferenceRuntime {
+    /**
+     * A fast, non-blocking probe backed by cached readiness state.
+     * True only when a compatible on-device runtime and model are installed and ready.
+     */
     fun isAvailable(): Boolean
 
     suspend fun generate(
@@ -138,8 +151,14 @@ interface LocalInferenceRuntime {
 class OptionalLocalAiProvider(
     private val runtime: LocalInferenceRuntime
 ) : AiProvider {
+    override val capabilities: AiProviderCapabilities
+        get() = AiProviderCapabilities(
+            supportsStructuredTools = false,
+            isLocal = isRuntimeAvailable()
+        )
+
     override suspend fun complete(request: AiRequest): AiCompletion {
-        if (!runtime.isAvailable() || request.tools.isNotEmpty() ||
+        if (!isRuntimeAvailable() || request.tools.isNotEmpty() ||
             request.messages.any { it.role == AiRole.TOOL || it.toolCalls.isNotEmpty() }
         ) {
             throw AiProviderException.Unavailable()
@@ -147,12 +166,20 @@ class OptionalLocalAiProvider(
 
         val output = try {
             runtime.generate(request.messages, request.maxOutputTokens).trim()
-        } catch (error: IOException) {
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
             throw AiProviderException.Unavailable(error)
         }
 
         if (output.isEmpty()) throw AiProviderException.InvalidResponse()
         return AiCompletion(content = output, model = "local")
+    }
+
+    private fun isRuntimeAvailable(): Boolean = try {
+        runtime.isAvailable()
+    } catch (_: Exception) {
+        false
     }
 }
 
