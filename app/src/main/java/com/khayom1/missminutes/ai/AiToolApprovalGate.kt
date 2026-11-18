@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 
@@ -63,7 +64,10 @@ data class AiToolApprovalPrompt(
  * A tool call that requires confirmation suspends until the user explicitly
  * approves or rejects it. Cancellation always clears the pending request.
  */
-class AiToolApprovalGate {
+class AiToolApprovalGate(private val approvalTimeoutMillis: Long = DEFAULT_APPROVAL_TIMEOUT_MILLIS) {
+    init {
+        require(approvalTimeoutMillis in 1L..MAX_APPROVAL_TIMEOUT_MILLIS)
+    }
     private val requestMutex = Mutex()
     private val mutablePending = MutableStateFlow<AiToolApprovalPrompt?>(null)
 
@@ -91,7 +95,7 @@ class AiToolApprovalGate {
                 mutablePending.value = requestPrompt
             }
             try {
-                decision.await()
+                withTimeoutOrNull(approvalTimeoutMillis) { decision.await() } ?: false
             } finally {
                 synchronized(this) {
                     if (pendingDecision === decision) {
@@ -113,5 +117,10 @@ class AiToolApprovalGate {
     fun rejectPending(): Boolean {
         val requestId = synchronized(this) { pendingPrompt?.requestId } ?: return false
         return resolve(requestId, approved = false)
+    }
+
+    private companion object {
+        const val DEFAULT_APPROVAL_TIMEOUT_MILLIS = 60_000L
+        const val MAX_APPROVAL_TIMEOUT_MILLIS = 120_000L
     }
 }
