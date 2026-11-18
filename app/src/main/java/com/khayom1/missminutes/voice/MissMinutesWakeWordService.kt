@@ -37,11 +37,18 @@ class MissMinutesWakeWordService : Service() {
     private var recognizer: SpeechRecognizer? = null
     private var active = false
     private var wakeHandled = false
+    private var awaitingCommand = false
     private var recognitionLanguageTag = Locale.US.toLanguageTag()
     private val retryBackoff = RecognitionRetryBackoff()
 
     private val restartListening = Runnable {
         if (active && !wakeHandled) startListening()
+    }
+    private val commandWaitTimeout = Runnable {
+        if (active && awaitingCommand) {
+            awaitingCommand = false
+            publishState(true, "No command heard. Still listening for “Miss Minutes”.")
+        }
     }
 
     private val recognitionListener = object : RecognitionListener {
@@ -52,18 +59,28 @@ class MissMinutesWakeWordService : Service() {
         override fun onEndOfSpeech() = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
-        // Wait for the final transcript so a partial "Miss Minutes" prefix in a
-        // longer utterance (for example, "Miss Minutes please") cannot wake the app.
+        // Final transcripts are used so partial hypotheses cannot dispatch commands.
         override fun onPartialResults(partialResults: Bundle?) = Unit
 
         override fun onResults(results: Bundle?) {
             val candidates = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-            val match = WakePhraseMatcher.parseRecognitionCandidates(candidates)
-            if (match != null) {
-                handleWakePhrase(match.command)
-            } else {
-                retryBackoff.reset()
-                scheduleRestart(RESTART_DELAY_MS)
+            val primaryTranscript = candidates.firstOrNull().orEmpty().trim()
+            val match = WakePhraseMatcher.parse(primaryTranscript)
+            when {
+                match?.command != null -> handleWakePhrase(match.command)
+                match != null -> {
+                    awaitingCommand = true
+                    mainHandler.removeCallbacks(commandWaitTimeout)
+                    mainHandler.postDelayed(commandWaitTimeout, COMMAND_WAIT_TIMEOUT_MS)
+                    publishState(true, "Miss Minutes heard. Say your command now.")
+                    retryBackoff.reset()
+                    scheduleRestart(RESTART_DELAY_MS)
+                }
+                awaitingCommand && primaryTranscript.isNotBlank() -> handleWakePhrase(primaryTranscript)
+                else -> {
+                    retryBackoff.reset()
+                    scheduleRestart(RESTART_DELAY_MS)
+                }
             }
         }
 
@@ -121,6 +138,8 @@ class MissMinutesWakeWordService : Service() {
             startForegroundCompat()
             active = true
             wakeHandled = false
+            awaitingCommand = false
+            mainHandler.removeCallbacks(commandWaitTimeout)
             retryBackoff.reset()
             publishState(true, "Offline wake phrase listening is active.")
             if (!createOnDeviceRecognizer()) {
@@ -205,6 +224,8 @@ class MissMinutesWakeWordService : Service() {
         if (wakeHandled || !active) return
         wakeHandled = true
         active = false
+        awaitingCommand = false
+        mainHandler.removeCallbacks(commandWaitTimeout)
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
         if (!command.isNullOrBlank()) PendingVoiceCommandStore.save(this, command)
@@ -231,6 +252,8 @@ class MissMinutesWakeWordService : Service() {
     private fun failClosed() {
         active = false
         wakeHandled = true
+        awaitingCommand = false
+        mainHandler.removeCallbacks(commandWaitTimeout)
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
         publishState(false, "Wake phrase listening stopped. Check on-device speech recognition and permissions.")
@@ -242,6 +265,8 @@ class MissMinutesWakeWordService : Service() {
     private fun stopWakeWordService() {
         active = false
         wakeHandled = true
+        awaitingCommand = false
+        mainHandler.removeCallbacks(commandWaitTimeout)
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
         publishState(false, "Offline wake phrase listening is off.")
@@ -330,6 +355,8 @@ class MissMinutesWakeWordService : Service() {
 
     override fun onDestroy() {
         active = false
+        awaitingCommand = false
+        mainHandler.removeCallbacks(commandWaitTimeout)
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
         publishState(false, "Offline wake phrase listening stopped.")
@@ -352,6 +379,7 @@ class MissMinutesWakeWordService : Service() {
         private const val OPEN_REQUEST_CODE = 7303
         private const val STOP_REQUEST_CODE = 7304
         private const val RESTART_DELAY_MS = 500L
+        private const val COMMAND_WAIT_TIMEOUT_MS = 15_000L
     }
 }
 
