@@ -83,7 +83,11 @@ class LocalModelStoreImportTest {
         val provider = FileBackedProvider(source)
         provider.attachInfo(
             context,
-            ProviderInfo().apply { authority = AUTHORITY }
+            ProviderInfo().apply {
+                authority = AUTHORITY
+                packageName = context.packageName
+                applicationInfo = context.applicationInfo
+            }
         )
         return MockContentResolver(context).apply {
             addProvider(AUTHORITY, provider)
