@@ -9,17 +9,18 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: android-ci-${{ github.ref }}
-  # Preserve each exact-head validation run; rapid commits must not cancel earlier builds.
+  # Preserve exact-head validation runs when commits arrive rapidly.
   cancel-in-progress: false
 
 jobs:
   build:
     name: Build, test and lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,23 +36,87 @@ jobs:
         with:
           packages: "platform-tools"
 
+      - name: Update Android SDK command-line tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$ANDROID_SDK_ROOT"
+          CLT="$SDK/cmdline-tools"
+          mkdir -p "$CLT"
+          # Ubuntu 24.04 ships cmdline-tools 12.0. It silently writes target=android-0
+          # for android-37.0 packages. sdkmanager installs the update beside "latest".
+          rm -rf "$CLT/latest-2"
+          set +o pipefail
+          yes | "$CLT/latest/bin/sdkmanager" --install "cmdline-tools;latest" >/dev/null
+          set -o pipefail
+          if [ -d "$CLT/latest-2" ]; then
+            rm -rf "$CLT/latest"
+            mv "$CLT/latest-2" "$CLT/latest"
+          fi
+          TOOLS_VERSION="$(awk -F= '$1 == "Pkg.Revision" { print $2; exit }' "$CLT/latest/source.properties")"
+          printf 'cmdline-tools=%s\n' "$TOOLS_VERSION"
+          printf '%s\n' "$TOOLS_VERSION" > "$RUNNER_TEMP/cmdline-tools-version.txt"
+          if [ -z "$TOOLS_VERSION" ] || [ "$(printf '%s\n' "20.0" "$TOOLS_VERSION" | sort -V | head -n1)" != "20.0" ]; then
+            echo "Android cmdline-tools 20.0+ is required to parse android-37.0 AVD targets." >&2
+            exit 1
+          fi
+          test -x "$CLT/latest/bin/android"
+          "$CLT/latest/bin/android" --version 2>&1 | tee "$RUNNER_TEMP/android-cli-version.txt"
+          "$CLT/latest/bin/avdmanager" list device >/dev/null
+          echo "$CLT/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK/emulator" >> "$GITHUB_PATH"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$CLT/latest/bin:$SDK/emulator:$SDK/platform-tools:$PATH"
+          sdkmanager --list --channel=3 | grep -E 'platforms;android-37|system-images;android-37|build-tools;37' || true
+
+      - name: Pin stable platform-tools for emulator-runner compatibility
+        run: |
+          set -euo pipefail
+          # The API 37 preview channel may offer a canary platform-tools package.
+          # reactivecircus/android-emulator-runner later requests the stable package;
+          # remove the preview build first so its SDK Manager cannot attempt a downgrade.
+          sdkmanager --uninstall "platform-tools"
+          sdkmanager --channel=0 --install "platform-tools"
+          PLATFORM_TOOLS_REVISION="$(awk -F= '$1 == "Pkg.Revision" { print $2; exit }' "$ANDROID_SDK_ROOT/platform-tools/source.properties")"
+          test -n "$PLATFORM_TOOLS_REVISION"
+          echo "stable platform-tools revision=$PLATFORM_TOOLS_REVISION"
+
       - name: Install Android platform
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager --channel=3 --install "platforms;android-35" "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.13"
+          gradle-version: "9.5.0"
 
       - name: Verify Kotlin source formatting basics
         run: |
           test -f app/src/main/java/com/khayom1/missminutes/MainActivity.kt
           test ! -d app/src/main/assets/models
 
+      - name: Verify Android 17 platform security policy
+        run: bash scripts/verify-android-platform-policy.sh
+
       - name: Scan tracked working tree for secrets
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
 
+      - name: Resolve Gradle lockfiles for dependency vulnerability scanning
+        run: |
+          gradle --no-daemon -p app --write-locks dependencies --configuration debugRuntimeClasspath
+          gradle --no-daemon -p app --write-locks dependencies --configuration releaseRuntimeClasspath
+          gradle --no-daemon -p app --write-locks dependencies --configuration debugUnitTestRuntimeClasspath
+          gradle --no-daemon -p app --write-locks dependencies --configuration debugAndroidTestRuntimeClasspath
+          test -s app/gradle.lockfile
+
+      - name: Scan resolved Gradle dependencies with OSV
+        uses: google/osv-scanner-action/osv-scanner-action@v2.7.1
+        with:
+          scan-args: |-
+            --recursive
+            .
+
       - name: Run JVM tests, debug and release builds, and lint
+        id: build_validation
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
 
 
@@ -68,9 +133,197 @@ jobs:
 
       - name: Install pinned emulator packages
         run: |
-          sdkmanager --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "emulator" "platform-tools"
+          sdkmanager --channel=3 --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "platforms;android-37.0" "system-images;android-37.0;google_apis;x86_64" "emulator"
 
-      - name: Run Android instrumentation tests (API 35)
+      - name: Run Android instrumentation tests (API 37.0)
+        id: api37_instrumentation
+        run: |
+          set -euo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          export ANDROID_SDK_HOME="$HOME/.android"
+          mkdir -p "$ANDROID_AVD_HOME"
+          EMULATOR_LOG="$RUNNER_TEMP/android17-api37-emulator.log"
+          collect_api37_diagnostics() {
+            {
+              echo "=== AVD target ==="
+              cat "$RUNNER_TEMP/android17-api37-avd-target.txt" 2>/dev/null || true
+              echo "=== system server ==="
+              adb shell pidof system_server || true
+              adb shell getprop init.svc.system_server || true
+              echo "=== framework services ==="
+              adb shell service list | grep -E 'package|activity|mount' || true
+              adb shell service check package || true
+              adb shell service check activity || true
+              adb shell service check mount || true
+              echo "=== mount state ==="
+              adb shell dumpsys mount || true
+              echo "=== data space ==="
+              adb shell df -h /data || true
+              echo "=== SurfaceFlinger ==="
+              adb shell pidof surfaceflinger || true
+            } > "$RUNNER_TEMP/android17-api37-services.txt" 2>&1 || true
+            adb logcat -b all -d > "$RUNNER_TEMP/android17-api37-logcat.txt" 2>/dev/null || true
+            grep -Ei 'system_server|PackageManager|FATAL EXCEPTION|Watchdog|lowmemorykiller|OutOfMemory|Killing .*system_server|RegionSampling|mapper.ranchu|hasReadColorBufferDma|SurfaceFlinger' "$RUNNER_TEMP/android17-api37-logcat.txt" | tail -300 || tail -300 "$RUNNER_TEMP/android17-api37-logcat.txt"
+            tail -200 "$EMULATOR_LOG" || true
+          }
+          API37_IMAGE="system-images;android-37.0;google_apis;x86_64"
+          AVD_OUTPUT="$(printf 'no\n' | avdmanager create avd --force -n android17-api37 --package "$API37_IMAGE" --abi "google_apis/x86_64" --device "pixel_6" -p "$ANDROID_AVD_HOME/android17-api37.avd" 2>&1)" || {
+            printf '%s\n' "$AVD_OUTPUT"
+            avdmanager list avd
+            collect_api37_diagnostics
+            exit 1
+          }
+          printf '%s\n' "$AVD_OUTPUT"
+          AVD_INI="$ANDROID_AVD_HOME/android17-api37.ini"
+          AVD_CONFIG="$ANDROID_AVD_HOME/android17-api37.avd/config.ini"
+          if [ ! -s "$AVD_INI" ] || [ ! -s "$AVD_CONFIG" ]; then
+            echo "API 37 AVD was not created in ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >&2
+            find "$HOME/.android" -maxdepth 3 -type f -name '*.ini' -print || true
+            avdmanager list avd
+            collect_api37_diagnostics
+            exit 1
+          fi
+          AVD_TARGET="$(grep '^target=' "$AVD_INI" | cut -d= -f2)"
+          if [ "$AVD_TARGET" != "android-37.0" ]; then
+            echo "Invalid API 37 AVD target: $AVD_TARGET (expected android-37.0)." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          printf '%s\n' "$AVD_TARGET" > "$RUNNER_TEMP/android17-api37-avd-target.txt"
+          # Keep enough userdata and RAM for system services plus APK splits.
+          sed -i '/^disk.dataPartition.size=/d; /^hw.ramSize=/d; /^vm.heapSize=/d; /^hw.cpu.ncore=/d' "$AVD_CONFIG"
+          printf '\ndisk.dataPartition.size=4G\nhw.ramSize=4096\nvm.heapSize=512\nhw.cpu.ncore=4\n' >> "$AVD_CONFIG"
+          grep -F 'disk.dataPartition.size=4G' "$AVD_CONFIG"
+          grep -F 'hw.ramSize=4096' "$AVD_CONFIG"
+          grep -F 'vm.heapSize=512' "$AVD_CONFIG"
+          grep -F 'hw.cpu.ncore=4' "$AVD_CONFIG"
+          emulator -list-avds | grep -Fx "android17-api37"
+          emulator -avd android17-api37 -memory 4096 -cores 4 -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -no-snapshot-save -wipe-data > "$EMULATOR_LOG" 2>&1 &
+          EMULATOR_PID=$!
+          trap 'adb emu kill >/dev/null 2>&1 || kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
+          if ! timeout 240 adb wait-for-device; then
+            echo "API 37 emulator did not become reachable over ADB." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          BOOTED=0
+          for attempt in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+              BOOTED=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$BOOTED" != "1" ]; then
+            echo "API 37 emulator did not finish Android boot." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          # sys.boot_completed may precede framework and SurfaceFlinger stability.
+          SERVICES_READY=0
+          STABLE_SERVICE_CHECKS=0
+          PREVIOUS_SYSTEM_SERVER_PID=""
+          PREVIOUS_SURFACEFLINGER_PID=""
+          for attempt in $(seq 1 72); do
+            PACKAGE_LIST="$(adb shell cmd package list packages 2>/dev/null || true)"
+            CURRENT_USER="$(adb shell cmd activity get-current-user 2>/dev/null | tr -d '\r' || true)"
+            PACKAGE_SERVICE="$(adb shell service check package 2>&1 || true)"
+            ACTIVITY_SERVICE="$(adb shell service check activity 2>&1 || true)"
+            SYSTEM_SERVER_PID="$(adb shell pidof system_server 2>/dev/null | tr -d '\r' || true)"
+            MOUNT_SERVICE="$(adb shell service check mount 2>&1 || true)"
+            SURFACEFLINGER_PID="$(adb shell pidof surfaceflinger 2>/dev/null | tr -d '\r' || true)"
+            if printf '%s\n' "$PACKAGE_LIST" | grep '^package:' >/dev/null &&
+               [ "$CURRENT_USER" = "0" ] &&
+               printf '%s\n' "$PACKAGE_SERVICE" | grep -q 'found' &&
+               printf '%s\n' "$ACTIVITY_SERVICE" | grep -q 'found' &&
+               [ -n "$SYSTEM_SERVER_PID" ] &&
+               [ "$SYSTEM_SERVER_PID" = "$PREVIOUS_SYSTEM_SERVER_PID" ] &&
+               printf '%s\n' "$MOUNT_SERVICE" | grep -q 'found' &&
+               [ -n "$SURFACEFLINGER_PID" ] &&
+               [ "$SURFACEFLINGER_PID" = "$PREVIOUS_SURFACEFLINGER_PID" ]; then
+              STABLE_SERVICE_CHECKS=$((STABLE_SERVICE_CHECKS + 1))
+              if [ "$STABLE_SERVICE_CHECKS" -ge 12 ]; then
+                SERVICES_READY=1
+                break
+              fi
+            else
+              STABLE_SERVICE_CHECKS=0
+            fi
+            PREVIOUS_SYSTEM_SERVER_PID="$SYSTEM_SERVER_PID"
+            PREVIOUS_SURFACEFLINGER_PID="$SURFACEFLINGER_PID"
+            sleep 5
+          done
+          if [ "$SERVICES_READY" != "1" ]; then
+            echo "Android 17 framework services or SurfaceFlinger did not remain stable for 12 checks." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          printf '%s\n' "$PACKAGE_LIST" | sed -n '1,5p'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          DATA_AVAILABLE_KB="$(adb shell df -k /data | awk 'NR==2 {print $4}' | tr -d '\r')"
+          if [ -z "$DATA_AVAILABLE_KB" ] || [ "$DATA_AVAILABLE_KB" -lt 524288 ]; then
+            echo "API 37 emulator has less than 512 MiB available in /data." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          adb shell df -h /data
+          echo "API 37 framework service state before instrumentation:"
+          if ! adb shell service check package || ! adb shell service check activity || ! adb shell service check mount; then
+            echo "API 37 framework services disappeared before instrumentation." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          if ! INSTALL_PROBE="$(timeout 60 adb shell cmd package install-create -r -t -S 1024 2>&1)"; then
+            printf '%s\n' "$INSTALL_PROBE"
+            echo "API 37 PackageInstaller preflight failed before the test APK was installed." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          printf '%s\n' "$INSTALL_PROBE"
+          INSTALL_SESSION="$(printf '%s\n' "$INSTALL_PROBE" | sed -n 's/.*session \[\([0-9][0-9]*\)\].*/\1/p')"
+          if [ -z "$INSTALL_SESSION" ]; then
+            echo "API 37 PackageInstaller did not return a valid session id." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          if ! timeout 30 adb shell cmd package install-abandon "$INSTALL_SESSION"; then
+            echo "API 37 PackageInstaller could not abandon its preflight session." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          if ! timeout 20m gradle --no-daemon connectedDebugAndroidTest; then
+            echo "API 37 instrumentation failed; collecting framework and emulator diagnostics." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          adb logcat -b all -d > "$RUNNER_TEMP/android17-api37-logcat.txt" 2>/dev/null || true
+          if ! adb shell service check package || ! adb shell service check activity || ! adb shell service check mount; then
+            echo "API 37 framework services disappeared after instrumentation." >&2
+            collect_api37_diagnostics
+            exit 1
+          fi
+          echo "API 37 instrumentation passed with stable framework services."
+
+      - name: Upload Android 17 emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android17-api37-diagnostics
+          path: |
+            ${{ runner.temp }}/android17-api37-emulator.log
+            ${{ runner.temp }}/android17-api37-logcat.txt
+            ${{ runner.temp }}/android17-api37-services.txt
+            ${{ runner.temp }}/android17-api37-avd-target.txt
+            ${{ runner.temp }}/cmdline-tools-version.txt
+            ${{ runner.temp }}/android-cli-version.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Run Android instrumentation tests (API 35 compatibility)
+        id: api35_instrumentation
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           disable-linux-hw-accel: false
@@ -80,16 +333,72 @@ jobs:
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
+          # Reuse the canary emulator revision installed for API 37; stable would downgrade it.
+          channel: canary
           script: gradle --no-daemon connectedDebugAndroidTest
 
+      - name: Verify APK package, version and signature metadata
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$ANDROID_SDK_ROOT/build-tools/37.0.0"
+          AAPT="$BUILD_TOOLS/aapt"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          unzip -tq "$DEBUG_APK"
+          unzip -tq "$RELEASE_APK"
+          DEBUG_BADGING="$("$AAPT" dump badging "$DEBUG_APK")"
+          RELEASE_BADGING="$("$AAPT" dump badging "$RELEASE_APK")"
+          printf '%s\n' "$DEBUG_BADGING" > app/build/release-evidence/debug-badging.txt
+          printf '%s\n' "$RELEASE_BADGING" > app/build/release-evidence/release-badging.txt
+          for BADGING in "$DEBUG_BADGING" "$RELEASE_BADGING"; do
+            printf '%s\n' "$BADGING" | grep -F "package: name='com.khayom1.missminutes'"
+            printf '%s\n' "$BADGING" | grep -F "sdkVersion:'26'"
+            printf '%s\n' "$BADGING" | grep -F "targetSdkVersion:'37'"
+          done
+          DEBUG_VERSION="$(printf '%s\n' "$DEBUG_BADGING" | sed -n "s/^package:.*versionCode='\\([^']*\\)'.*versionName='\\([^']*\\)'.*/\\1 \\2/p")"
+          RELEASE_VERSION="$(printf '%s\n' "$RELEASE_BADGING" | sed -n "s/^package:.*versionCode='\\([^']*\\)'.*versionName='\\([^']*\\)'.*/\\1 \\2/p")"
+          test -n "$DEBUG_VERSION"
+          test "$DEBUG_VERSION" = "$RELEASE_VERSION"
+          "$APKSIGNER" verify --verbose --print-certs "$DEBUG_APK" > app/build/release-evidence/debug-signature.txt 2>&1
+          if "$APKSIGNER" verify --verbose --print-certs "$RELEASE_APK" > app/build/release-evidence/release-signature.txt 2>&1; then
+            echo "Release APK is signed without an authorized owner-controlled release key." >&2
+            exit 1
+          fi
+          grep -Eqi "DOES NOT VERIFY|No signatures|not signed" app/build/release-evidence/release-signature.txt
+          {
+            echo "applicationId=com.khayom1.missminutes"
+            echo "version=$DEBUG_VERSION"
+            echo "minSdk=26"
+            echo "targetSdk=37"
+            echo "debugSignature=verified; see debug-signature.txt"
+            echo "releaseSignature=unsigned; owner-controlled release signing is required"
+          } > app/build/release-evidence/apk-metadata.txt
+
       - name: Generate APK checksums
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
         run: |
           sha256sum app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk > app/build/release-evidence/SHA256SUMS.txt
 
-      - name: Upload release evidence
+      - name: Record CI validation outcomes
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
+        run: |
+          mkdir -p app/build/release-evidence
+          {
+            echo "build_validation=${{ steps.build_validation.outcome }}"
+            echo "api37_instrumentation=${{ steps.api37_instrumentation.outcome }}"
+            echo "api35_compatibility=${{ steps.api35_instrumentation.outcome }}"
+            echo "release_signing=unsigned; owner-controlled key required"
+          } > app/build/release-evidence/validation-status.txt
+
+      - name: Upload CI test-build evidence
+        if: ${{ always() && steps.build_validation.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: miss-minutes-p8-release-candidates
+          name: miss-minutes-p8-ci-test-builds
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/release/app-release-unsigned.apk

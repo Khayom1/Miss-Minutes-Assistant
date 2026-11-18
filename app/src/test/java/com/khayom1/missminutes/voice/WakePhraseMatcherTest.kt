@@ -48,4 +48,22 @@ class WakePhraseMatcherTest {
         )?.command)
         assertFalse(WakePhraseMatcher.matchesRecognitionCandidates(emptyList()))
     }
+
+    @Test
+    fun stripsPunctuationBetweenEnglishAndCyrillicWakePhrasesAndCommands() {
+        val cases = mapOf(
+            "Miss Minutes, open settings" to "open settings",
+            "Miss Minutes: open settings" to "open settings",
+            "Miss Minutes - open settings" to "open settings",
+            "Miss Minutes — open settings" to "open settings",
+            "Miss Minutes – open settings" to "open settings",
+            "Miss Minutes open settings" to "open settings",
+            "Мисс Минутка, открой настройки" to "открой настройки",
+            "Мисс Минутка — открой настройки" to "открой настройки",
+            "Мисс Минутка – открой настройки" to "открой настройки"
+        )
+        cases.forEach { (transcript, expected) ->
+            assertEquals(transcript, expected, WakePhraseMatcher.parse(transcript)?.command)
+        }
+    }
 }
