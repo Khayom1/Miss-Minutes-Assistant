@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
@@ -78,10 +79,13 @@ import com.khayom1.missminutes.ai.AiToolExecutor
 import com.khayom1.missminutes.ai.AiToolExecutionResult
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
+import com.khayom1.missminutes.ai.AiRuntimeProfile
+import com.khayom1.missminutes.ai.AiRuntimePolicy
 import com.khayom1.missminutes.ai.AiRole
 import com.khayom1.missminutes.ai.DeepSeekApiKeyStore
 import com.khayom1.missminutes.ai.buildAiContextMessages
 import com.khayom1.missminutes.ai.TtsProvider
+import com.khayom1.missminutes.ai.TtsBackgroundPlaybackGuard
 import com.khayom1.missminutes.device.AndroidDeviceToolHost
 import com.khayom1.missminutes.device.DeviceToolCapability
 import com.khayom1.missminutes.device.DeviceToolCommand
@@ -89,6 +93,7 @@ import com.khayom1.missminutes.device.DeviceToolEngine
 import com.khayom1.missminutes.device.DeviceToolResult
 import com.khayom1.missminutes.device.FileDeviceToolAuditLog
 import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
+import com.khayom1.missminutes.permissions.permissionsToRequest
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
 import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
@@ -125,10 +130,10 @@ private enum class AppScreen(val symbol: String) {
     Settings("⚙")
 }
 
-internal enum class AppLanguage(val nativeName: String) {
-    English("English"),
-    Russian("Русский"),
-    Tajik("Тоҷикӣ")
+internal enum class AppLanguage(val nativeName: String, val speechLocale: Locale) {
+    English("English", Locale.ENGLISH),
+    Russian("Русский", Locale.forLanguageTag("ru")),
+    Tajik("Тоҷикӣ", Locale.forLanguageTag("tg"))
 }
 
 private data class ChatMessage(
@@ -340,7 +345,12 @@ fun MissMinutesApp(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val appSettingsStore = remember(context) { AndroidAppSettingsStore(context) }
+    var selectedAiRuntimeProfileName by remember(context) {
+        mutableStateOf(appSettingsStore.loadAiRuntimeProfile().name)
+    }
+    val selectedAiRuntimeProfile = AiRuntimeProfile.valueOf(selectedAiRuntimeProfileName)
     var selectedLanguageName by remember(context) {
         mutableStateOf(when (appSettingsStore.loadAppearance().language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name })
     }
@@ -456,10 +466,11 @@ fun MissMinutesApp(
         }
     }
     val enableWakeListening = {
-        val allGranted = wakePermissions.all {
-            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        val missingPermissions = permissionsToRequest(wakePermissions.asList()) { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
         }
-        if (allGranted) startWakeListening() else wakePermissionLauncher.launch(wakePermissions)
+        if (missingPermissions.isEmpty()) startWakeListening()
+        else wakePermissionLauncher.launch(missingPermissions)
     }
     val disableWakeListening = {
         // Stop an existing listener without starting a new background service.
@@ -483,8 +494,17 @@ fun MissMinutesApp(
     var userEmail by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
+    var chatErrorNeedsApiKey by remember { mutableStateOf(false) }
     var aiHasResponded by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<Long?>(null) }
+    DisposableEffect(lifecycleOwner, ttsProvider) {
+        val playbackGuard = TtsBackgroundPlaybackGuard(
+            stopPlayback = ttsProvider::stop,
+            onStopped = { speakingMessageId = null }
+        )
+        lifecycleOwner.lifecycle.addObserver(playbackGuard)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(playbackGuard) }
+    }
     var voiceError by remember { mutableStateOf<String?>(null) }
     var speechError by remember { mutableStateOf<String?>(null) }
     var speechListening by remember { mutableStateOf(false) }
@@ -724,7 +744,8 @@ fun MissMinutesApp(
                                 language = when (language) { AppLanguage.English -> "en"; AppLanguage.Russian -> "ru"; AppLanguage.Tajik -> "tg" },
                                 darkMode = darkTheme,
                                 retentionDays = conversationStore.getRetentionDays(owner),
-                                memoryContextEnabled = conversationStore.isMemoryContextEnabled(owner)
+                                memoryContextEnabled = conversationStore.isMemoryContextEnabled(owner),
+                                aiRuntimeProfile = selectedAiRuntimeProfile.name
                             )
                         } else null
                         val manifests = if (BackupArchive.Category.PLUGINS in selected) {
@@ -911,6 +932,7 @@ fun MissMinutesApp(
             backupError = null
             scope.launch {
                 val oldAppearance = appSettingsStore.loadAppearance()
+                val oldAiRuntimeProfile = appSettingsStore.loadAiRuntimeProfile()
                 val oldRetention = withContext(Dispatchers.IO) { conversationStore.getRetentionDays(owner) }
                 val oldMemoryContext = withContext(Dispatchers.IO) { conversationStore.isMemoryContextEnabled(owner) }
                 val oldPlugins = pluginRegistry.installedPlugins()
@@ -948,6 +970,7 @@ fun MissMinutesApp(
                     incoming.settings?.let { settings ->
                         selectedLanguageName = when (settings.language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name }
                         darkTheme = settings.darkMode
+                        selectedAiRuntimeProfileName = settings.aiRuntimeProfile
                     }
                     if (AndroidDeviceStatusPlugin.PLUGIN_ID in incomingPluginIds) {
                         androidPluginConsent = false
@@ -973,12 +996,20 @@ fun MissMinutesApp(
                         pluginManifestStore.replace(oldPlugins)
                         oldConsents.forEach { (id, granted) -> pluginConsentStore.setGranted(id, granted) }
                         appSettingsStore.saveAppearance(oldAppearance.language, oldAppearance.darkMode)
+                        appSettingsStore.saveAiRuntimeProfile(oldAiRuntimeProfile)
                         conversationStore.setRetentionDays(owner, oldRetention)
                         conversationStore.setMemoryContextEnabled(owner, oldMemoryContext)
                         if (oldChat != null) {
                             conversationStore.restoreAll(owner, oldChat, RestoreConflictPolicy.REPLACE, restoreSettings = false)
                         }
                     }
+                    selectedLanguageName = when (oldAppearance.language) {
+                        "ru" -> AppLanguage.Russian.name
+                        "tg" -> AppLanguage.Tajik.name
+                        else -> AppLanguage.English.name
+                    }
+                    darkTheme = oldAppearance.darkMode
+                    selectedAiRuntimeProfileName = oldAiRuntimeProfile.name
                     pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
                         it.id to pluginConsentStore.isGranted(it.id)
                     }
@@ -1060,6 +1091,8 @@ fun MissMinutesApp(
                 apiKeySaving = false
                 result.onSuccess {
                     apiKeyConfigured = true
+                    if (chatErrorNeedsApiKey) chatError = null
+                    chatErrorNeedsApiKey = false
                     apiKeyInput = ""
                     apiKeyMessage = when (language) {
                         AppLanguage.English -> "API key saved securely on this device."
@@ -1115,6 +1148,13 @@ fun MissMinutesApp(
     val submitMessage: () -> Unit = {
         val value = draft.trim()
         if (value.isNotEmpty() && value.length <= 8_000 && !isSending) {
+            val connectedTools = agentOrchestrator.availablePluginTools()
+            val runtimePlan = AiRuntimePolicy.resolve(
+                requestedProfile = selectedAiRuntimeProfile,
+                userMessage = value,
+                connectedToolCount = connectedTools.size,
+                providerCapabilities = aiProvider.capabilities
+            )
             val requestMessages = buildAiContextMessages(
                 history = messages.map { message ->
                     AiMessage(
@@ -1124,13 +1164,18 @@ fun MissMinutesApp(
                 },
                 currentUserMessage = value,
                 savedMemory = memoryItems.map { it.content },
-                includeSavedMemory = memoryContextEnabled
+                includeSavedMemory = memoryContextEnabled,
+                maxHistoryMessages = runtimePlan.maxHistoryMessages,
+                maxTotalCharacters = runtimePlan.maxContextCharacters
             )
 
             val request = try {
                 AiRequest(
                     messages = requestMessages,
-                    tools = PluginToolSchemaFactory.toAiToolDefinitions(agentOrchestrator.availablePluginTools())
+                    maxOutputTokens = runtimePlan.maxOutputTokens,
+                    tools = if (runtimePlan.structuredToolsEnabled) {
+                        PluginToolSchemaFactory.toAiToolDefinitions(connectedTools)
+                    } else emptyList()
                 )
             } catch (_: IllegalArgumentException) {
                 chatError = copy.conversationTooLong
@@ -1141,6 +1186,7 @@ fun MissMinutesApp(
                 isSending = true
                 draft = ""
                 chatError = null
+                chatErrorNeedsApiKey = false
                 val requestGeneration = conversationGeneration
 
                 scope.launch {
@@ -1175,7 +1221,9 @@ fun MissMinutesApp(
                                     agentOrchestrator.executePluginTool(call.name, call.arguments, userConfirmed = false)
                                 }
                                 AiToolExecutionResult(result.status.name + ": " + result.message)
-                            }
+                            },
+                            maxToolRounds = runtimePlan.maxToolRounds,
+                            maxToolCalls = runtimePlan.maxToolCalls
                         ).complete(request)
                         if (requestGeneration != conversationGeneration) return@launch
                         val assistantMessageId = withContext(Dispatchers.IO) {
@@ -1197,9 +1245,11 @@ fun MissMinutesApp(
                     } catch (_: AiProviderException.MissingApiKey) {
                         if (requestGeneration == conversationGeneration) {
                             chatError = copy.apiKeyRequired
+                            chatErrorNeedsApiKey = true
                         }
                     } catch (_: AiProviderException.InvalidApiKey) {
                         if (requestGeneration == conversationGeneration) {
+                            chatErrorNeedsApiKey = true
                             chatError = when (language) {
                                 AppLanguage.Tajik -> "DeepSeek ин калиди API-ро рад кард. Онро дар Танзимот санҷед ё иваз кунед."
                                 AppLanguage.Russian -> "DeepSeek отклонил этот API-ключ. Проверьте его или замените в настройках."
@@ -1370,6 +1420,7 @@ fun MissMinutesApp(
                 voiceError = null
                 ttsProvider.speak(
                     text = message.text,
+                    locale = language.speechLocale,
                     onDone = { speakingMessageId = null },
                     onError = {
                         speakingMessageId = null
@@ -1426,6 +1477,8 @@ fun MissMinutesApp(
                                 draft = draft,
                                 isSending = isSending,
                                 error = chatError,
+                                showApiKeySettingsAction = chatErrorNeedsApiKey,
+                                onOpenSettings = { selectedScreenName = AppScreen.Settings.name },
                                 onDraftChange = { draft = it },
                                 onSend = submitMessage,
                                 speakingMessageId = speakingMessageId,
@@ -1470,6 +1523,11 @@ fun MissMinutesApp(
                                 copy = copy,
                                 language = language,
                                 darkTheme = darkTheme,
+                                aiRuntimeProfile = selectedAiRuntimeProfile,
+                                onAiRuntimeProfileChange = { profile ->
+                                    selectedAiRuntimeProfileName = profile.name
+                                    appSettingsStore.saveAiRuntimeProfile(profile)
+                                },
                                 isBusy = apiKeySaving,
                                 apiKeyConfigured = apiKeyConfigured,
                                 apiKeyInput = apiKeyInput,
@@ -1612,6 +1670,8 @@ private fun ChatScreen(
     draft: String,
     isSending: Boolean,
     error: String?,
+    showApiKeySettingsAction: Boolean,
+    onOpenSettings: () -> Unit,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     speakingMessageId: Long?,
@@ -1678,6 +1738,14 @@ private fun ChatScreen(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall
             )
+            if (showApiKeySettingsAction) {
+                TextButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.testTag("api_key_settings_action")
+                ) {
+                    Text(copy.settings)
+                }
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1919,6 +1987,8 @@ private fun SettingsScreen(
     copy: UiCopy,
     language: AppLanguage,
     darkTheme: Boolean,
+    aiRuntimeProfile: AiRuntimeProfile,
+    onAiRuntimeProfileChange: (AiRuntimeProfile) -> Unit,
     isBusy: Boolean,
     apiKeyConfigured: Boolean,
     apiKeyInput: String,
@@ -2016,6 +2086,55 @@ private fun SettingsScreen(
                     modifier = Modifier.testTag("dark_mode_switch")
                 )
             }
+        }
+        val runtimeProfileTitle = when (language) {
+            AppLanguage.English -> "AI runtime profile"
+            AppLanguage.Russian -> "Профиль работы ИИ"
+            AppLanguage.Tajik -> "Ҳолати кори зеҳни сунъӣ"
+        }
+        val runtimeProfileDescription = when (language) {
+            AppLanguage.English -> "Profiles change output budget, conversation context and automatic tool-step limits. Auto selects a budget from request complexity and provider capabilities."
+            AppLanguage.Russian -> "Профили меняют лимит ответа, контекст диалога и число шагов инструментов. Auto выбирает лимит по сложности запроса и возможностям провайдера."
+            AppLanguage.Tajik -> "Профилҳо ҳаҷми ҷавоб, контексти гуфтугӯ ва шумораи қадамҳои воситаҳоро тағйир медиҳанд. Auto лимитро аз рӯи мураккабии дархост ва имкониятҳои провайдер интихоб мекунад."
+        }
+        fun runtimeProfileLabel(profile: AiRuntimeProfile): String = when (profile) {
+            AiRuntimeProfile.FAST -> when (language) { AppLanguage.English -> "Fast"; AppLanguage.Russian -> "Быстрый"; AppLanguage.Tajik -> "Зуд" }
+            AiRuntimeProfile.STANDARD -> when (language) { AppLanguage.English -> "Standard"; AppLanguage.Russian -> "Стандарт"; AppLanguage.Tajik -> "Стандартӣ" }
+            AiRuntimeProfile.MAX -> when (language) { AppLanguage.English -> "Max"; AppLanguage.Russian -> "Максимум"; AppLanguage.Tajik -> "Максимум" }
+            AiRuntimeProfile.EXTRA -> when (language) { AppLanguage.English -> "Extra"; AppLanguage.Russian -> "Экстра"; AppLanguage.Tajik -> "Иловагӣ" }
+            AiRuntimeProfile.AUTO -> when (language) { AppLanguage.English -> "Auto"; AppLanguage.Russian -> "Авто"; AppLanguage.Tajik -> "Худкор" }
+        }
+        fun runtimeProfileDetail(profile: AiRuntimeProfile): String = when (profile) {
+            AiRuntimeProfile.FAST -> when (language) { AppLanguage.English -> "192 output tokens · 4 history messages · 1 tool round"; AppLanguage.Russian -> "192 токена ответа · 4 сообщения истории · 1 раунд инструментов"; AppLanguage.Tajik -> "192 токени ҷавоб · 4 паёми таърих · 1 даври воситаҳо" }
+            AiRuntimeProfile.STANDARD -> when (language) { AppLanguage.English -> "384 output tokens · 8 history messages · 2 tool rounds"; AppLanguage.Russian -> "384 токена ответа · 8 сообщений истории · 2 раунда инструментов"; AppLanguage.Tajik -> "384 токени ҷавоб · 8 паёми таърих · 2 даври воситаҳо" }
+            AiRuntimeProfile.MAX -> when (language) { AppLanguage.English -> "640 output tokens · 14 history messages · 3 tool rounds"; AppLanguage.Russian -> "640 токенов ответа · 14 сообщений истории · 3 раунда инструментов"; AppLanguage.Tajik -> "640 токени ҷавоб · 14 паёми таърих · 3 даври воситаҳо" }
+            AiRuntimeProfile.EXTRA -> when (language) { AppLanguage.English -> "768 output tokens · 18 history messages · 4 tool rounds"; AppLanguage.Russian -> "768 токенов ответа · 18 сообщений истории · 4 раунда инструментов"; AppLanguage.Tajik -> "768 токени ҷавоб · 18 паёми таърих · 4 даври воситаҳо" }
+            AiRuntimeProfile.AUTO -> when (language) { AppLanguage.English -> "Automatically selects Fast, Standard, Max or Extra for each request."; AppLanguage.Russian -> "Автоматически выбирает профиль для каждого запроса."; AppLanguage.Tajik -> "Барои ҳар дархост профили мувофиқро худкор интихоб мекунад." }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(runtimeProfileTitle, fontWeight = FontWeight.SemiBold)
+            Text(runtimeProfileDescription, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            AiRuntimeProfile.entries.forEach { profile ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    FilterChip(
+                        selected = aiRuntimeProfile == profile,
+                        onClick = { onAiRuntimeProfileChange(profile) },
+                        enabled = !isBusy,
+                        label = { Text(runtimeProfileLabel(profile)) },
+                        modifier = Modifier.testTag("runtime_profile_${profile.name.lowercase()}")
+                    )
+                    Text(runtimeProfileDetail(profile), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Text(
+                when (language) {
+                    AppLanguage.English -> "Local model: not installed. DeepSeek is optional and connects directly from this device with your own key."
+                    AppLanguage.Russian -> "Локальная модель: не установлена. DeepSeek необязателен и подключается напрямую с этого устройства по вашему ключу."
+                    AppLanguage.Tajik -> "Модели маҳаллӣ: насб нашудааст. DeepSeek ихтиёрӣ буда, мустақим аз ҳамин дастгоҳ бо калиди шумо пайваст мешавад."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
         val keyTitle = when (language) {
             AppLanguage.English -> "DeepSeek API key"
