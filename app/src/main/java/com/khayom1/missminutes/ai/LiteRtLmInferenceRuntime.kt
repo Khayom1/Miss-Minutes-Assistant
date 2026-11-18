@@ -27,6 +27,26 @@ import kotlinx.coroutines.withContext
  * The Local AI provider deliberately rejects structured tool requests until
  * model tool calls use the same approval-gated dispatcher as cloud models.
  */
+internal fun buildLiteRtLmPrompt(
+    messages: List<AiMessage>,
+    maxCharacters: Int = 18_000
+): String {
+    require(maxCharacters > 0)
+    return messages
+        .filter { it.role != AiRole.SYSTEM }
+        .joinToString("\n\n") { message ->
+            val role = when (message.role) {
+                AiRole.USER -> "User"
+                AiRole.ASSISTANT -> "Assistant"
+                AiRole.TOOL -> "Tool result (${message.name.orEmpty()})"
+                AiRole.SYSTEM -> "System"
+            }
+            "$role:\n${message.content}"
+        }
+        .takeLast(maxCharacters)
+        .ifBlank { throw IllegalArgumentException("The local model prompt is empty.") }
+}
+
 class LiteRtLmInferenceRuntime(
     private val modelPath: () -> String?,
     private val cacheDirectory: File
@@ -71,19 +91,7 @@ class LiteRtLmInferenceRuntime(
                 .filter { it.role == AiRole.SYSTEM }
                 .joinToString("\n") { it.content }
                 .ifBlank { DEFAULT_SYSTEM_INSTRUCTION }
-            val prompt = messages
-                .filter { it.role != AiRole.SYSTEM }
-                .joinToString("\n\n") { message ->
-                    val role = when (message.role) {
-                        AiRole.USER -> "User"
-                        AiRole.ASSISTANT -> "Assistant"
-                        AiRole.TOOL -> "Tool result (\${message.name.orEmpty()})"
-                        AiRole.SYSTEM -> "System"
-                    }
-                    "\$role:\n\${message.content}"
-                }
-                .takeLast(MAX_PROMPT_CHARACTERS)
-                .ifBlank { throw IllegalArgumentException("The local model prompt is empty.") }
+            val prompt = buildLiteRtLmPrompt(messages)
 
             val conversation = checkNotNull(engine).createConversation(
                 ConversationConfig(
@@ -147,7 +155,6 @@ class LiteRtLmInferenceRuntime(
     }
 
     private companion object {
-        const val MAX_PROMPT_CHARACTERS = 18_000
         const val MAX_OUTPUT_CHARACTERS = 16_000
         const val DEFAULT_SYSTEM_INSTRUCTION =
             "You are Miss Minutes, a helpful personal assistant. Be accurate, practical and concise."

@@ -9,11 +9,18 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
 
+private const val LOCAL_MODEL_EXTENSION = ".litertlm"
+
+internal fun localModelTemporaryFile(directory: File, id: UUID): File =
+    File(directory, ".$id.part")
+
+internal fun localModelDestinationFile(directory: File, id: UUID): File =
+    File(directory, "$id$LOCAL_MODEL_EXTENSION")
 /** Stores imported model weights in app-private storage, separate from secrets and backups. */
 class LocalModelStore(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
-    private val modelDirectory = File(appContext.filesDir, MODEL_DIRECTORY)
+    private val modelDirectory = File(appContext.noBackupFilesDir, MODEL_DIRECTORY)
 
     fun currentModelPath(): String? = preferences.getString(KEY_MODEL_PATH, null)
         ?.takeIf { path -> File(path).let { it.isFile && it.length() > 0L } }
@@ -38,12 +45,12 @@ class LocalModelStore(context: Context) {
             throw IOException("Model storage is unavailable.")
         }
         val displayName = queryDisplayName(contentResolver, uri).orEmpty()
-        if (displayName.isNotBlank() && !displayName.lowercase().endsWith(MODEL_EXTENSION)) {
+        if (displayName.isBlank() || !displayName.lowercase(java.util.Locale.ROOT).endsWith(MODEL_EXTENSION)) {
             throw IOException("Select a .litertlm model file.")
         }
 
-        val temporary = File(modelDirectory, ".\${UUID.randomUUID()}.part")
-        val destination = File(modelDirectory, "\${UUID.randomUUID()}\$MODEL_EXTENSION")
+        val temporary = localModelTemporaryFile(modelDirectory, UUID.randomUUID())
+        val destination = localModelDestinationFile(modelDirectory, UUID.randomUUID())
         var totalBytes = 0L
         try {
             val input = contentResolver.openInputStream(uri)
@@ -100,7 +107,7 @@ class LocalModelStore(context: Context) {
         private const val MODEL_DIRECTORY = "local-models"
         private const val KEY_MODEL_PATH = "active_model_path"
         private const val KEY_USE_LOCAL_MODEL = "use_local_model"
-        private const val MODEL_EXTENSION = ".litertlm"
+        private const val MODEL_EXTENSION = LOCAL_MODEL_EXTENSION
         private const val COPY_BUFFER_BYTES = 1024 * 1024
         private const val MAX_MODEL_BYTES = 4L * 1024L * 1024L * 1024L
     }
