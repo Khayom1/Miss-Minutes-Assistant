@@ -29,7 +29,10 @@ private val approvalBidiControls = setOf(
 internal fun sanitizeApprovalDisplayText(value: String, maxLength: Int): String {
     require(maxLength in 1..512)
     return value
-        .filterNot { character -> (Character.isISOControl(character) && !character.isWhitespace()) || character in approvalBidiControls }
+        .filterNot { character ->
+            (Character.isISOControl(character) && !character.isWhitespace()) ||
+                character in approvalBidiControls
+        }
         .replace(Regex("\\s+"), " ")
         .trim()
         .take(maxLength)
