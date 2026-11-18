@@ -14,4 +14,25 @@
     <string name="miss_minutes_voice_session_title">Miss Minutes is ready</string>
     <string name="miss_minutes_voice_session_body">The system Assistant session is active. Screen content is not shared unless you explicitly enable that feature.</string>
     <string name="miss_minutes_voice_session_open">Open Miss Minutes</string>
+
+    <string name="sms_triage_title">SMS intelligence</string>
+    <string name="sms_triage_description">After Miss Minutes is selected as your Android Assistant and you grant SMS permissions, new messages are classified on this phone. Message text, sender addresses and verification codes are not stored or sent to an AI server. Only classification metadata is retained. Scanning existing inbox messages is a separate action.</string>
+    <string name="sms_triage_role_required">Select Miss Minutes as the Android Assistant first.</string>
+    <string name="sms_triage_status_needs_permission">SMS permissions are not enabled.</string>
+    <string name="sms_triage_status_active">Incoming SMS screening is active on this device.</string>
+    <string name="sms_triage_notifications_disabled">Messages are screened locally, but Android notifications are disabled.</string>
+    <string name="sms_triage_permission_denied">Android did not grant the required SMS permission.</string>
+    <string name="sms_triage_enable">Enable SMS screening</string>
+    <string name="sms_triage_scan_recent">Classify up to 200 recent inbox messages</string>
+    <string name="sms_triage_scanning">Scanning messages…</string>
+    <string name="sms_triage_scan_result">Scanned %1$d messages. %2$d were marked important; %3$d new classifications were saved.</string>
+    <string name="sms_triage_scan_failed">The inbox scan could not be completed.</string>
+    <string name="sms_triage_notification_channel_name">Important SMS alerts</string>
+    <string name="sms_triage_notification_channel_description">Alerts for important incoming SMS. Message contents and verification codes are hidden.</string>
+    <string name="sms_triage_notification_body">Miss Minutes classified an incoming message as important. Open the assistant to review the priority.</string>
+    <string name="sms_triage_title_important">Important message received</string>
+    <string name="sms_triage_title_verification">Verification message received</string>
+    <string name="sms_triage_title_bank">Bank message received</string>
+    <string name="sms_triage_title_security">Account security message received</string>
+    <string name="sms_triage_title_urgent">Urgent message received</string>
 </resources>

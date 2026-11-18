@@ -14,4 +14,25 @@
     <string name="miss_minutes_voice_session_title">Miss Minutes омода аст</string>
     <string name="miss_minutes_voice_session_body">Сессияи ёвари системавӣ фаъол аст. Мундариҷаи экран то иҷозати махсуси шумо мубодила намешавад.</string>
     <string name="miss_minutes_voice_session_open">Кушодани Miss Minutes</string>
+
+    <string name="sms_triage_title">Таҳлили SMS</string>
+    <string name="sms_triage_description">Пас аз интихоби Miss Minutes ҳамчун ёвари Android ва додани иҷозатҳои SMS, паёмҳои нав дар худи телефон гурӯҳбандӣ мешаванд. Матни паём, рақами фиристанда ва рамзи тасдиқ нигоҳ дошта ё ба сервери AI фиристода намешаванд. Танҳо натиҷаи гурӯҳбандӣ нигоҳ дошта мешавад. Санҷиши паёмҳои кӯҳна амали ҷудогона аст.</string>
+    <string name="sms_triage_role_required">Аввал Miss Minutes-ро ҳамчун ёвари Android интихоб кунед.</string>
+    <string name="sms_triage_status_needs_permission">Иҷозатҳои SMS фаъол нестанд.</string>
+    <string name="sms_triage_status_active">Санҷиши SMS-и воридшаванда дар телефон фаъол аст.</string>
+    <string name="sms_triage_notifications_disabled">Паёмҳо маҳаллӣ таҳлил мешаванд, вале огоҳиномаҳои Android хомӯшанд.</string>
+    <string name="sms_triage_permission_denied">Android иҷозати зарурии SMS-ро надод.</string>
+    <string name="sms_triage_enable">Фаъол кардани таҳлили SMS</string>
+    <string name="sms_triage_scan_recent">Гурӯҳбандии то 200 SMS-и охирин</string>
+    <string name="sms_triage_scanning">Паёмҳо таҳлил мешаванд…</string>
+    <string name="sms_triage_scan_result">Санҷида шуд: %1$d паём. Муҳим: %2$d. Гурӯҳбандии нави нигоҳдошта: %3$d.</string>
+    <string name="sms_triage_scan_failed">Санҷиши паёмҳо иҷро нашуд.</string>
+    <string name="sms_triage_notification_channel_name">Огоҳии SMS-и муҳим</string>
+    <string name="sms_triage_notification_channel_description">Огоҳӣ барои SMS-и муҳим. Матни паём ва рамзҳои тасдиқ пинҳонанд.</string>
+    <string name="sms_triage_notification_body">Miss Minutes паёми навро муҳим муайян кард. Барои дидани дараҷаи муҳимият ёварро кушоед.</string>
+    <string name="sms_triage_title_important">Паёми муҳим омад</string>
+    <string name="sms_triage_title_verification">Паёми рамзи тасдиқ омад</string>
+    <string name="sms_triage_title_bank">Паёми бонкӣ омад</string>
+    <string name="sms_triage_title_security">Огоҳии амнияти ҳисоб омад</string>
+    <string name="sms_triage_title_urgent">Паёми таъҷилӣ омад</string>
 </resources>

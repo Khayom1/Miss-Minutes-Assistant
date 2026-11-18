@@ -14,4 +14,25 @@
     <string name="miss_minutes_voice_session_title">Miss Minutes готова</string>
     <string name="miss_minutes_voice_session_body">Системная сессия помощника активна. Содержимое экрана не передаётся, пока вы явно не включите эту функцию.</string>
     <string name="miss_minutes_voice_session_open">Открыть Miss Minutes</string>
+
+    <string name="sms_triage_title">Анализ SMS</string>
+    <string name="sms_triage_description">После выбора Miss Minutes системным помощником Android и выдачи разрешений новые сообщения классифицируются на этом телефоне. Текст сообщений, адреса отправителей и коды подтверждения не сохраняются и не отправляются на сервер ИИ. Хранятся только метаданные классификации. Проверка старых сообщений запускается отдельно.</string>
+    <string name="sms_triage_role_required">Сначала выберите Miss Minutes помощником Android.</string>
+    <string name="sms_triage_status_needs_permission">Разрешения SMS не включены.</string>
+    <string name="sms_triage_status_active">Проверка входящих SMS активна на устройстве.</string>
+    <string name="sms_triage_notifications_disabled">Сообщения анализируются локально, но уведомления Android отключены.</string>
+    <string name="sms_triage_permission_denied">Android не предоставил необходимое разрешение SMS.</string>
+    <string name="sms_triage_enable">Включить анализ SMS</string>
+    <string name="sms_triage_scan_recent">Классифицировать до 200 последних SMS</string>
+    <string name="sms_triage_scanning">Анализ сообщений…</string>
+    <string name="sms_triage_scan_result">Проверено сообщений: %1$d. Важных: %2$d. Новых классификаций сохранено: %3$d.</string>
+    <string name="sms_triage_scan_failed">Не удалось выполнить проверку входящих сообщений.</string>
+    <string name="sms_triage_notification_channel_name">Важные SMS</string>
+    <string name="sms_triage_notification_channel_description">Уведомления о важных SMS. Содержимое сообщений и коды подтверждения скрыты.</string>
+    <string name="sms_triage_notification_body">Miss Minutes определила входящее сообщение как важное. Откройте помощника, чтобы посмотреть приоритет.</string>
+    <string name="sms_triage_title_important">Получено важное сообщение</string>
+    <string name="sms_triage_title_verification">Получено сообщение с кодом подтверждения</string>
+    <string name="sms_triage_title_bank">Получено банковское сообщение</string>
+    <string name="sms_triage_title_security">Получено сообщение о безопасности аккаунта</string>
+    <string name="sms_triage_title_urgent">Получено срочное сообщение</string>
 </resources>
