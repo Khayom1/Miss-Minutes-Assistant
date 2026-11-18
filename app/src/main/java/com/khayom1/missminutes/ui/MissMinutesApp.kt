@@ -1,6 +1,7 @@
 package com.khayom1.missminutes.ui
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
@@ -60,6 +61,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -385,6 +389,7 @@ fun MissMinutesApp(
     var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
     var wakeMessage by remember { mutableStateOf<String?>(null) }
     var pendingVoiceCommand by remember { mutableStateOf(PendingVoiceCommandStore.consume(context)) }
+    var isAppResumed by remember { mutableStateOf(false) }
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(receiverContext: android.content.Context?, intent: Intent?) {
@@ -404,7 +409,15 @@ fun MissMinutesApp(
             IntentFilter(MissMinutesWakeWordService.ACTION_STATE_CHANGED),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
-        onDispose { context.unregisterReceiver(receiver) }
+        val lifecycle = (context as? LifecycleOwner)?.lifecycle
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            isAppResumed = event == Lifecycle.Event.ON_RESUME
+        }
+        lifecycle?.addObserver(lifecycleObserver)
+        onDispose {
+            lifecycle?.removeObserver(lifecycleObserver)
+            context.unregisterReceiver(receiver)
+        }
     }
     val wakePermissions = remember {
         buildList {
@@ -1250,9 +1263,12 @@ fun MissMinutesApp(
         }
     }
 
-    LaunchedEffect(pendingVoiceCommand, isRestoring, isSending, currentOwnerId) {
+    LaunchedEffect(pendingVoiceCommand, isRestoring, isSending, currentOwnerId, isAppResumed) {
         val command = pendingVoiceCommand
-        if (!command.isNullOrBlank() && !isRestoring && !isSending && currentOwnerId != null) {
+        val deviceUnlocked = !(context.getSystemService(android.content.Context.KEYGUARD_SERVICE) as KeyguardManager).isDeviceLocked
+        if (!command.isNullOrBlank() && isAppResumed && deviceUnlocked &&
+            !isRestoring && !isSending && currentOwnerId != null
+        ) {
             pendingVoiceCommand = null
             selectedScreenName = AppScreen.Chat.name
             submitMessage(command)
