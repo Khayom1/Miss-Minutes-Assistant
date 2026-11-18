@@ -433,6 +433,14 @@ fun MissMinutesApp(
                 context,
                 Intent(context, MissMinutesWakeWordService::class.java)
                     .setAction(MissMinutesWakeWordService.ACTION_START)
+                    .putExtra(
+                        MissMinutesWakeWordService.EXTRA_RECOGNITION_LANGUAGE,
+                        when (language) {
+                            AppLanguage.Tajik -> "tg-TJ"
+                            AppLanguage.Russian -> "ru-RU"
+                            AppLanguage.English -> "en-US"
+                        }
+                    )
             )
             wakeEnabled = true
             wakeMessage = when (language) {
