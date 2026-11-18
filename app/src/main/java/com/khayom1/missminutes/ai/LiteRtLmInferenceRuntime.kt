@@ -91,6 +91,8 @@ class LiteRtLmInferenceRuntime(
                         cacheDir = cacheDirectory.absolutePath
                     )
                 )
+            } catch (error: Exception) {
+                throw IOException("LiteRT-LM could not create an engine for this model.", error)
             } catch (error: LinkageError) {
                 throw IOException("The LiteRT-LM native runtime is unavailable on this device.", error)
             }
@@ -275,6 +277,8 @@ class LiteRtLmInferenceRuntime(
                     cacheDir = cacheDirectory.absolutePath
                 )
             )
+        } catch (error: Exception) {
+            throw IOException("LiteRT-LM could not create an engine for this model.", error)
         } catch (error: LinkageError) {
             throw IOException("The LiteRT-LM native runtime is unavailable on this device.", error)
         }
