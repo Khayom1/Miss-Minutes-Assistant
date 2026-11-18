@@ -18,11 +18,16 @@ import com.khayom1.missminutes.plugins.PluginRegistry
 internal object AgentTaskRuntime {
     // Rebuild the lightweight runtime for each UI/worker entry. Task state is
     // durable, while rebuilding refreshes manifests imported since the last run.
-    fun get(context: Context): AgentOrchestrator = build(context)
+    fun get(context: Context): AgentOrchestrator =
+        get(context, createPluginRegistry(context.applicationContext))
 
-    private fun build(context: Context): AgentOrchestrator {
+    /**
+     * UI callers inject their existing registry so plugin management, AI tool
+     * discovery and dispatch share one in-process source of truth. Background
+     * workers may still build a fresh registry from persisted manifests.
+     */
+    fun get(context: Context, registry: PluginRegistry): AgentOrchestrator {
         val appContext = context.applicationContext
-        val registry = createPluginRegistry(appContext)
         val store = AndroidAgentTaskStateStore(
             appContext,
             AndroidKeystoreConversationCipher("miss_minutes_agent_tasks_aes_v1")

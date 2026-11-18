@@ -113,8 +113,7 @@ internal object BackgroundVoiceCommandExecutor {
                             )
                         } else {
                             val approvedByExplicitCommand = dangerousApproved ||
-                                descriptor.capability == PluginCapability.CALENDAR_WRITE ||
-                                descriptor.actionId == "open_app"
+                                VoiceActionIntentPolicy.isExplicitlyRequested(descriptor.actionId, command)
                             val result = orchestrator.executePluginTool(
                                 call.name,
                                 call.arguments,

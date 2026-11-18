@@ -39,6 +39,30 @@ class AgentTaskRuntimeTest {
     }
 
     @Test
+    fun uiOrchestratorUsesTheExactPluginRegistrySuppliedByTheUi() {
+        val registry = AgentTaskRuntime.createPluginRegistry(context)
+        val manifest = AndroidDeviceStatusPlugin.manifest().copy(
+            id = "in_memory_runtime_plugin",
+            displayName = "In-memory runtime plugin",
+            description = "An ephemeral manifest proves the injected registry is shared."
+        )
+        val consent = AndroidPluginConsentStore(context)
+        consent.setGranted(manifest.id, false)
+
+        try {
+            assertTrue(registry.install(manifest))
+            assertTrue(registry.connect(manifest.id))
+            val orchestrator = AgentTaskRuntime.get(context, registry)
+
+            assertTrue(orchestrator.availablePluginTools().any { it.pluginId == manifest.id })
+            assertTrue(registry.revokeConsent(manifest.id))
+            assertFalse(orchestrator.availablePluginTools().any { it.pluginId == manifest.id })
+        } finally {
+            consent.setGranted(manifest.id, false)
+        }
+    }
+
+    @Test
     fun runtimeIsRebuiltForEachUiOrWorkerEntry() {
         val first = AgentTaskRuntime.get(context)
         val second = AgentTaskRuntime.get(context)

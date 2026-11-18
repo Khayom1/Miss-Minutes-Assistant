@@ -388,7 +388,7 @@ fun MissMinutesApp(
             pluginRegistry.installedPlugins().associate { it.id to pluginConsentStore.isGranted(it.id) }
         )
     }
-    val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
+    val agentOrchestrator = remember(context, pluginRegistry) { AgentTaskRuntime.get(context, pluginRegistry) }
     val toolApprovalGate = remember { AiToolApprovalGate() }
     val pendingToolApproval by toolApprovalGate.pending.collectAsState()
     var androidPluginConsent by remember(context) {
