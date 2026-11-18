@@ -53,6 +53,20 @@ class AiProviderTest {
     }
 
     @Test
+    fun localCapabilityTracksRuntimeAndModelAvailabilityDynamically() {
+        var available = false
+        val provider = OptionalLocalAiProvider(object : LocalInferenceRuntime {
+            override fun isAvailable(): Boolean = available
+            override suspend fun generate(messages: List<AiMessage>, maxOutputTokens: Int): String =
+                error("This test only checks capability detection")
+        })
+
+        assertFalse(provider.capabilities.isLocal)
+        available = true
+        assertTrue(provider.capabilities.isLocal)
+    }
+
+    @Test
     fun localProviderTreatsCapabilityProbeErrorsAsUnavailable() = runBlocking {
         val runtime = object : LocalInferenceRuntime {
             override fun isAvailable(): Boolean = error("Capability probe failed")
