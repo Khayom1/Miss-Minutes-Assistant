@@ -249,3 +249,74 @@ The Android implementation must follow the current platform contracts:
 - [Foreground-service type requirements](https://developer.android.com/about/versions/14/changes/fgs-types-required) specify runtime prerequisites for microphone and MediaProjection service types.
 
 Therefore Miss Minutes must state capability limits honestly. It can orchestrate supported phone operations and connected systems; it cannot become an unrestricted fictional Iron Man suit, silently observe everything, bypass OS controls or guarantee operation on every Android device.
+
+## 12. Film-capability traceability matrix
+
+This matrix is the product-level interpretation of recurring J.A.R.V.I.S. behavior across the Iron Man / Avengers films. It deliberately separates cinematic behavior from Android-feasible implementation.
+
+| J.A.R.V.I.S. capability | Android product analogue | Platform / integration boundary | Acceptance evidence |
+|---|---|---|---|
+| Natural conversation and personality | Low-latency, context-aware dialogue with interruption, persistent user preferences and consistent character voice | Model runtime, ASR/TTS, local memory; network/model availability varies | Multi-turn context tests, interruption tests, language consistency and latency benchmarks |
+| Personal chief-of-staff behavior | Calendar, reminders, briefings, task follow-up, prioritization and user-approved proactive suggestions | Calendar/contacts permissions, WorkManager for deferrable work, notifications | End-to-end task scenarios, duplicate prevention, permission-revocation tests |
+| Workshop and home-system management | Typed control of Android settings/apps plus connected-home integrations | Android intents/APIs; external hub/provider must be explicitly connected | Per-device integration contract, capability status, verified state change and revoke test |
+| Suit / system telemetry | Battery, storage, connectivity, thermal state where public APIs expose it, and user-approved wearable/device telemetry | Public Android APIs and optional companion integrations; no private OEM API assumptions | Sensor/source provenance, stale-data handling, permission and device compatibility tests |
+| Engineering analysis and recommendations | Document/image analysis, calculations, code assistance, comparison and structured visual results | User-selected files/media; bounded model context; no arbitrary code execution | Grounded-output tests, malformed-input tests, provenance and export checks |
+| Situational awareness | User-triggered camera, selected image, document and screen-context interpretation | Camera/MediaProjection consent, secure-window restrictions and visible indicators | Capture indicator, stop/revoke, no background capture, image/document test corpus |
+| Communications assistant | SMS triage, notification summaries, contact resolution, call/message hand-off and safe drafting | Assistant role, SMS permissions, separate Notification Access, call intents and carrier limits | Role-loss tests, sender deduplication, redaction, recipient-resolution and send-policy tests |
+| Remote / multi-system orchestration | Bounded task graph controlling multiple approved tools and connected devices | Closed-world tool catalog, provider APIs, idempotency, risk policy and user consent | Multi-step scenario suite, cancellation, crash recovery, no duplicate side effects |
+| Security and threat response | Permission-health warnings, suspicious-message triage, local security checklists and safe recommendations | No antivirus/kernel/root powers are implied; privileged operations remain OS-controlled | False-positive/negative corpus, redacted audit evidence and explicit non-capability tests |
+| Holographic command interface | Premium Compose command center, live cards, charts, task timeline, catalog and optional 3D Miss Minutes avatar | Android rendering and GPU/memory/thermal budgets | Screenshot/UI tests, accessibility semantics, frame-time and low-memory tests |
+| Always-present assistant | Selected Android Assistant, system voice session and supported hardware hotword path | OEM/DSP dependent; visible user-controlled fallback required | Supported-device matrix, wake latency/false-trigger/battery measurements |
+| Multiple J.A.R.V.I.S. instances / Iron Legion | Multiple bounded software agents and concurrent read-only jobs; serialized consequential mutations | No unrestricted autonomous fleet control; each tool requires its own scope | Isolation, quotas, cancellation, approval and cross-task interference tests |
+
+**Non-goals / explicit limits:** Miss Minutes does not claim to fly or control an Iron Man suit, access satellites or military networks, read arbitrary private app databases, bypass Android permissions, silently record calls, unlock secure windows, perform hidden surveillance, or execute unrestricted shell/code. Any future hardware or smart-home capability requires a real supported integration and a separate safety review.
+
+## 13. Commissioned-build work packages — $10,000 quality benchmark
+
+The following allocation is a scope and engineering-effort benchmark. It is not a statement that money was received, spent, or that a delivery contract has been signed. The amounts sum to exactly $10,000.
+
+| Work package | Allocation | Required deliverables |
+|---|---:|---|
+| Product architecture, threat model and platform contracts | $800 | Architecture decisions, capability matrix, data-flow map, threat model, API contracts and acceptance plan |
+| AI runtime, planner and orchestration | $1,300 | Provider-neutral streaming, structured events, bounded planner, task graph integration, cancellation, retries and recovery |
+| Voice and Android Assistant | $1,200 | Assistant-role onboarding, real voice session, ASR/TTS lifecycle, wake strategy, fallback and physical-device voice validation |
+| Android device control and automation | $1,200 | Typed capability catalog, app/system actions, verified Accessibility workflows, connected-device adapter contracts and action audit |
+| Communications intelligence | $900 | SMS/notification separation, local triage, sender/contact resolution, safe message composition and permission/role-loss handling |
+| Memory and proactive assistance | $850 | Encrypted working/episodic/semantic/operational stores, retention controls, routines, reminders and briefings |
+| Premium experience and character | $1,300 | Command Center, rich conversation renderer, catalog, activity timeline, trust center, responsive themes and optional optimized 3D character |
+| Multimodal perception | $750 | User-triggered image/document/camera/screen adapters, consent indicators, bounded processing and revocation |
+| Quality, security and release engineering | $1,700 | Unit/instrumentation/UI tests, threat/abuse tests, dependency and secret scans, SBOM, signing procedure, APK evidence and physical-device acceptance |
+| **Total** | **$10,000** | **Complete commissioned-build scope benchmark** |
+
+The allocation is not a promise that every fictional film capability is technically reproducible on Android. It reserves engineering effort for a real, testable product with explicit platform boundaries.
+
+## 14. Delivery phases and release gates
+
+| Phase | Scope | Exit gate |
+|---|---|---|
+| P0 — Baseline and architecture | Live repository audit, branch/PR inventory, threat model, architecture contract, dependency map and CI baseline | Exact source SHA recorded; architecture reviewed; no unverified capability claims |
+| P1 — Assistant experience | Premium Command Center, conversation renderer, catalog, activity/task surfaces, localization and accessibility | Every visible action maps to a real capability state; UI and navigation tests pass |
+| P2 — Conversation runtime | Streaming events, provider routing, context builder, planner and structured tool execution | Cancellation, malformed tool calls, provider failure and multi-turn scenarios pass |
+| P3 — Voice presence | Assistant role/session, ASR/TTS, wake capability detection, interruption and fallback | Supported-device matrix and voice lifecycle tests pass; no false always-on claims |
+| P4 — Android agency | Capability catalog, device tools, permissions, Accessibility, calendar, contacts and app workflows | Per-capability authorization, verification, idempotency and revocation tests pass |
+| P5 — Communications | SMS role path, inbox sync, local classifier, Notification Access and safe message flow | Role loss, deduplication, redaction, abuse and recipient confirmation tests pass |
+| P6 — Memory and proactive workflows | Encrypted memory layers, tasks, reminders, routines and briefings | Migrations, retention, inspect/edit/delete, backup exclusions and crash recovery pass |
+| P7 — Multimodal and character | Image/document/screen analysis, optional camera, 3D character and voice synchronization | Consent indicators, asset provenance, thermal/memory adaptation and rendering tests pass |
+| P8 — Production hardening | Physical-device matrix, security review, performance, release signing, SBOM and APK evidence | All required CI green on exact release commit; no open P0/P1 defects; signed release and checksums verified |
+
+Phases are sequential release gates. A phase is not complete because its source code exists: all required evidence must pass. A failed gate blocks dependent scope.
+
+## 15. Product acceptance scorecard
+
+The product dashboard must report evidence-backed status, not subjective completion percentages. Every capability is tracked as **Not started**, **In progress**, **Implemented**, **CI verified**, **Device verified**, or **Accepted**.
+
+A capability can reach **Accepted** only with:
+- linked implementation and tests on the audited branch;
+- explicit Android permission/role and data-flow documentation;
+- positive, negative, boundary, lifecycle, abuse and revocation tests;
+- observed result verification and cancellation/recovery behavior;
+- localization and accessible UI;
+- exact commit and CI run evidence;
+- physical-device evidence wherever hardware, microphone, camera, battery or OEM lifecycle is involved.
+
+No aggregate percentage may be reported without a defined denominator and traceable evidence for every scored item.
