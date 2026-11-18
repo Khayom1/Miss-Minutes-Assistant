@@ -430,13 +430,25 @@ object PendingVoiceCommandStore {
     }
 
     @Synchronized
-    fun consume(context: Context): String? {
+    fun peek(context: Context): String? {
         val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
         val command = preferences.getString(COMMAND, null)
         val createdAt = preferences.getLong(CREATED_AT, 0L)
-        preferences.edit().remove(COMMAND).remove(CREATED_AT).apply()
-        if (command.isNullOrBlank() || createdAt <= 0L) return null
-        if (System.currentTimeMillis() - createdAt !in 0..MAX_AGE_MS) return null
+        if (command.isNullOrBlank() || createdAt <= 0L ||
+            System.currentTimeMillis() - createdAt !in 0..MAX_AGE_MS
+        ) {
+            acknowledge(context)
+            return null
+        }
         return command
+    }
+
+    @Synchronized
+    fun acknowledge(context: Context) {
+        context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+            .edit()
+            .remove(COMMAND)
+            .remove(CREATED_AT)
+            .apply()
     }
 }
