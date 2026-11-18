@@ -45,6 +45,19 @@ class AiToolApprovalGateTest {
     }
 
     @Test
+    fun conversationInvalidationRejectsPendingApprovalImmediately() = runBlocking {
+        val gate = AiToolApprovalGate()
+        val result = async(start = CoroutineStart.UNDISPATCHED) {
+            gate.awaitApproval(prompt)
+        }
+
+        assertTrue(gate.rejectPending())
+        assertFalse(result.await())
+        assertNull(gate.pending.value)
+        assertFalse(gate.resolve(approved = true))
+    }
+
+    @Test
     fun cancellationClearsThePendingRequest() = runBlocking {
         val gate = AiToolApprovalGate()
         val result = async(start = CoroutineStart.UNDISPATCHED) {

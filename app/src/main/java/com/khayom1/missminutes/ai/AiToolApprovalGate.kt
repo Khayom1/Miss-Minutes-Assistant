@@ -55,4 +55,7 @@ class AiToolApprovalGate {
     /** Returns false when no approval is awaiting a user decision. */
     fun resolve(approved: Boolean): Boolean =
         pendingDecision?.complete(approved) ?: false
+
+    /** Rejects a pending approval as soon as its owning conversation changes. */
+    fun rejectPending(): Boolean = resolve(approved = false)
 }

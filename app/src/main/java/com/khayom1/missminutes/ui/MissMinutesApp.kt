@@ -487,6 +487,10 @@ fun MissMinutesApp(
     var draft by rememberSaveable { mutableStateOf("") }
     var isRestoring by remember { mutableStateOf(true) }
     var conversationGeneration by remember { mutableStateOf(0L) }
+    val invalidateConversationApproval: () -> Unit = {
+        conversationGeneration += 1
+        toolApprovalGate.rejectPending()
+    }
     var userEmail by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
@@ -682,6 +686,7 @@ fun MissMinutesApp(
     val copy = copyFor(language)
 
     suspend fun loadConversation(ownerId: String, preferredConversationId: String? = null) {
+        invalidateConversationApproval()
         val snapshot = withContext(Dispatchers.IO) {
             conversationStore.pruneExpired(ownerId)
             val initial = conversationStore.listConversations(ownerId)
@@ -1287,6 +1292,7 @@ fun MissMinutesApp(
     }
     val startNewConversation: () -> Unit = {
         currentOwnerId?.let { owner ->
+            invalidateConversationApproval()
             scope.launch {
                 val id = withContext(Dispatchers.IO) { conversationStore.createConversation(owner) }
                 loadConversation(owner, id)
@@ -1296,6 +1302,7 @@ fun MissMinutesApp(
     }
     val deleteConversation: (String) -> Unit = { id ->
         currentOwnerId?.let { owner ->
+            if (activeConversationId == id) invalidateConversationApproval()
             scope.launch {
                 withContext(Dispatchers.IO) { conversationStore.deleteConversation(owner, id) }
                 pendingDeleteConversationId = null
@@ -1328,6 +1335,7 @@ fun MissMinutesApp(
     }
     val deleteAllLocalData: () -> Unit = {
         currentOwnerId?.let { owner ->
+            invalidateConversationApproval()
             scope.launch {
                 withContext(Dispatchers.IO) { conversationStore.deleteAll(owner) }
                 confirmDeleteAll = false
