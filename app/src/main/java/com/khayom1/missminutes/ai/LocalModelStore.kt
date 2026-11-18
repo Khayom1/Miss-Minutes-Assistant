@@ -12,7 +12,7 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.lock
 import kotlinx.coroutines.withContext
 
 private const val LOCAL_MODEL_EXTENSION = ".litertlm"
@@ -88,8 +88,10 @@ class LocalModelStore(context: Context) {
         contentResolver: ContentResolver,
         uri: Uri,
         validateModel: suspend (String) -> Unit
-    ): String = importMutex.withLock {
-        withContext(Dispatchers.IO) {
+    ): String {
+        importMutex.lock()
+        try {
+            return withContext(Dispatchers.IO) {
         if (!modelDirectory.exists() && !modelDirectory.mkdirs()) {
             throw IOException("Model storage is unavailable.")
         }
@@ -159,6 +161,9 @@ class LocalModelStore(context: Context) {
             if (error is IOException) throw error
             throw IOException("The selected model is not a compatible LiteRT-LM model.", error)
         }
+            }
+        } finally {
+            importMutex.unlock()
         }
     }
 
