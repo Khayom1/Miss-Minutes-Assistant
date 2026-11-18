@@ -1690,7 +1690,10 @@ private fun ChatScreen(
     onSpeak: (ChatMessage) -> Unit,
     speechListening: Boolean,
     speechError: String?,
-    onSpeechInput: () -> Unit
+    onSpeechInput: () -> Unit,
+    usingLocalModel: Boolean,
+    localModelReady: Boolean,
+    onAiBackendChange: (Boolean) -> Unit
 ) { 
     val messageListState = rememberLazyListState()
     LaunchedEffect(messages.lastOrNull()?.id) {
@@ -1705,6 +1708,40 @@ private fun ChatScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = !usingLocalModel,
+                onClick = { onAiBackendChange(false) },
+                label = {
+                    Text(
+                        when (copy.language) {
+                            "Тоҷикӣ" -> "DeepSeek"
+                            "Русский" -> "DeepSeek"
+                            else -> "DeepSeek"
+                        }
+                    )
+                },
+                modifier = Modifier.testTag("ai_provider_deepseek")
+            )
+            FilterChip(
+                selected = usingLocalModel,
+                onClick = { if (localModelReady) onAiBackendChange(true) },
+                enabled = localModelReady,
+                label = {
+                    Text(
+                        when (copy.language) {
+                            "Тоҷикӣ" -> "Модели маҳаллӣ"
+                            "Русский" -> "Локальная модель"
+                            else -> "Local model"
+                        }
+                    )
+                },
+                modifier = Modifier.testTag("ai_provider_local")
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = copy.welcomeTitle,
@@ -1738,7 +1775,13 @@ private fun ChatScreen(
             Text(voicePreparing, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Text(
-            text = copy.gatewayNotice,
+            text = if (usingLocalModel) {
+                when (copy.language) {
+                    "Тоҷикӣ" -> "Чати офлайн фаъол аст. Барои ин модели маҳаллӣ даъвати плагинҳо ҳоло хомӯш аст."
+                    "Русский" -> "Работает офлайн-чат. Вызов плагинов для этой локальной модели пока отключён."
+                    else -> "Offline chat is active. Plugin tool calling is not enabled for this local model yet."
+                }
+            } else copy.gatewayNotice,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1996,6 +2039,12 @@ private fun SettingsScreen(
     onApiKeyInputChange: (String) -> Unit,
     onSaveApiKey: () -> Unit,
     onClearApiKey: () -> Unit,
+    localModelReady: Boolean,
+    usingLocalModel: Boolean,
+    localModelMessage: String?,
+    localModelImporting: Boolean,
+    onImportLocalModel: () -> Unit,
+    onUseLocalModelChange: (Boolean) -> Unit,
     wakeEnabled: Boolean,
     wakeMessage: String?,
     onEnableWakeListening: () -> Unit,
@@ -2143,6 +2192,87 @@ private fun SettingsScreen(
                     TextButton(onClick = onClearApiKey, enabled = !isBusy) { Text(removeLabel) }
                 }
             }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Модели маҳаллӣ (офлайн)"
+                    AppLanguage.Russian -> "Локальная модель (офлайн)"
+                    AppLanguage.English -> "Local model (offline)"
+                },
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Файли .litertlm-ро интихоб кун. Модел дар хотираи хусусии барнома нигоҳ дошта мешавад; интернет ва API Key барои ҷавобҳои маҳаллӣ лозим нест."
+                    AppLanguage.Russian -> "Выберите файл .litertlm. Модель хранится в закрытом хранилище приложения; для локальных ответов не нужны интернет и API-ключ."
+                    AppLanguage.English -> "Choose a .litertlm file. The model is copied into private app storage; local replies need neither internet nor an API key."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> if (localModelReady) "Модел ворид шудааст" else "Модел ҳанӯз ворид нашудааст"
+                    AppLanguage.Russian -> if (localModelReady) "Модель импортирована" else "Модель ещё не импортирована"
+                    AppLanguage.English -> if (localModelReady) "Model imported" else "No local model imported"
+                },
+                color = if (localModelReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onImportLocalModel,
+                enabled = !localModelImporting && !isBusy,
+                modifier = Modifier.testTag("import_local_model")
+            ) {
+                Text(
+                    when (language) {
+                        AppLanguage.Tajik -> if (localModelImporting) "Ворид шуда истодааст…" else "Ворид кардани модел"
+                        AppLanguage.Russian -> if (localModelImporting) "Импорт…" else "Импортировать модель"
+                        AppLanguage.English -> if (localModelImporting) "Importing…" else "Import model"
+                    }
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Истифодаи модели маҳаллӣ"
+                            AppLanguage.Russian -> "Использовать локальную модель"
+                            AppLanguage.English -> "Use local model"
+                        }
+                    )
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Танҳо баъди ворид кардани модел фаъол мешавад."
+                            AppLanguage.Russian -> "Доступно после импорта модели."
+                            AppLanguage.English -> "Available after a model is imported."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = usingLocalModel,
+                    onCheckedChange = onUseLocalModelChange,
+                    enabled = localModelReady && !localModelImporting,
+                    modifier = Modifier.testTag("use_local_model")
+                )
+            }
+            if (localModelMessage != null) {
+                Text(localModelMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                when (language) {
+                    AppLanguage.Tajik -> "Эзоҳ: ҳоло модели маҳаллӣ матнро офлайн тавлид мекунад; истифодаи плагинҳо дар ин режим ҳанӯз дастгирӣ намешавад."
+                    AppLanguage.Russian -> "Примечание: локальная модель пока генерирует текст офлайн; использование плагинов в этом режиме ещё не поддерживается."
+                    AppLanguage.English -> "Note: local inference currently provides offline text generation; plugin use in this mode is not yet supported."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         val overlayContext = LocalContext.current
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
