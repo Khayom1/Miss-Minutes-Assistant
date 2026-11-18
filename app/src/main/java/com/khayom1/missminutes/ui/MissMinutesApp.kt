@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
@@ -113,6 +114,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.khayom1.missminutes.ai.SpeechInputProvider
+import com.khayom1.missminutes.ai.SpeechInputBackgroundGuard
 import java.util.Locale
 import java.io.ByteArrayOutputStream
 
@@ -340,6 +342,7 @@ fun MissMinutesApp(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val appSettingsStore = remember(context) { AndroidAppSettingsStore(context) }
     var selectedLanguageName by remember(context) {
         mutableStateOf(when (appSettingsStore.loadAppearance().language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name })
@@ -488,6 +491,20 @@ fun MissMinutesApp(
     var voiceError by remember { mutableStateOf<String?>(null) }
     var speechError by remember { mutableStateOf<String?>(null) }
     var speechListening by remember { mutableStateOf(false) }
+    DisposableEffect(lifecycleOwner, speechInputProvider) {
+        val guard = SpeechInputBackgroundGuard(
+            stopListening = speechInputProvider::stop,
+            onStopped = {
+                speechListening = false
+                speechError = null
+            }
+        )
+        lifecycleOwner.lifecycle.addObserver(guard)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(guard)
+            speechInputProvider.stop()
+        }
+    }
     var apiKeyConfigured by remember { mutableStateOf(false) }
     var apiKeySaving by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
