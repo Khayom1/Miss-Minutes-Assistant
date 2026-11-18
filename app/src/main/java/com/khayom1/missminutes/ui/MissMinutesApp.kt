@@ -93,6 +93,7 @@ import com.khayom1.missminutes.device.DeviceToolEngine
 import com.khayom1.missminutes.device.DeviceToolResult
 import com.khayom1.missminutes.device.FileDeviceToolAuditLog
 import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
+import com.khayom1.missminutes.permissions.permissionsToRequest
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
 import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
@@ -465,10 +466,11 @@ fun MissMinutesApp(
         }
     }
     val enableWakeListening = {
-        val allGranted = wakePermissions.all {
-            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        val missingPermissions = permissionsToRequest(wakePermissions.asList()) { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
         }
-        if (allGranted) startWakeListening() else wakePermissionLauncher.launch(wakePermissions)
+        if (missingPermissions.isEmpty()) startWakeListening()
+        else wakePermissionLauncher.launch(missingPermissions)
     }
     val disableWakeListening = {
         // Stop an existing listener without starting a new background service.
