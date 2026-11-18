@@ -1,42 +1,58 @@
 package com.khayom1.missminutes.voice
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WakePhraseMatcherTest {
     @Test
-    fun acceptsExactPhraseCaseInsensitively() {
-        assertTrue(WakePhraseMatcher.matches("Miss Minutes"))
-        assertTrue(WakePhraseMatcher.matches("miss minutes"))
-        assertTrue(WakePhraseMatcher.matches("MISS MINUTES"))
-    }
-
-    @Test
-    fun acceptsPunctuationAroundTheExactWords() {
-        assertTrue(WakePhraseMatcher.matches("Miss Minutes!"))
+    fun acceptsWakePhraseAlone() {
+        assertEquals(null, WakePhraseMatcher.parse("Miss Minutes")?.command)
+        assertTrue(WakePhraseMatcher.matches("MISS MINUTES!"))
         assertTrue(WakePhraseMatcher.matches("  Miss   Minutes... "))
     }
 
     @Test
-    fun rejectsHeyPrefixAndEveryOtherExtraWord() {
-        assertFalse(WakePhraseMatcher.matches("Hey Miss Minutes"))
-        assertFalse(WakePhraseMatcher.matches("Hello Miss Minutes"))
-        assertFalse(WakePhraseMatcher.matches("Miss Minutes please"))
+    fun extractsCommandsInEnglishRussianAndTajik() {
+        assertEquals("open settings", WakePhraseMatcher.parse("Miss Minutes, open settings")?.command)
+        assertEquals("открой настройки", WakePhraseMatcher.parse("MISS MINUTES — открой настройки")?.command)
+        assertEquals("ҳолати батареяро нишон деҳ", WakePhraseMatcher.parse("Miss Minutes ҳолати батареяро нишон деҳ")?.command)
     }
 
     @Test
-    fun usesOnlyThePrimaryRecognitionHypothesis() {
-        assertTrue(WakePhraseMatcher.matchesRecognitionCandidates(listOf("Miss Minutes", "Hey Miss Minutes")))
-        assertFalse(WakePhraseMatcher.matchesRecognitionCandidates(listOf("Hey Miss Minutes", "Miss Minutes")))
+    fun rejectsWakePhraseEmbeddedAfterOtherWords() {
+        assertNull(WakePhraseMatcher.parse("Hey Miss Minutes"))
+        assertNull(WakePhraseMatcher.parse("Hello Miss Minutes, open settings"))
+        assertNull(WakePhraseMatcher.parse("Miss Minute"))
+        assertNull(WakePhraseMatcher.parse("Minutes Miss"))
+        assertNull(WakePhraseMatcher.parse(""))
+    }
+
+    @Test
+    fun onlyPrimaryRecognitionHypothesisCanTrigger() {
+        assertEquals("open settings", WakePhraseMatcher.parseRecognitionCandidates(
+            listOf("Miss Minutes, open settings", "Hey Miss Minutes")
+        )?.command)
+        assertNull(WakePhraseMatcher.parseRecognitionCandidates(
+            listOf("Hey Miss Minutes", "Miss Minutes, open settings")
+        ))
         assertFalse(WakePhraseMatcher.matchesRecognitionCandidates(emptyList()))
     }
 
     @Test
-    fun rejectsNearMatchesAndEmptyInput() {
-        assertFalse(WakePhraseMatcher.matches(""))
-        assertFalse(WakePhraseMatcher.matches("Miss Minute"))
-        assertFalse(WakePhraseMatcher.matches("Minutes Miss"))
-        assertFalse(WakePhraseMatcher.matches("Missed Minutes"))
+    fun stripsPunctuationBetweenWakePhraseAndCommand() {
+        val command = "open settings"
+        listOf(
+            "Miss Minutes, $command",
+            "Miss Minutes: $command",
+            "Miss Minutes - $command",
+            "Miss Minutes — $command",
+            "Miss Minutes – $command",
+            "Miss Minutes $command"
+        ).forEach { transcript ->
+            assertEquals(command, WakePhraseMatcher.parse(transcript)?.command)
+        }
     }
 }
