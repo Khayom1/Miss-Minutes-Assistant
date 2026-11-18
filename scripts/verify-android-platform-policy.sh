@@ -22,7 +22,7 @@ require_match 'VERSION_17' "$gradle_file"
 require_match 'kotlin-gradle-plugin:2[.]4[.]21' "$root_gradle_file"
 require_match 'gradle-version: "9[.]5[.]0"' "$workflow_file"
 require_match 'platforms;android-37[.]0' "$workflow_file"
-require_match 'system-images;android-37[.]0;google_apis;x86_64' "$workflow_file"
+require_match 'system-images;android-37[.]0;default;x86_64' "$workflow_file"
 if grep -Eq 'id\("org[.]jetbrains[.]kotlin[.]android"\)' "$root_gradle_file" "$gradle_file"; then
   echo "Android platform policy failed: use AGP built-in Kotlin, not the legacy Android Kotlin plugin." >&2
   exit 1
