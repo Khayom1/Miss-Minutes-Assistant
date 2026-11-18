@@ -12,7 +12,6 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.lock
 import kotlinx.coroutines.withContext
 
 private const val LOCAL_MODEL_EXTENSION = ".litertlm"
