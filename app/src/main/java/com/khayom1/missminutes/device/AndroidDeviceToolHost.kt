@@ -2,7 +2,6 @@ package com.khayom1.missminutes.device
 
 import android.app.AlarmManager
 import android.app.PendingIntent
-import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -21,6 +20,7 @@ import java.util.TimeZone
 
 class AndroidDeviceToolHost(context: Context) : DeviceToolHost {
     private val appContext = context.applicationContext
+    private val calendarReminderWriter = CalendarReminderWriter(AndroidCalendarReminderGateway(appContext))
 
     override fun execute(command: DeviceToolCommand): String = when (command) {
         DeviceToolCommand.ReadDeviceInfo ->
@@ -113,30 +113,8 @@ class AndroidDeviceToolHost(context: Context) : DeviceToolHost {
         }
     }
 
-    private fun createReminder(command: DeviceToolCommand.CreateReminder): String {
-        val values = ContentValues().apply {
-            put(CalendarContract.Events.TITLE, command.title)
-            put(CalendarContract.Events.DESCRIPTION, command.description)
-            put(CalendarContract.Events.DTSTART, command.startEpochMillis)
-            put(CalendarContract.Events.DTEND, command.startEpochMillis + 30 * 60 * 1000L)
-            put(CalendarContract.Events.CALENDAR_ID, 1) // primary calendar (may fail on some devices)
-            put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-            put(CalendarContract.Events.HAS_ALARM, 1)
-        }
-        val uri = appContext.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
-            ?: return "Could not create calendar event. Check calendar permission and default calendar."
-
-        // Add a simple reminder 10 minutes before
-        val eventId = ContentUris.parseId(uri)
-        val reminder = ContentValues().apply {
-            put(CalendarContract.Reminders.EVENT_ID, eventId)
-            put(CalendarContract.Reminders.MINUTES, 10)
-            put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
-        }
-        appContext.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, reminder)
-
-        return "Reminder created: ${command.title}"
-    }
+    private fun createReminder(command: DeviceToolCommand.CreateReminder): String =
+        calendarReminderWriter.create(command)
 
     private fun readContactsSummary(): String {
         val projection = arrayOf(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)

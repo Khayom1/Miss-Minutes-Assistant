@@ -122,8 +122,11 @@ class DeviceToolEngine(
                 if (cmd.title.isBlank() || cmd.title.length > 200) {
                     return reject("Reminder title must be 1–200 characters.")
                 }
-                if (cmd.startEpochMillis < now - 60_000L) {
-                    return reject("Reminder time must be in the future.")
+                if (
+                    cmd.startEpochMillis < now - 60_000L ||
+                    cmd.startEpochMillis > now + MAX_FUTURE_REMINDER_MILLIS
+                ) {
+                    return reject("Reminder time must be within the next 365 days.")
                 }
             }
             is DeviceToolCommand.SetAlarm -> {
@@ -170,6 +173,8 @@ class DeviceToolEngine(
         }
     }
 }
+
+private const val MAX_FUTURE_REMINDER_MILLIS = 365L * 24 * 60 * 60 * 1_000
 
 private fun DeviceToolCommand.capability(): DeviceToolCapability = when (this) {
     DeviceToolCommand.ReadDeviceInfo -> DeviceToolCapability.DEVICE_INFO
