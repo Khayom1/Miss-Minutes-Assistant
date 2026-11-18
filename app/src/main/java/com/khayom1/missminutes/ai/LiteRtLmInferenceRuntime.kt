@@ -207,6 +207,7 @@ class LiteRtLmInferenceRuntime(
                     conversation.close()
                 }
             }
+            }
         } finally {
             activeRequests.remove(requestJob)
             requestJob.cancel()
