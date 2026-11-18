@@ -73,6 +73,7 @@ import com.khayom1.missminutes.agent.AgentTaskRuntime
 import com.khayom1.missminutes.ai.AiCompletion
 import com.khayom1.missminutes.ai.AiMessage
 import com.khayom1.missminutes.ai.AiProvider
+import com.khayom1.missminutes.ai.LocalModelStore
 import com.khayom1.missminutes.ai.AiToolExecutionLoop
 import com.khayom1.missminutes.ai.AiToolExecutor
 import com.khayom1.missminutes.ai.AiToolExecutionResult
@@ -333,6 +334,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
 @Composable
 fun MissMinutesApp(
     aiProvider: AiProvider,
+    localAiProvider: AiProvider,
+    localModelStore: LocalModelStore,
     ttsProvider: TtsProvider,
     apiKeyStore: DeepSeekApiKeyStore,
     speechInputProvider: SpeechInputProvider,
@@ -375,6 +378,60 @@ fun MissMinutesApp(
         )
     }
     val agentOrchestrator = remember(context, pluginConsentSnapshot) { AgentTaskRuntime.get(context) }
+    var localModelReady by remember(context) {
+        mutableStateOf(localModelStore.currentModelPath() != null)
+    }
+    var usingLocalModel by remember(context) {
+        mutableStateOf(localModelStore.isLocalModelSelected() && localModelReady)
+    }
+    var localModelMessage by remember { mutableStateOf<String?>(null) }
+    var localModelImporting by remember { mutableStateOf(false) }
+
+    val importLocalModelLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            localModelImporting = true
+            localModelMessage = when (language) {
+                AppLanguage.Tajik -> "Модел ба хотираи хусусии барнома нусхабардорӣ мешавад…"
+                AppLanguage.Russian -> "Модель копируется в защищённое хранилище приложения…"
+                AppLanguage.English -> "Copying model into private app storage…"
+            }
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        localModelStore.importModel(context.contentResolver, uri)
+                    }
+                    localModelReady = localModelStore.currentModelPath() != null
+                    usingLocalModel = localModelReady
+                    localModelMessage = when (language) {
+                        AppLanguage.Tajik -> "Модел ворид шуд. Барои ҷавоби аввал вақти боркунии модел лозим мешавад."
+                        AppLanguage.Russian -> "Модель импортирована. Первый ответ загрузит веса модели."
+                        AppLanguage.English -> "Model imported. The first reply will initialize the model weights."
+                    }
+                } catch (error: Exception) {
+                    localModelMessage = error.message ?: when (language) {
+                        AppLanguage.Tajik -> "Ворид кардани модел ноком шуд."
+                        AppLanguage.Russian -> "Не удалось импортировать модель."
+                        AppLanguage.English -> "Model import failed."
+                    }
+                } finally {
+                    localModelImporting = false
+                }
+            }
+        }
+    }
+
+    val changeAiBackend: (Boolean) -> Unit = { selected ->
+        runCatching { localModelStore.selectLocalModel(selected) }
+            .onSuccess {
+                usingLocalModel = selected
+                localModelMessage = null
+            }
+            .onFailure { error ->
+                localModelMessage = error.message
+            }
+    }
     var androidPluginConsent by remember(context) {
         mutableStateOf(pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
     }
@@ -1130,7 +1187,11 @@ fun MissMinutesApp(
             val request = try {
                 AiRequest(
                     messages = requestMessages,
-                    tools = PluginToolSchemaFactory.toAiToolDefinitions(agentOrchestrator.availablePluginTools())
+                    tools = if (usingLocalModel) {
+                        emptyList()
+                    } else {
+                        PluginToolSchemaFactory.toAiToolDefinitions(agentOrchestrator.availablePluginTools())
+                    }
                 )
             } catch (_: IllegalArgumentException) {
                 chatError = copy.conversationTooLong
@@ -1169,7 +1230,7 @@ fun MissMinutesApp(
                         }
 
                         val completion: AiCompletion = AiToolExecutionLoop(
-                            provider = aiProvider,
+                            provider = if (usingLocalModel) localAiProvider else aiProvider,
                             executor = AiToolExecutor { call ->
                                 val result = withContext(Dispatchers.IO) {
                                     agentOrchestrator.executePluginTool(call.name, call.arguments, userConfirmed = false)
@@ -1434,7 +1495,10 @@ fun MissMinutesApp(
                                 onSpeak = speakMessage,
                                 speechListening = speechListening,
                                 speechError = speechError,
-                                onSpeechInput = requestSpeechInput
+                                onSpeechInput = requestSpeechInput,
+                                usingLocalModel = usingLocalModel,
+                                localModelReady = localModelReady,
+                                onAiBackendChange = changeAiBackend
                             )
                             AppScreen.Dashboard -> DashboardScreen(
                                 copy = copy,
@@ -1477,6 +1541,12 @@ fun MissMinutesApp(
                                 onApiKeyInputChange = { apiKeyInput = it.take(512) },
                                 onSaveApiKey = saveApiKey,
                                 onClearApiKey = clearApiKey,
+                                localModelReady = localModelReady,
+                                usingLocalModel = usingLocalModel,
+                                localModelMessage = localModelMessage,
+                                localModelImporting = localModelImporting,
+                                onImportLocalModel = { importLocalModelLauncher.launch(arrayOf("*/*")) },
+                                onUseLocalModelChange = changeAiBackend,
                                 wakeEnabled = wakeEnabled,
                                 wakeMessage = wakeMessage,
                                 onEnableWakeListening = enableWakeListening,
