@@ -56,8 +56,10 @@ class MissMinutesWakeWordService : Service() {
         override fun onPartialResults(partialResults: Bundle?) = Unit
 
         override fun onResults(results: Bundle?) {
-            if (containsExactWakePhrase(results)) {
-                handleWakePhrase()
+            val candidates = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+            val match = WakePhraseMatcher.parseRecognitionCandidates(candidates)
+            if (match != null) {
+                handleWakePhrase(match.command)
             } else {
                 retryBackoff.reset()
                 scheduleRestart(RESTART_DELAY_MS)
@@ -186,26 +188,36 @@ class MissMinutesWakeWordService : Service() {
         }
     }
 
-    private fun containsExactWakePhrase(bundle: Bundle?): Boolean {
-        val candidates = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-        return WakePhraseMatcher.matchesRecognitionCandidates(candidates)
-    }
-
     private fun scheduleRestart(delayMillis: Long) {
         if (!active || wakeHandled) return
         mainHandler.removeCallbacks(restartListening)
         mainHandler.postDelayed(restartListening, delayMillis)
     }
 
-    private fun handleWakePhrase() {
+    private fun handleWakePhrase(command: String?) {
         if (wakeHandled || !active) return
         wakeHandled = true
         active = false
         mainHandler.removeCallbacks(restartListening)
         releaseRecognizer()
-        publishState(false, "Miss Minutes heard. Tap to open the assistant.")
+        if (!command.isNullOrBlank()) PendingVoiceCommandStore.save(this, command)
+        val message = if (command.isNullOrBlank()) {
+            "Miss Minutes heard. Tap to open the assistant."
+        } else {
+            "Voice command captured. Unlock and tap to execute it."
+        }
+        publishState(false, message)
+        if (!command.isNullOrBlank()) {
+            sendBroadcast(
+                Intent(ACTION_STATE_CHANGED)
+                    .setPackage(packageName)
+                    .putExtra(EXTRA_ENABLED, false)
+                    .putExtra(EXTRA_MESSAGE, message)
+                    .putExtra(EXTRA_COMMAND, command)
+            )
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
-        postStatusNotification("Miss Minutes heard. Tap to open the assistant.")
+        postStatusNotification(message)
         stopSelf()
     }
 
@@ -325,6 +337,7 @@ class MissMinutesWakeWordService : Service() {
         const val ACTION_STATE_CHANGED = "com.khayom1.missminutes.voice.WAKE_STATE_CHANGED"
         const val EXTRA_ENABLED = "wake_enabled"
         const val EXTRA_MESSAGE = "wake_message"
+        const val EXTRA_COMMAND = "wake_command"
         const val CHANNEL_ID = "miss_minutes_wake_phrase"
         const val NOTIFICATION_ID = 7301
         private const val STATUS_NOTIFICATION_ID = 7302
@@ -358,5 +371,36 @@ object WakeWordServiceState {
             .putBoolean(ENABLED, enabled)
         if (enabled) editor.putInt(SERVICE_PID, Process.myPid()) else editor.remove(SERVICE_PID)
         editor.apply()
+    }
+}
+
+
+/** One-shot command handoff; stale voice commands expire after ten minutes. */
+object PendingVoiceCommandStore {
+    private const val PREFERENCES = "miss_minutes_pending_voice"
+    private const val COMMAND = "command"
+    private const val CREATED_AT = "created_at"
+    private const val MAX_AGE_MS = 10 * 60 * 1000L
+
+    @Synchronized
+    fun save(context: Context, command: String) {
+        val safeCommand = command.trim().take(8_000)
+        if (safeCommand.isEmpty()) return
+        context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+            .edit()
+            .putString(COMMAND, safeCommand)
+            .putLong(CREATED_AT, System.currentTimeMillis())
+            .apply()
+    }
+
+    @Synchronized
+    fun consume(context: Context): String? {
+        val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+        val command = preferences.getString(COMMAND, null)
+        val createdAt = preferences.getLong(CREATED_AT, 0L)
+        preferences.edit().remove(COMMAND).remove(CREATED_AT).apply()
+        if (command.isNullOrBlank() || createdAt <= 0L) return null
+        if (System.currentTimeMillis() - createdAt !in 0..MAX_AGE_MS) return null
+        return command
     }
 }
