@@ -79,7 +79,7 @@ jobs:
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          channel: 3
+          channel: canary
           script: gradle --no-daemon connectedDebugAndroidTest
 
       - name: Generate APK checksums
