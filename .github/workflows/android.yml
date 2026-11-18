@@ -68,6 +68,18 @@ jobs:
           export PATH="$CLT/latest/bin:$SDK/emulator:$SDK/platform-tools:$PATH"
           sdkmanager --list --channel=3 | grep -E 'platforms;android-37|system-images;android-37|build-tools;37' || true
 
+      - name: Pin stable platform-tools for emulator-runner compatibility
+        run: |
+          set -euo pipefail
+          # The API 37 preview channel may offer a canary platform-tools package.
+          # reactivecircus/android-emulator-runner later requests the stable package;
+          # remove the preview build first so its SDK Manager cannot attempt a downgrade.
+          sdkmanager --uninstall "platform-tools"
+          sdkmanager --channel=0 --install "platform-tools"
+          PLATFORM_TOOLS_REVISION="$(awk -F= '$1 == "Pkg.Revision" { print $2; exit }' "$ANDROID_SDK_ROOT/platform-tools/source.properties")"
+          test -n "$PLATFORM_TOOLS_REVISION"
+          echo "stable platform-tools revision=$PLATFORM_TOOLS_REVISION"
+
       - name: Install Android platform
         run: sdkmanager --channel=3 --install "platforms;android-35" "platforms;android-37.0" "build-tools;37.0.0"
 
@@ -120,7 +132,7 @@ jobs:
 
       - name: Install pinned emulator packages
         run: |
-          sdkmanager --channel=3 --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "platforms;android-37.0" "system-images;android-37.0;google_apis;x86_64" "emulator" "platform-tools"
+          sdkmanager --channel=3 --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "platforms;android-37.0" "system-images;android-37.0;google_apis;x86_64" "emulator"
 
       - name: Run Android instrumentation tests (API 37.0)
         id: api37_instrumentation
@@ -135,6 +147,7 @@ jobs:
               echo "=== AVD target ==="
               cat "$RUNNER_TEMP/android17-api37-avd-target.txt" 2>/dev/null || true
               echo "=== system server ==="
+              adb shell pidof system_server || true
               adb shell getprop init.svc.system_server || true
               echo "=== framework services ==="
               adb shell service list | grep -E 'package|activity|mount' || true
@@ -208,15 +221,22 @@ jobs:
           # sys.boot_completed may precede framework and SurfaceFlinger stability.
           SERVICES_READY=0
           STABLE_SERVICE_CHECKS=0
+          PREVIOUS_SYSTEM_SERVER_PID=""
           PREVIOUS_SURFACEFLINGER_PID=""
           for attempt in $(seq 1 72); do
             PACKAGE_LIST="$(adb shell cmd package list packages 2>/dev/null || true)"
             CURRENT_USER="$(adb shell cmd activity get-current-user 2>/dev/null | tr -d '\r' || true)"
-            SYSTEM_SERVER="$(adb shell getprop init.svc.system_server 2>/dev/null | tr -d '\r' || true)"
+            PACKAGE_SERVICE="$(adb shell service check package 2>&1 || true)"
+            ACTIVITY_SERVICE="$(adb shell service check activity 2>&1 || true)"
+            SYSTEM_SERVER_PID="$(adb shell pidof system_server 2>/dev/null | tr -d '\r' || true)"
             MOUNT_SERVICE="$(adb shell service check mount 2>&1 || true)"
             SURFACEFLINGER_PID="$(adb shell pidof surfaceflinger 2>/dev/null | tr -d '\r' || true)"
             if printf '%s\n' "$PACKAGE_LIST" | grep '^package:' >/dev/null &&
-               [ "$CURRENT_USER" = "0" ] && [ "$SYSTEM_SERVER" = "running" ] &&
+               [ "$CURRENT_USER" = "0" ] &&
+               printf '%s\n' "$PACKAGE_SERVICE" | grep -q 'found' &&
+               printf '%s\n' "$ACTIVITY_SERVICE" | grep -q 'found' &&
+               [ -n "$SYSTEM_SERVER_PID" ] &&
+               [ "$SYSTEM_SERVER_PID" = "$PREVIOUS_SYSTEM_SERVER_PID" ] &&
                printf '%s\n' "$MOUNT_SERVICE" | grep -q 'found' &&
                [ -n "$SURFACEFLINGER_PID" ] &&
                [ "$SURFACEFLINGER_PID" = "$PREVIOUS_SURFACEFLINGER_PID" ]; then
@@ -228,6 +248,7 @@ jobs:
             else
               STABLE_SERVICE_CHECKS=0
             fi
+            PREVIOUS_SYSTEM_SERVER_PID="$SYSTEM_SERVER_PID"
             PREVIOUS_SURFACEFLINGER_PID="$SURFACEFLINGER_PID"
             sleep 5
           done
