@@ -142,9 +142,8 @@ class AndroidSpeechInputProvider(
     }
 
     private fun releaseRecognizer(expected: SpeechRecognizer? = null) {
-        val current = recognizer ?: return
-        if (expected != null && current !== expected) return
-        recognizer = null
+        val current = expected ?: recognizer ?: return
+        if (recognizer === current) recognizer = null
         runCatching { current.cancel() }
         runCatching { current.destroy() }
     }
