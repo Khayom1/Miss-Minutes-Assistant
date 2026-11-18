@@ -1180,11 +1180,14 @@ fun MissMinutesApp(
                             executor = AiToolExecutor { call ->
                                 val descriptor = agentOrchestrator.availablePluginTools()
                                     .firstOrNull { it.toolName == call.name }
-                                val approved = if (descriptor?.requiresConfirmation == true) {
+                                val approved = if (
+                                    descriptor?.requiresConfirmation == true &&
+                                    requestGeneration == conversationGeneration
+                                ) {
                                     val argumentNames = runCatching {
                                         Json.parseToJsonElement(call.arguments).jsonObject.keys.sorted().take(16)
                                     }.getOrDefault(emptyList())
-                                    toolApprovalGate.awaitApproval(
+                                    val userApproved = toolApprovalGate.awaitApproval(
                                         AiToolApprovalPrompt(
                                             toolName = call.name,
                                             pluginName = descriptor.pluginName,
@@ -1192,6 +1195,7 @@ fun MissMinutesApp(
                                             argumentNames = argumentNames
                                         )
                                     )
+                                    userApproved && requestGeneration == conversationGeneration
                                 } else {
                                     false
                                 }
