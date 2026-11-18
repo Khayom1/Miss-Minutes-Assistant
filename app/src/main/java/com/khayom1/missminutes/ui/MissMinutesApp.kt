@@ -388,7 +388,7 @@ fun MissMinutesApp(
     }
     var wakeEnabled by remember { mutableStateOf(WakeWordServiceState.isEnabled(context)) }
     var wakeMessage by remember { mutableStateOf<String?>(null) }
-    var pendingVoiceCommand by remember { mutableStateOf(PendingVoiceCommandStore.consume(context)) }
+    var pendingVoiceCommand by remember { mutableStateOf(PendingVoiceCommandStore.peek(context)) }
     var isAppResumed by remember { mutableStateOf(false) }
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
@@ -398,7 +398,7 @@ fun MissMinutesApp(
                     wakeMessage = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_MESSAGE)
                     val capturedCommand = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_COMMAND)
                     if (!capturedCommand.isNullOrBlank()) {
-                        pendingVoiceCommand = PendingVoiceCommandStore.consume(context) ?: capturedCommand
+                        pendingVoiceCommand = PendingVoiceCommandStore.peek(context) ?: capturedCommand
                     }
                 }
             }
@@ -1280,6 +1280,7 @@ fun MissMinutesApp(
             pendingVoiceCommand = null
             selectedScreenName = AppScreen.Chat.name
             submitMessage(command)
+            PendingVoiceCommandStore.acknowledge(context)
         }
     }
 
