@@ -2,6 +2,7 @@ package com.khayom1.missminutes.ai
 
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -162,7 +163,9 @@ class OptionalLocalAiProvider(
 
         val output = try {
             runtime.generate(request.messages, request.maxOutputTokens).trim()
-        } catch (error: IOException) {
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
             throw AiProviderException.Unavailable(error)
         }
 
@@ -170,8 +173,11 @@ class OptionalLocalAiProvider(
         return AiCompletion(content = output, model = "local")
     }
 
-    private fun isRuntimeAvailable(): Boolean =
-        runCatching { runtime.isAvailable() }.getOrDefault(false)
+    private fun isRuntimeAvailable(): Boolean = try {
+        runtime.isAvailable()
+    } catch (_: Exception) {
+        false
+    }
 }
 
 /**
