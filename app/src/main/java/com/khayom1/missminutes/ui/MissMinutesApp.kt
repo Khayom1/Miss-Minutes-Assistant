@@ -79,6 +79,7 @@ import com.khayom1.missminutes.ai.AiToolExecutor
 import com.khayom1.missminutes.ai.AiToolExecutionResult
 import com.khayom1.missminutes.ai.AiToolApprovalGate
 import com.khayom1.missminutes.ai.AiToolApprovalPrompt
+import com.khayom1.missminutes.ai.sanitizeApprovalDisplayText
 import com.khayom1.missminutes.ai.AiProviderException
 import com.khayom1.missminutes.ai.AiRequest
 import com.khayom1.missminutes.ai.AiRole
@@ -1195,8 +1196,8 @@ fun MissMinutesApp(
                                     val userApproved = toolApprovalGate.awaitApproval(
                                         AiToolApprovalPrompt(
                                             toolName = call.name,
-                                            pluginName = descriptor.pluginName,
-                                            description = descriptor.description,
+                                            pluginName = sanitizeApprovalDisplayText(descriptor.pluginName, 128),
+                                            description = sanitizeApprovalDisplayText(descriptor.description, 512),
                                             argumentNames = argumentNames
                                         )
                                     )
@@ -1633,7 +1634,7 @@ fun MissMinutesApp(
         }
         pendingToolApproval?.let { approval ->
             AlertDialog(
-                onDismissRequest = { toolApprovalGate.resolve(approved = false); Unit },
+                onDismissRequest = { toolApprovalGate.resolve(approval.requestId, approved = false); Unit },
                 title = {
                     Text(
                         when (language) {
@@ -1646,6 +1647,7 @@ fun MissMinutesApp(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(approval.pluginName, fontWeight = FontWeight.SemiBold)
+                        Text(approval.toolName, style = MaterialTheme.typography.labelMedium)
                         Text(approval.description)
                         if (approval.argumentNames.isNotEmpty()) {
                             Text(
@@ -1670,7 +1672,7 @@ fun MissMinutesApp(
                 },
                 confirmButton = {
                     TextButton(
-                        onClick = { toolApprovalGate.resolve(approved = true); Unit },
+                        onClick = { toolApprovalGate.resolve(approval.requestId, approved = true); Unit },
                         modifier = Modifier.testTag("approve_plugin_tool")
                     ) {
                         Text(
@@ -1684,7 +1686,7 @@ fun MissMinutesApp(
                 },
                 dismissButton = {
                     TextButton(
-                        onClick = { toolApprovalGate.resolve(approved = false); Unit },
+                        onClick = { toolApprovalGate.resolve(approval.requestId, approved = false); Unit },
                         modifier = Modifier.testTag("reject_plugin_tool")
                     ) {
                         Text(

@@ -24,12 +24,12 @@ class AiToolApprovalGateTest {
         val result = async(start = CoroutineStart.UNDISPATCHED) {
             gate.awaitApproval(prompt)
         }
+        val requestId = requireNotNull(gate.pending.value).requestId
 
-        assertEquals(prompt, gate.pending.value)
-        assertTrue(gate.resolve(approved = true))
+        assertTrue(gate.resolve(requestId, approved = true))
         assertTrue(result.await())
         assertNull(gate.pending.value)
-        assertFalse(gate.resolve(approved = true))
+        assertFalse(gate.resolve(requestId, approved = true))
     }
 
     @Test
@@ -38,23 +38,12 @@ class AiToolApprovalGateTest {
         val result = async(start = CoroutineStart.UNDISPATCHED) {
             gate.awaitApproval(prompt)
         }
+        val requestId = requireNotNull(gate.pending.value).requestId
 
-        assertTrue(gate.resolve(approved = false))
+        assertTrue(gate.resolve(requestId, approved = false))
         assertFalse(result.await())
         assertNull(gate.pending.value)
-    }
-
-    @Test
-    fun conversationInvalidationRejectsPendingApprovalImmediately() = runBlocking {
-        val gate = AiToolApprovalGate()
-        val result = async(start = CoroutineStart.UNDISPATCHED) {
-            gate.awaitApproval(prompt)
-        }
-
-        assertTrue(gate.rejectPending())
-        assertFalse(result.await())
-        assertNull(gate.pending.value)
-        assertFalse(gate.resolve(approved = true))
+        assertFalse(gate.resolve(requestId, approved = true))
     }
 
     @Test
@@ -63,11 +52,53 @@ class AiToolApprovalGateTest {
         val result = async(start = CoroutineStart.UNDISPATCHED) {
             gate.awaitApproval(prompt)
         }
+        val requestId = requireNotNull(gate.pending.value).requestId
 
         result.cancelAndJoin()
 
         assertNull(gate.pending.value)
-        assertFalse(gate.resolve(approved = true))
+        assertFalse(gate.resolve(requestId, approved = true))
+    }
+
+    @Test
+    fun conversationInvalidationRejectsPendingApprovalImmediately() = runBlocking {
+        val gate = AiToolApprovalGate()
+        val result = async(start = CoroutineStart.UNDISPATCHED) {
+            gate.awaitApproval(prompt)
+        }
+        val requestId = requireNotNull(gate.pending.value).requestId
+
+        assertTrue(gate.rejectPending())
+        assertFalse(result.await())
+        assertNull(gate.pending.value)
+        assertFalse(gate.resolve(requestId, approved = true))
+    }
+
+    @Test
+    fun staleDecisionCannotResolveAReplacementApproval() = runBlocking {
+        val gate = AiToolApprovalGate()
+        val first = async(start = CoroutineStart.UNDISPATCHED) {
+            gate.awaitApproval(prompt)
+        }
+        val firstRequestId = requireNotNull(gate.pending.value).requestId
+        assertTrue(gate.resolve(firstRequestId, approved = false))
+        assertFalse(first.await())
+
+        val second = async(start = CoroutineStart.UNDISPATCHED) {
+            gate.awaitApproval(prompt.copy(toolName = "calendar_update_event"))
+        }
+        val secondRequestId = requireNotNull(gate.pending.value).requestId
+
+        assertTrue(secondRequestId > firstRequestId)
+        assertFalse(gate.resolve(firstRequestId, approved = true))
+        assertTrue(gate.resolve(secondRequestId, approved = true))
+        assertTrue(second.await())
+    }
+
+    @Test
+    fun displayTextRemovesControlAndBidiOverrideCharacters() {
+        val untrusted = "Calendar" + 0x202E.toChar() + "\nCreate event"
+        assertEquals("Calendar Create event", sanitizeApprovalDisplayText(untrusted, 128))
     }
 
     @Test
@@ -77,15 +108,17 @@ class AiToolApprovalGateTest {
         val first = async(start = CoroutineStart.UNDISPATCHED) {
             gate.awaitApproval(prompt)
         }
+        val firstRequestId = requireNotNull(gate.pending.value).requestId
         val second = async {
             gate.awaitApproval(secondPrompt)
         }
 
-        assertEquals(prompt, gate.pending.value)
-        assertTrue(gate.resolve(approved = false))
+        assertEquals(prompt.toolName, gate.pending.value?.toolName)
+        assertTrue(gate.resolve(firstRequestId, approved = false))
         assertFalse(first.await())
-        assertEquals(secondPrompt, gate.pending.value)
-        assertTrue(gate.resolve(approved = true))
+        val secondRequestId = requireNotNull(gate.pending.value).requestId
+        assertEquals(secondPrompt.toolName, gate.pending.value?.toolName)
+        assertTrue(gate.resolve(secondRequestId, approved = true))
         assertTrue(second.await())
         assertNull(gate.pending.value)
     }
