@@ -71,9 +71,9 @@ class AndroidPlatformPolicyTest {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             packageManager.getPackageInfo(
                 context.packageName,
-                PackageManager.PackageInfoFlags.of(0)
+                PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong())
             )
         } else {
-            packageManager.getPackageInfo(context.packageName, 0)
+            packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
         }
 }
