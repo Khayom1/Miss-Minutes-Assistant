@@ -35,6 +35,15 @@ class VoiceActionIntentPolicyTest {
     }
 
     @Test
+    fun descriptiveQuestionsAndQuotedPhrasesDoNotGrantApproval() {
+        assertFalse(VoiceActionIntentPolicy.isExplicitlyRequested("create_reminder", "What does the phrase remind me mean?"))
+        assertFalse(VoiceActionIntentPolicy.isExplicitlyRequested("create_reminder", "Can you explain how reminders work?"))
+        assertFalse(VoiceActionIntentPolicy.isExplicitlyRequested("set_alarm", "What is an alarm for?"))
+        assertFalse(VoiceActionIntentPolicy.isExplicitlyRequested("open_app", "Can you explain how to open Android settings?"))
+        assertFalse(VoiceActionIntentPolicy.isExplicitlyRequested("open_app", "What is an open app?"))
+    }
+
+    @Test
     fun explicitlyNegatedRequestsNeverGrantApproval() {
         assertFalse(VoiceActionIntentPolicy.isExplicitlyRequested("create_reminder", "Don't remind me to call the dentist"))
         assertFalse(VoiceActionIntentPolicy.isExplicitlyRequested("set_alarm", "Do not set an alarm for tomorrow"))

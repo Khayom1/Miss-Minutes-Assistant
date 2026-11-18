@@ -12,10 +12,18 @@ internal object VoiceActionIntentPolicy {
     private val whitespace = Regex("\\s+")
 
     private val negations = listOf(
-        "do not", "don't", "dont", "never", "not", "no", "stop",
+        "do not", "don't", "dont", "never", "not", "no", "stop", "not necessary",
         "не надо", "не нужно", "не хочу", "не делай", "не", "нельзя",
         "накун", "нагузор", "намон", "на"
     ).map(::normalize)
+
+    private val allowedRequestPrefixTokens = setOf(
+        "please", "can", "could", "would", "will", "you", "hey", "kindly",
+        "пожалуйста", "можешь", "можно", "ты", "вы",
+        "илтимос", "лутфан", "метавонӣ", "метавонед", "маро", "ба", "ман",
+        "соати", "пагоҳ", "фардо", "имрӯз", "шаш", "ҳафт", "ҳашт", "панҷ",
+        "чор", "се", "ду", "як", "нӯҳ", "даҳ"
+    )
 
     fun isExplicitlyRequested(actionId: String, utterance: String): Boolean {
         val command = normalize(utterance)
@@ -83,7 +91,11 @@ internal object VoiceActionIntentPolicy {
             val index = padded.indexOf(needle, startIndex = searchFrom)
             if (index < 0) return false
             val prefix = padded.substring(0, index)
-            if (negations.none { negation -> prefix.contains(" $negation ") }) return true
+            val prefixTokens = prefix.trim().split(' ').filter(String::isNotBlank)
+            val isDirectRequest = prefixTokens.size <= 3 &&
+                prefixTokens.all { it in allowedRequestPrefixTokens }
+            val isNegated = negations.any { negation -> prefix.contains(" $negation ") }
+            if (isDirectRequest && !isNegated) return true
             searchFrom = index + needle.length
         }
     }
