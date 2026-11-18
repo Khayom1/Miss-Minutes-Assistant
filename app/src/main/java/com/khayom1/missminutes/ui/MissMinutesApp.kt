@@ -336,6 +336,7 @@ fun MissMinutesApp(
     aiProvider: AiProvider,
     localAiProvider: AiProvider,
     localModelStore: LocalModelStore,
+    validateLocalModel: suspend (String) -> Unit,
     ttsProvider: TtsProvider,
     apiKeyStore: DeepSeekApiKeyStore,
     speechInputProvider: SpeechInputProvider,
@@ -399,15 +400,17 @@ fun MissMinutesApp(
             }
             scope.launch {
                 try {
-                    withContext(Dispatchers.IO) {
-                        localModelStore.importModel(context.contentResolver, uri)
-                    }
+                    localModelStore.importModel(
+                        context.contentResolver,
+                        uri,
+                        validateLocalModel
+                    )
                     localModelReady = localModelStore.currentModelPath() != null
                     usingLocalModel = localModelReady
                     localModelMessage = when (language) {
                         AppLanguage.Tajik -> "Модел ворид шуд. Барои ҷавоби аввал вақти боркунии модел лозим мешавад."
                         AppLanguage.Russian -> "Модель импортирована. Первый ответ загрузит веса модели."
-                        AppLanguage.English -> "Model imported. The first reply will initialize the model weights."
+                        AppLanguage.English -> "Model validated by LiteRT-LM and imported. The first reply will load it for conversation."
                     }
                 } catch (error: Exception) {
                     localModelMessage = error.message ?: when (language) {
