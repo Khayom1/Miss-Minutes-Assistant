@@ -1,5 +1,9 @@
 package com.khayom1.missminutes.ai
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,5 +69,26 @@ class SpeechInputSessionTest {
 
         assertTrue(second > first)
         assertTrue(session.finish(second))
+    }
+
+    @Test
+    fun concurrentCallbacksCanCompleteOnlyOnce() {
+        val session = SpeechInputSession()
+        val id = session.begin()
+        val gate = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val callbacks = (1..2).map {
+                executor.submit<Boolean> {
+                    gate.await(5, TimeUnit.SECONDS)
+                    session.finish(id)
+                }
+            }
+            gate.countDown()
+            val completed = callbacks.count { it.get(5, TimeUnit.SECONDS) }
+            assertEquals(1, completed)
+        } finally {
+            executor.shutdownNow()
+        }
     }
 }
