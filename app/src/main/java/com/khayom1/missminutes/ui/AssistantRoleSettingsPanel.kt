@@ -29,6 +29,7 @@ internal fun AssistantRoleSettingsPanel() {
     var available by remember(context) { mutableStateOf(AndroidAssistantRole.isAvailable(context)) }
     var held by remember(context) { mutableStateOf(AndroidAssistantRole.isHeld(context)) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
+    val roleNotGrantedMessage = stringResource(R.string.miss_minutes_assistant_role_not_granted)
 
     fun refreshRoleState() {
         available = AndroidAssistantRole.isAvailable(context)
@@ -40,7 +41,7 @@ internal fun AssistantRoleSettingsPanel() {
     ) {
         refreshRoleState()
         resultMessage = if (held) null else context.getString(
-            R.string.miss_minutes_assistant_role_not_granted
+            roleNotGrantedMessage
         )
     }
 
@@ -83,7 +84,7 @@ internal fun AssistantRoleSettingsPanel() {
                     if (requestIntent == null) {
                         refreshRoleState()
                         if (!held) resultMessage = context.getString(
-                            R.string.miss_minutes_assistant_role_not_granted
+                            roleNotGrantedMessage
                         )
                     } else {
                         roleLauncher.launch(requestIntent)
