@@ -35,6 +35,24 @@ require_match 'android:exported="false"' "$manifest"
 require_match 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE' "$manifest"
 
 source_files="app/src/main"
+speech_input_file="$source_files/java/com/khayom1/missminutes/ai/AndroidSpeechInputProvider.kt"
+wake_service_file="$source_files/java/com/khayom1/missminutes/voice/MissMinutesWakeWordService.kt"
+provider_file="$source_files/java/com/khayom1/missminutes/ai/AiProvider.kt"
+deepseek_file="$source_files/java/com/khayom1/missminutes/ai/DirectDeepSeekProvider.kt"
+
+# Speech must stay on-device; EXTRA_PREFER_OFFLINE alone is not a security boundary.
+require_match 'SpeechRecognizer[.]createOnDeviceSpeechRecognizer' "$speech_input_file"
+require_match 'SpeechRecognizer[.]createOnDeviceSpeechRecognizer' "$wake_service_file"
+if grep -RInE --include='*.kt' 'SpeechRecognizer[.]createSpeechRecognizer[(]' "$source_files"; then
+  echo "Android platform policy failed: network-capable speech recognizers are forbidden." >&2
+  exit 1
+fi
+
+# BYOK credentials must not be forwarded across HTTP redirects or to a proxy.
+require_match 'followRedirects[(]false[)]' "$provider_file"
+require_match 'followSslRedirects[(]false[)]' "$provider_file"
+require_match 'https://api[.]deepseek[.]com/chat/completions' "$deepseek_file"
+
 if grep -RInE \
   --include='*.kt' --include='*.java' --include='*.xml' \
   '(DexClassLoader|PathClassLoader|InMemoryDexClassLoader|URLClassLoader|ClassLoader|ScriptEngine|System[.]load(Library)?[[:space:]]*[(]|Runtime[.]getRuntime[(][)][.]exec|ProcessBuilder|Class[.]forName|java[.]lang[.]reflect|MethodHandles|Method[.]invoke)' \
