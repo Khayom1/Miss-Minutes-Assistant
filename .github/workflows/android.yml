@@ -55,6 +55,15 @@ jobs:
           test -s build/kotlin-reachability/kotlin-reachability.json
           test -s build/kotlin-reachability/kotlin-reachability-summary.md
 
+      - name: Build app-local bytecode reachability graph
+        run: |
+          mkdir -p build/bytecode-audit
+          curl --fail --silent --show-error --location https://repo1.maven.org/maven2/org/ow2/asm/asm/9.8/asm-9.8.jar --output build/bytecode-audit/asm.jar
+          javac -cp build/bytecode-audit/asm.jar -d build/bytecode-audit tools/BytecodeReachability.java
+          gradle --no-daemon :app:assembleDebug
+          java -cp build/bytecode-audit:build/bytecode-audit/asm.jar BytecodeReachability app/src/main/AndroidManifest.xml build/bytecode-audit/bytecode-reachability.json app/build/tmp/kotlin-classes/debug app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes
+          test -s build/bytecode-audit/bytecode-reachability.json
+
       - name: Scan tracked working tree for secrets
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
 
