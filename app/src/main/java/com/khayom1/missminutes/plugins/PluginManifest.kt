@@ -5,6 +5,7 @@ enum class PluginCapability(val requiresConfirmation: Boolean = false) {
     BATTERY_STATUS,
     CALENDAR_READ,
     CALENDAR_WRITE(true),
+    ALARM_SCHEDULE(true),
     CONTACTS_READ,
     LOCATION_APPROXIMATE,
     LOCATION_PRECISE,
