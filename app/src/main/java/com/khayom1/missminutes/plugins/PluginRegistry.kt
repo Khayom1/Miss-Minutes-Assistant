@@ -134,7 +134,9 @@ class PluginRegistry(
                     arguments = handler.argumentSchema.toMap(),
                     requiresConfirmation = action.requiresConfirmation || handler.requiresConfirmation || action.capability.requiresConfirmation,
                     connected = consentStore.isGranted(manifest.id),
-                    access = access
+                    access = access,
+                    sideEffect = action.requiresConfirmation || handler.requiresConfirmation ||
+                        action.capability.requiresConfirmation || handler.sideEffect
                 )
             }
         }
