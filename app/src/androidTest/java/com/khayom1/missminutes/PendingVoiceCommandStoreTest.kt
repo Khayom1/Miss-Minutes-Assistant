@@ -55,5 +55,13 @@ class PendingVoiceCommandStoreTest {
         )
     }
 
+    @Test
+    fun blankReplacementClearsAnyPreviouslyPendingCommand() {
+        assertTrue(PendingVoiceCommandStore.save(context, "open settings"))
+
+        assertFalse(PendingVoiceCommandStore.save(context, "   "))
+        assertNull(PendingVoiceCommandStore.peek(context))
+    }
+
 }
 
