@@ -208,4 +208,33 @@ class AiToolExecutionLoopTest {
         assertTrue(error is AiProviderException.InvalidResponse)
         assertEquals(1, executions)
     }
+    @Test
+    fun duplicateActionArgumentsAreCanonicalizedIndependentOfObjectKeyOrder() = runBlocking {
+        val provider = ScriptedProvider(
+            AiCompletion(
+                "",
+                "deepseek-chat",
+                listOf(
+                    AiToolCall("call_1", "plugin_status", """{"x":1,"y":2}"""),
+                    AiToolCall("call_2", "plugin_status", """{"y":2,"x":1}""")
+                )
+            )
+        )
+        var executions = 0
+        val error = runCatching {
+            AiToolExecutionLoop(provider, AiToolExecutor {
+                executions++
+                AiToolExecutionResult("ok")
+            }).complete(
+                AiRequest(
+                    messages = listOf(AiMessage(AiRole.USER, "Do the action once")),
+                    tools = listOf(tool)
+                )
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is AiProviderException.InvalidResponse)
+        assertEquals(0, executions)
+    }
+
 }
