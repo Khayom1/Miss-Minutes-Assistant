@@ -208,6 +208,10 @@ class PluginRegistry(
                 now, request, action, access.explanation,
                 PluginExecutionStatus.PERMISSION_REQUIRED, access
             )
+            is PluginAccessDecision.UserAuthorizationRequired -> return denied(
+                now, request, action, access.explanation,
+                PluginExecutionStatus.USER_AUTHORIZATION_REQUIRED, access
+            )
             is PluginAccessDecision.CredentialRequired -> return denied(
                 now, request, action, access.explanation,
                 PluginExecutionStatus.CREDENTIAL_REQUIRED, access
@@ -267,6 +271,10 @@ class PluginRegistry(
                 is PluginAccessDecision.PermissionRequired -> return denied(
                     now, request, action, currentAccess.explanation,
                     PluginExecutionStatus.PERMISSION_REQUIRED, currentAccess
+                )
+                is PluginAccessDecision.UserAuthorizationRequired -> return denied(
+                    now, request, action, currentAccess.explanation,
+                    PluginExecutionStatus.USER_AUTHORIZATION_REQUIRED, currentAccess
                 )
                 is PluginAccessDecision.CredentialRequired -> return denied(
                     now, request, action, currentAccess.explanation,
@@ -383,6 +391,7 @@ class PluginRegistry(
         action?.let {
             val outcome = when (status) {
                 PluginExecutionStatus.PERMISSION_REQUIRED -> "permission_required"
+                PluginExecutionStatus.USER_AUTHORIZATION_REQUIRED -> "user_authorization_required"
                 PluginExecutionStatus.CREDENTIAL_REQUIRED -> "credential_required"
                 PluginExecutionStatus.PLUGIN_NOT_CONNECTED -> "not_connected"
                 PluginExecutionStatus.CONFIRMATION_REQUIRED -> "confirmation_required"
