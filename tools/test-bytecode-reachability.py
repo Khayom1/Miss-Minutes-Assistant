@@ -12,8 +12,10 @@ asm = pathlib.Path(sys.argv[2]).resolve()
 with tempfile.TemporaryDirectory(prefix="bytecode-reachability-test-") as tmp:
     work = pathlib.Path(tmp)
     src = work / "src/com/khayom1/missminutes"
+    worker_src = work / "src/androidx/work"
     out = work / "classes"
     src.mkdir(parents=True)
+    worker_src.mkdir(parents=True)
     out.mkdir()
     (src / "Entry.java").write_text("""
 package com.khayom1.missminutes;
@@ -31,10 +33,25 @@ public class Helper {
   public void dead() {}
 }
 """, encoding="utf-8")
+    (worker_src / "CoroutineWorker.java").write_text("""
+package androidx.work;
+public abstract class CoroutineWorker {
+  public abstract Object doWork();
+}
+""", encoding="utf-8")
+    (src / "WorkerEntry.java").write_text("""
+package com.khayom1.missminutes;
+public class WorkerEntry extends androidx.work.CoroutineWorker {
+  public WorkerEntry() {}
+  @Override public Object doWork() { return new Helper().used(); }
+  public void unusedWorkerMethod() {}
+}
+""", encoding="utf-8")
     manifest = work / "AndroidManifest.xml"
     manifest.write_text("""<manifest xmlns:android="http://schemas.android.com/apk/res/android"
  package="com.khayom1.missminutes"><application><activity android:name=".Entry"/></application></manifest>""", encoding="utf-8")
-    subprocess.run(["javac", "-d", str(out), *map(str, src.glob("*.java"))], check=True)
+    java_sources = list(src.glob("*.java")) + list(worker_src.glob("*.java"))
+    subprocess.run(["javac", "-d", str(out), *map(str, java_sources)], check=True)
     report = work / "report.json"
     cp = str(classes) + ":" + str(asm)
     subprocess.run(["java", "-cp", cp, "BytecodeReachability",
@@ -44,4 +61,7 @@ public class Helper {
     assert "com.khayom1.missminutes.Entry#unused()V" in unreachable, unreachable
     assert "com.khayom1.missminutes.Helper#dead()V" in unreachable, unreachable
     assert "com.khayom1.missminutes.Helper#used()V" not in unreachable, unreachable
-    print("PASS: Android lifecycle roots, direct call reachability, and dead-method candidate detection")
+    assert "com.khayom1.missminutes.WorkerEntry#doWork()Ljava/lang/Object;" not in unreachable, unreachable
+    assert "com.khayom1.missminutes.WorkerEntry#<init>()V" not in unreachable, unreachable
+    assert "com.khayom1.missminutes.WorkerEntry#unusedWorkerMethod()V" in unreachable, unreachable
+    print("PASS: Android lifecycle roots, WorkManager worker roots, direct calls, and dead-method candidate detection")
