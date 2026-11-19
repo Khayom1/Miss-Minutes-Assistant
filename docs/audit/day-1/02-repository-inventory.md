@@ -650,3 +650,72 @@ The bytecode log reported 455 compiled app classes, 3,360 methods, 26 roots, 2,2
 - [ ] The exact latest-main recursive tree and final report/artifact must be reconciled after CI completes.
 
 **Status:** The previously identified WorkManager omission and missing bytecode artifact retention have been corrected in code. Step 02 is not marked 100% until the new CI run passes, its archived report is inspected, and all remaining declaration candidates receive evidence-based dispositions. A semantic proof that depends on a Kotlin compiler/PSI analysis remains outside the current analyzer's guarantees and must be stated as a limitation rather than concealed.
+
+
+## 18. Final reconciliation — exact main tree and CI artifact (2026-11-19)
+
+**Verified main commit:** `f2432082d075ed273ea5bbf274dbab74b57510e8`  
+**Recursive Git tree:** `truncated: false`; 206 entries = 145 tracked files + 61 tracked directories.  
+**Tracked file extension inventory:** 127 `.kt`, 3 `.kts`, 7 `.xml`, 2 `.md`, 2 `.py`, 1 `.yml`, 1 `.properties`, 1 `.java`, and 1 `.gitignore`. This reconciles the earlier 141-file historical baseline with the current added audit tooling and documentation; no tree truncation occurred.
+
+### 18.1 Final CI evidence
+
+GitHub Actions run [44540351481](https://github.com/Khayom1/Miss-Minutes-Assistant/actions/runs/44540351481), run number 736, validated exact head `f2432082d075ed273ea5bbf274dbab74b57510e8` and concluded **success**. All 19 substantive workflow steps completed successfully:
+
+1. Environment and toolchain setup (OSV scanner image, checkout, JDK 17, Android SDK/platform, Gradle).
+2. Kotlin source-format sanity check.
+3. Kotlin declaration/reference triage generation.
+4. App-local bytecode reachability graph generation.
+5. Tracked working-tree secret scan.
+6. JVM tests, Debug build, Release build and lint.
+7. Android runtime dependency report and lock evidence.
+8. OSV dependency vulnerability scan.
+9. KVM and pinned emulator setup.
+10. Android instrumentation tests on API 35.
+11. APK SHA-256 checksum generation.
+12. Release-evidence artifact upload.
+
+The successful job exposed artifact `miss-minutes-p8-release-candidates` (artifact ID `14538167859`, 24,294,712 bytes; SHA-256 `37e604ea66e136a9ef881cab34766e5be77c613f8b570d8a10c9af73602a73a6`). The archive was downloaded and inspected. It contains both APKs, SHA-256 sums, resolved runtime dependencies, Gradle lockfile, Kotlin triage JSON/summary, and the previously omitted `build/bytecode-audit/bytecode-reachability.json`.
+
+### 18.2 Exact current Kotlin triage disposition
+
+The final artifact was generated from the exact successful CI commit and reports:
+
+| Measure | Count |
+|---|---:|
+| Kotlin files scanned | 127 |
+| Tracked text files searched | 145 |
+| Declarations detected | 3,343 |
+| Production declarations | 2,154 |
+| Test declarations | 1,189 |
+| Has textual reference | 2,845 |
+| Framework/annotation entry-point review | 210 |
+| Zero-text-reference candidates | 288 |
+
+All 288 zero-text-reference candidates are in the test source sets: 287 test functions and one test property (`testRule`). There are **zero production declarations** in this zero-reference bucket. The test candidates are test-runner/lifecycle/Compose test discovery surfaces or test fixtures, not evidence of dead production code. Their zero textual reference is expected for methods discovered through test annotations/runners and rule conventions.
+
+The 210 framework/annotation review flags split into 155 production declarations and 55 test declarations. They remain explicitly classified as framework/annotation review flags, not dead-code findings. The production cases include Android callback/lifecycle overrides, service and worker entry points, Compose UI declarations, and framework/annotation-driven declarations. The source-level manifest, WorkManager, Compose, listener, service and plugin-dispatch paths are documented in Sections 14–17. The triage scanner is heuristic; it cannot prove invocation of every flagged declaration and is not represented as a compiler-backed semantic call graph.
+
+### 18.3 Bytecode reachability evidence
+
+The archived bytecode report records 455 compiled app classes, 3,360 methods, 28 roots, 2,201 reachable methods and 1,159 unreachable *candidates*. The WorkManager regression fixture passed. The report explicitly roots both `AgentTaskWorker` constructor and suspend `doWork` method. The 1,159 are candidates produced by a conservative app-local JVM bytecode graph, not confirmed dead methods; generated code, Android framework dispatch, reflection, Compose and other dynamic invocation remain outside its proof guarantees.
+
+### 18.4 Release artifact integrity
+
+The archived `SHA256SUMS.txt` records:
+- Debug APK: `5986796ee8b2e63bbf093cbde63584c4eb23874d4c4d89c9b827a0e2fd7ffc92`
+- Unsigned Release APK: `724818cdc008509a714962d770591d0fbe18664f5c4d4e484dcf039e806b857c`
+
+### 18.5 Step 02 acceptance
+
+- [x] Exact current-main recursive tree enumerated without truncation.
+- [x] All 145 tracked files and 61 directories reconciled; all file types classified.
+- [x] Kotlin production, JVM test and instrumentation test source sets counted and scanned.
+- [x] Manifest and major framework entry paths documented, including WorkManager.
+- [x] All zero-reference candidates dispositioned by source set: 288 test-only; zero production zero-reference candidates.
+- [x] Framework/annotation review bucket quantified and explicitly distinguished from dead-code findings.
+- [x] Bytecode report archived and inspected; WorkManager worker constructor and `doWork` roots verified.
+- [x] Exact final-main CI passed all 19 substantive steps, including API 35 instrumentation tests.
+- [x] APK checksums and complete release-evidence artifact generated and inspected.
+
+**Final Step 02 result:** the exhaustive repository/module inventory and its defined verification scope are complete on the exact commit above. This completion does not claim that every method is semantically proven reachable or dead: that stronger result would require a Kotlin compiler/PSI-aware semantic analysis plus complete modeling of Android and dynamic dispatch, which this repository does not currently implement. The documented boundary is a limitation of the reachability proof, not a missing tracked-file inventory item.
