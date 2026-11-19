@@ -64,6 +64,7 @@ class AndroidPluginAccessChecker(
             PluginCapability.BATTERY_STATUS,
             PluginCapability.CALENDAR_READ,
             PluginCapability.CALENDAR_WRITE,
+            PluginCapability.ALARM_SCHEDULE,
             PluginCapability.CONTACTS_READ,
             PluginCapability.LOCATION_APPROXIMATE,
             PluginCapability.LOCATION_PRECISE -> Unit
@@ -96,6 +97,7 @@ class AndroidPluginAccessChecker(
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR
         )
+        PluginCapability.ALARM_SCHEDULE -> listOf("com.android.alarm.permission.SET_ALARM")
         PluginCapability.CONTACTS_READ -> listOf(Manifest.permission.READ_CONTACTS)
         PluginCapability.LOCATION_APPROXIMATE -> listOf(Manifest.permission.ACCESS_COARSE_LOCATION)
         PluginCapability.LOCATION_PRECISE -> listOf(
@@ -111,6 +113,7 @@ class AndroidPluginAccessChecker(
     }
 
     private fun permissionLabel(permission: String): String = when (permission) {
+        "com.android.alarm.permission.SET_ALARM" -> "Alarm scheduling"
         Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR -> "Calendar access"
         Manifest.permission.READ_CONTACTS -> "Contacts access"
         Manifest.permission.ACCESS_COARSE_LOCATION,
