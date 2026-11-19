@@ -15,7 +15,7 @@ class PluginRegistryAgentActionExecutor(
 ) : AgentActionExecutor, AgentActionCatalogProvider {
     private val toolDispatcher = PluginToolCallDispatcher(registry)
 
-    override fun availableTools(): List<PluginToolDescriptor> = registry.connectedTools()
+    override fun availableTools(): List<PluginToolDescriptor> = registry.readyTools()
 
     override fun executeToolCall(
         toolName: String,
