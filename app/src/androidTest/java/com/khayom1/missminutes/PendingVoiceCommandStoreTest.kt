@@ -5,6 +5,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.khayom1.missminutes.voice.PendingVoiceCommandStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
