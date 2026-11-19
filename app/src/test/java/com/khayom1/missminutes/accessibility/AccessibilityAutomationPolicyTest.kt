@@ -25,6 +25,25 @@ class AccessibilityAutomationPolicyTest {
     }
 
     @Test
+    fun modernAndroidPermissionDialogWordingIsTreatedAsHighRisk() {
+        listOf(
+            "Allow Miss Minutes to record audio?",
+            "Allow Miss Minutes to take pictures and record video?",
+            "Allow Miss Minutes to send you notifications?",
+            "Allow Miss Minutes to access photos and videos?",
+            "Allow Miss Minutes to find nearby devices?",
+            "Allow Miss Minutes to manage all files?",
+            "Разрешить приложению записывать аудио?",
+            "Разрешить отправлять уведомления?",
+            "Иҷозат додан барои сабти садо",
+            "Иҷозат додан барои ирсоли огоҳиҳо"
+        ).forEach { label ->
+            assertTrue("Expected sensitive permission wording to be high risk: $label",
+                AccessibilityAutomationPolicy.isHighRiskControlLabel(label))
+        }
+    }
+
+    @Test
     fun labelMatchingIsCaseAndWhitespaceInsensitive() {
         assertTrue(AccessibilityAutomationPolicy.normalize("  POST   COMMENT ") == "post comment")
     }
