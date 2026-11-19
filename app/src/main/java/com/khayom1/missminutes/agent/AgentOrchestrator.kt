@@ -3,6 +3,7 @@ package com.khayom1.missminutes.agent
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
 import com.khayom1.missminutes.plugins.PluginToolDescriptor
+import java.util.concurrent.CancellationException
 import java.util.concurrent.ConcurrentHashMap
 
 /** A single, explicitly allowlisted plugin invocation in an inspectable task graph. */
@@ -383,8 +384,28 @@ class AgentOrchestrator(
                 pending.action.request.copy(userConfirmed = confirmationRequired && approvalFresh),
                 running.getValue(pending.id).idempotencyKey
             )
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            PluginExecutionResult(
+                false,
+                "Action was interrupted after dispatch; verify its effect before retrying.",
+                pending.action.requestCapability(),
+                com.khayom1.missminutes.plugins.PluginExecutionStatus.CANCELLED
+            )
+        } catch (_: CancellationException) {
+            PluginExecutionResult(
+                false,
+                "Action was cancelled after dispatch; verify its effect before retrying.",
+                pending.action.requestCapability(),
+                com.khayom1.missminutes.plugins.PluginExecutionStatus.CANCELLED
+            )
         } catch (_: Exception) {
-            PluginExecutionResult(false, "Action failed safely.", pending.action.requestCapability())
+            PluginExecutionResult(
+                false,
+                "Action failed after dispatch; verify its effect before retrying.",
+                pending.action.requestCapability(),
+                com.khayom1.missminutes.plugins.PluginExecutionStatus.FAILED
+            )
         } finally {
             activeExecutions.remove(taskId, executingThread)
         }
@@ -406,15 +427,31 @@ class AgentOrchestrator(
                 return@synchronized AgentAdvanceResult.Finished(current)
             }
 
+            val outcomeUncertain = result.status in setOf(
+                com.khayom1.missminutes.plugins.PluginExecutionStatus.FAILED,
+                com.khayom1.missminutes.plugins.PluginExecutionStatus.TIMED_OUT,
+                com.khayom1.missminutes.plugins.PluginExecutionStatus.CANCELLED,
+                com.khayom1.missminutes.plugins.PluginExecutionStatus.OUTPUT_REJECTED
+            )
             val finalNode = running.getValue(pending.id).copy(
-                status = if (result.success) AgentNodeStatus.SUCCEEDED else AgentNodeStatus.FAILED,
-                message = result.message.take(MAX_RESULT_CHARACTERS),
+                status = when {
+                    outcomeUncertain -> AgentNodeStatus.RECOVERY_REQUIRED
+                    result.success -> AgentNodeStatus.SUCCEEDED
+                    else -> AgentNodeStatus.FAILED
+                },
+                message = if (outcomeUncertain) {
+                    "The action may have taken effect. Verify its external result before retrying. " +
+                        result.message.take(MAX_RESULT_CHARACTERS)
+                } else {
+                    result.message.take(MAX_RESULT_CHARACTERS)
+                },
                 approved = false,
                 approvedAtMillis = null
             )
             val finalNodes = running + (pending.id to finalNode)
             val completed = current.completedSteps + 1
             val nextStatus = when {
+                outcomeUncertain -> AgentTaskStatus.RECOVERY_REQUIRED
                 !result.success -> AgentTaskStatus.FAILED
                 finalNodes.values.all { it.status == AgentNodeStatus.SUCCEEDED } -> AgentTaskStatus.SUCCEEDED
                 else -> AgentTaskStatus.READY
@@ -426,7 +463,11 @@ class AgentOrchestrator(
                 updatedAtMillis = clockMillis()
             )
             store.save(current)
-            AgentAdvanceResult.Progress(current, pending.id)
+            if (outcomeUncertain) {
+                AgentAdvanceResult.Finished(current)
+            } else {
+                AgentAdvanceResult.Progress(current, pending.id)
+            }
         }
     }
 
