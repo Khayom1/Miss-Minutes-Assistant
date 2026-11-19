@@ -7,6 +7,8 @@ import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.AndroidPluginConsentStore
 import com.khayom1.missminutes.plugins.AndroidPluginManifestStore
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
+import com.khayom1.missminutes.device.DeviceToolCapability
+import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
@@ -47,7 +49,9 @@ class AgentTaskRuntimeTest {
             description = "An ephemeral manifest proves the injected registry is shared."
         )
         val consent = AndroidPluginConsentStore(context)
+        val deviceAuthorization = SharedPreferencesDeviceToolAuthorization(context)
         consent.setGranted(manifest.id, false)
+        deviceAuthorization.setGranted(DeviceToolCapability.DEVICE_INFO, true)
 
         try {
             assertTrue(registry.install(manifest))
@@ -59,6 +63,7 @@ class AgentTaskRuntimeTest {
             assertFalse(orchestrator.availablePluginTools().any { it.pluginId == manifest.id })
         } finally {
             consent.setGranted(manifest.id, false)
+            deviceAuthorization.setGranted(DeviceToolCapability.DEVICE_INFO, false)
         }
     }
 
