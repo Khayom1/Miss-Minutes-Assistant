@@ -43,7 +43,7 @@ public abstract class CoroutineWorker {
 package com.khayom1.missminutes;
 public class WorkerEntry extends androidx.work.CoroutineWorker {
   public WorkerEntry() {}
-  @Override public Object doWork() { return new Helper().used(); }
+  @Override public Object doWork() { new Helper().used(); return null; }
   public void unusedWorkerMethod() {}
 }
 """, encoding="utf-8")
