@@ -7,8 +7,9 @@ import com.khayom1.missminutes.plugins.PluginToolCallDispatcher
 import com.khayom1.missminutes.plugins.PluginToolDescriptor
 
 /**
- * Adapter to the closed-world registry. Only compiled handlers can execute;
- * the currently shipped Android status actions are read-only.
+ * Adapter to the closed-world registry. Only compiled handlers with currently
+ * granted access are exposed to the agent; execution rechecks consent and
+ * access, and the registry enforces confirmation for state-changing actions.
  */
 class PluginRegistryAgentActionExecutor(
     private val registry: PluginRegistry
