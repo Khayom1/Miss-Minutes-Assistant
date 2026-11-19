@@ -747,4 +747,48 @@ class PluginRegistryTest {
         assertEquals(PluginExecutionStatus.CANCELLED, result.get()?.status)
         assertFalse(consent.isGranted("test_plugin"))
     }
+
+    @Test
+    fun installedManifestIsDefensivelyCopiedFromMutableCallerCollections() {
+        val consent = PluginConsentStore { true }
+        val registry = PluginRegistry(
+            handlers = listOf(handler { PluginActionOutput(true, "ok") }),
+            consentStore = consent,
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker
+        )
+        val mutableCapabilities = mutableSetOf(PluginCapability.DEVICE_INFORMATION)
+        val mutableAllowedValues = mutableSetOf("en", "ru", "tg")
+        val mutableArguments = manifest.actions.single().arguments.toMutableMap().apply {
+            this["locale"] = getValue("locale").copy(allowedValues = mutableAllowedValues)
+        }
+        val mutableActions = mutableListOf(
+            manifest.actions.single().copy(arguments = mutableArguments)
+        )
+        val input = manifest.copy(
+            capabilities = mutableCapabilities,
+            actions = mutableActions
+        )
+
+        assertTrue(registry.install(input))
+        mutableCapabilities.clear()
+        mutableAllowedValues.clear()
+        mutableArguments.clear()
+        mutableActions.clear()
+
+        val stored = registry.installedPlugins().single()
+        assertEquals(setOf(PluginCapability.DEVICE_INFORMATION), stored.capabilities)
+        assertEquals(1, stored.actions.size)
+        assertEquals(setOf("en", "ru", "tg"), stored.actions.single().arguments.getValue("locale").allowedValues)
+        assertTrue(
+            registry.execute(
+                PluginExecutionRequest(
+                    "test_plugin",
+                    "read_info",
+                    mapOf("locale" to PluginValue.Text("en"))
+                )
+            ).success
+        )
+    }
+
 }
