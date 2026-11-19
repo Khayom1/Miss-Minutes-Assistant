@@ -18,6 +18,7 @@ public final class BytecodeReachability {
   }
   static final Map<String, Set<Method>> methodsByOwner = new HashMap<>();
   static final Map<Method, Set<Method>> edges = new HashMap<>();
+  static final Map<Method, Set<String>> virtualCalls = new HashMap<>();
   static final Map<String, List<Method>> virtualTargets = new HashMap<>();
   static final Set<Method> methods = new TreeSet<>(Comparator.comparing(Method::key));
   static final Set<String> classes = new TreeSet<>();
@@ -39,7 +40,7 @@ public final class BytecodeReachability {
               public void visitMethodInsn(int opcode,String target,String mn,String md,boolean itf) {
                 edges.computeIfAbsent(from,k->new HashSet<>()).add(new Method(target,mn,md));
                 if(opcode==Opcodes.INVOKEVIRTUAL || opcode==Opcodes.INVOKEINTERFACE)
-                  edges.get(from).addAll(virtualTargets.getOrDefault(sig(mn,md),List.of()));
+                  virtualCalls.computeIfAbsent(from,k->new HashSet<>()).add(sig(mn,md));
               }
               public void visitInvokeDynamicInsn(String n,String d,Handle bsm,Object... args) {
                 if(bsm.getTag()>=Opcodes.H_INVOKEVIRTUAL && bsm.getTag()<=Opcodes.H_INVOKEINTERFACE)
@@ -84,7 +85,10 @@ public final class BytecodeReachability {
     while(!q.isEmpty()) {
       Method m=q.removeFirst();
       if(!reachable.add(m))continue;
-      for(Method next:edges.getOrDefault(m,Set.of())) {
+      Set<Method> nextMethods=new HashSet<>(edges.getOrDefault(m,Set.of()));
+      for(String signature:virtualCalls.getOrDefault(m,Set.of()))
+        nextMethods.addAll(virtualTargets.getOrDefault(signature,List.of()));
+      for(Method next:nextMethods) {
         if(methods.contains(next) && !reachable.contains(next))q.addLast(next);
       }
     }
