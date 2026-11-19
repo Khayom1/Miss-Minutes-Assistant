@@ -57,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
@@ -1830,6 +1831,7 @@ private fun ChatScreen(
     onSpeechInput: () -> Unit
 ) { 
     val messageListState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
     LaunchedEffect(messages.lastOrNull()?.id) {
         if (messages.isNotEmpty()) {
             messageListState.scrollToItem(messages.lastIndex)
@@ -1898,7 +1900,7 @@ private fun ChatScreen(
                 placeholder = { Text(copy.composerHint) },
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { onSend() })
+                keyboardActions = KeyboardActions(onSend = { focusManager.clearFocus(); onSend() })
             )
             TextButton(
                 onClick = onSpeechInput,
@@ -1908,7 +1910,7 @@ private fun ChatScreen(
                 Text(if (speechListening) copy.stopListening else copy.dictate)
             }
             Button(
-                onClick = onSend,
+                onClick = { focusManager.clearFocus(); onSend() },
                 enabled = draft.isNotBlank() && !isSending,
                 modifier = Modifier.testTag("chat_send")
             ) {

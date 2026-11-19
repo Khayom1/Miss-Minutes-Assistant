@@ -84,6 +84,14 @@ jobs:
             exit 1
           fi
 
+      - name: Preserve resolved dependency lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: miss-minutes-gradle-locks
+          path: app/gradle.lockfile
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Scan resolved dependencies for known vulnerabilities (OSV)
         uses: google/osv-scanner-action/osv-scanner-action@v2.7.1
         with:
