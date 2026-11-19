@@ -140,3 +140,11 @@ This is a baseline and inventory step. No application behavior was changed, no f
 The remote baseline inventory is complete for the data exposed by the GitHub integration and is pinned to main SHA `cdb27a37b4a53e5f2208178c255f9a1ca05d9499`. The audit has surfaced and preserved the concrete CI and PR hygiene blockers rather than silently fixing or overlooking them.
 
 **Step 01 status:** Baseline evidence captured. Local working-tree state and detailed branch-protection settings remain explicitly unverified due to environment/integration access limits. The application source and CI workflow remain untouched by this step.
+
+## 9. Post-commit validation of the audit artifact
+
+The audit-only commit `dc00d41687a6bed476174cb135ff1b48604c5eed` triggered Android CI run [#711](https://github.com/Khayom1/Miss-Minutes-Assistant/actions/runs/44489789519). The run completed with **failure** at the same API 35 instrumentation step. All 85 tests executed; the same two `AgentTaskWorkerTest` assertions failed with expected `FAILED` versus actual `WAITING_APPROVAL`. JVM tests, debug/release builds, lint, dependency locking, and OSV scan completed successfully before the instrumentation failure.
+
+This confirms the audit commit itself did not introduce a new compile, lint, or dependency-scan failure; however, the branch's CI status remains red. The failure is a pre-existing product/test behavior issue captured as a finding, not a condition that this read-only baseline step is authorized to fix.
+
+**Scope completion:** The remote repository inventory, baseline evidence, CI failure capture, and audit artifact commit are complete. Device-local Git state and detailed branch-protection configuration remain outside the accessible evidence boundary and are explicitly not certified.
