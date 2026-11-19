@@ -447,6 +447,15 @@ class MainActivityTest {
         composeRule.onNodeWithTag("plugin_consent_android_device_status")
             .performScrollTo()
             .performClick()
+        composeRule.onNodeWithTag("plugin_authorization_android_device_status_battery_status")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("device_capability_read_calendar")
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithTag("plugin_access_android_device_status_calendar_summary")
+            .performScrollTo()
+            .assertIsDisplayed()
         composeRule.onNodeWithText("New").performClick()
         // Creating/loading a conversation is asynchronous; wait for Chat to be
         // composed before interacting with its input field.
