@@ -791,4 +791,29 @@ class PluginRegistryTest {
         )
     }
 
+
+    @Test
+    fun compiledActionIdentityCannotBeClaimedByTwoPluginIds() {
+        val registry = registry(consented = true) { PluginActionOutput(true, "ok") }
+        assertTrue(registry.install(manifest))
+
+        val alias = manifest.copy(id = "another_plugin")
+        assertTrue(runCatching { registry.install(alias) }.isFailure)
+        assertEquals(listOf("test_plugin"), registry.installedPlugins().map { it.id })
+    }
+
+    @Test
+    fun installedPluginSnapshotsCannotMutateRegistryState() {
+        val registry = registry(consented = true) { PluginActionOutput(true, "ok") }
+        assertTrue(registry.install(manifest))
+
+        val exposed = registry.installedPlugins().single()
+        (exposed.capabilities as MutableSet<PluginCapability>).clear()
+        (exposed.actions as MutableList<PluginActionSpec>).clear()
+
+        val stored = registry.installedPlugins().single()
+        assertEquals(setOf(PluginCapability.DEVICE_INFORMATION), stored.capabilities)
+        assertEquals(1, stored.actions.size)
+    }
+
 }
