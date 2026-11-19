@@ -4,6 +4,7 @@ import com.khayom1.missminutes.plugins.PluginAccessDecision
 import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
+import com.khayom1.missminutes.plugins.PluginExecutionStatus
 import com.khayom1.missminutes.plugins.PluginToolDescriptor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -297,16 +298,47 @@ class AgentOrchestratorTest {
     }
 
     @Test
-    fun failedActionStopsGraphAndDoesNotRunDependents() {
+    fun failedDispatchedActionRequiresRecoveryAndDoesNotRunDependents() {
         var calls = 0
         val engine = orchestrator { _, _ ->
             calls++
-            PluginExecutionResult(false, "denied", PluginCapability.DEVICE_INFORMATION)
+            PluginExecutionResult(false, "handler failed", PluginCapability.DEVICE_INFORMATION)
         }
         engine.create(plan(listOf(node("first"), node("second", setOf("first")))))
-        val result = engine.advance("task_1") as AgentAdvanceResult.Progress
-        assertEquals(AgentTaskStatus.FAILED, result.state.status)
+        val result = engine.advance("task_1") as AgentAdvanceResult.Finished
+        assertEquals(AgentTaskStatus.RECOVERY_REQUIRED, result.state.status)
+        assertEquals(AgentNodeStatus.RECOVERY_REQUIRED, result.state.nodes.getValue("first").status)
         assertEquals(1, calls)
+        engine.advance("task_1")
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun timedOutCancelledAndRejectedOutputActionsRequireRecovery() {
+        listOf(
+            PluginExecutionStatus.TIMED_OUT,
+            PluginExecutionStatus.CANCELLED,
+            PluginExecutionStatus.OUTPUT_REJECTED
+        ).forEach { status ->
+            var calls = 0
+            val engine = orchestrator { _, _ ->
+                calls++
+                PluginExecutionResult(
+                    false,
+                    "uncertain outcome",
+                    PluginCapability.DEVICE_INFORMATION,
+                    status
+                )
+            }
+            engine.create(plan(listOf(node("external"))))
+
+            val result = engine.advance("task_1") as AgentAdvanceResult.Finished
+            assertEquals(status.name, AgentTaskStatus.RECOVERY_REQUIRED, result.state.status)
+            assertEquals(status.name, AgentNodeStatus.RECOVERY_REQUIRED, result.state.nodes.getValue("external").status)
+            assertEquals(1, calls)
+            engine.advance("task_1")
+            assertEquals(1, calls)
+        }
     }
 
 
