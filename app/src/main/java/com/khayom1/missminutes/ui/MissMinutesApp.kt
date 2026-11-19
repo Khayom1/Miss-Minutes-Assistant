@@ -1789,6 +1789,7 @@ fun MissMinutesApp(
                                 onDeviceGrantChange = { capability, granted ->
                                     deviceAuthorization.setGranted(capability, granted)
                                     deviceGrants = deviceGrants + (capability to granted)
+                                    pluginToolCatalogRevision++
                                 },
                                 onRunDeviceCommand = { command, confirmed ->
                                     deviceToolEngine.execute(
@@ -2679,6 +2680,36 @@ private fun SettingsScreen(
                         onCheckedChange = { onDeviceGrantChange(capability, it) },
                         modifier = Modifier.testTag("device_capability_${capability.name.lowercase()}")
                     )
+                }
+            }
+            val userAuthorizationTools = pluginTools.filter {
+                it.connected && it.access is PluginAccessDecision.UserAuthorizationRequired
+            }
+            if (userAuthorizationTools.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Иҷозати амалҳои дастгоҳ"
+                            AppLanguage.Russian -> "Разрешение действий устройства"
+                            AppLanguage.English -> "Device action authorization"
+                        },
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    userAuthorizationTools.forEach { tool ->
+                        val authorization = tool.access as PluginAccessDecision.UserAuthorizationRequired
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "${tool.pluginName} · ${tool.actionId}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                authorization.explanation,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                 }
             }
             val permissionRequiredTools = pluginTools.filter {
