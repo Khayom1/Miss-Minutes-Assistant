@@ -133,18 +133,25 @@ class DirectDeepSeekProvider(
                 ),
                 body = payload
             )
+        } catch (error: AiProviderException) {
+            throw error
         } catch (error: IOException) {
-            throw AiProviderException.Unavailable(error)
+            throw mapAiTransportIOException(error)
         }
 
         when (response.statusCode) {
             200 -> Unit
             401, 403 -> throw AiProviderException.InvalidApiKey()
+            408 -> throw AiProviderException.Timeout()
             429 -> throw AiProviderException.RateLimited()
             in 500..599 -> throw AiProviderException.Unavailable()
+            in 400..499 -> throw AiProviderException.ProviderRejected(response.statusCode)
             else -> throw AiProviderException.InvalidResponse()
         }
 
+        if (response.body.length > MAX_RESPONSE_BODY_CHARS) {
+            throw AiProviderException.InvalidResponse()
+        }
         val decoded = try {
             json.decodeFromString(DeepSeekResponse.serializer(), response.body)
         } catch (error: SerializationException) {
@@ -187,6 +194,7 @@ class DirectDeepSeekProvider(
 
     private companion object {
         const val MAX_RESPONSE_CHARS = 64_000
+        const val MAX_RESPONSE_BODY_CHARS = 64 * 1024
         const val MAX_ARGUMENT_CHARACTERS = 2_000
         const val MAX_TOOL_CALLS = 4
         val TOOL_ID = Regex("^[a-zA-Z0-9_-]{1,128}$")

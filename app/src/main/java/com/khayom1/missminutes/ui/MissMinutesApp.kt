@@ -124,10 +124,13 @@ import com.khayom1.missminutes.memory.LocalConversationStore
 import com.khayom1.missminutes.memory.MemoryItem
 import com.khayom1.missminutes.memory.RestoreConflictPolicy
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import com.khayom1.missminutes.ai.SpeechInputProvider
 import com.khayom1.missminutes.ai.SpeechInputBackgroundGuard
 import java.util.Locale
@@ -163,6 +166,7 @@ private data class UiCopy(
     val welcomeBody: String,
     val composerHint: String,
     val send: String,
+    val cancel: String,
     val gatewayNotice: String,
     val you: String,
     val dashboardTitle: String,
@@ -172,8 +176,10 @@ private data class UiCopy(
     val memory: String,
     val deviceTools: String,
     val notConnected: String,
-    val providerNotVerified: String,
-    val providerResponding: String,
+    val providerConfigured: String,
+    val providerNeedsKey: String,
+    val localAi: String,
+    val localAiUnavailable: String,
     val historyTitle: String,
     val historyEmpty: String,
     val settingsTitle: String,
@@ -212,7 +218,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Your personal assistant, ready when you are.",
         composerHint = "Message Miss Minutes",
         send = "Send",
-        gatewayNotice = "Chat, history and memory stay on this device. AI replies require your optional DeepSeek API key and go directly to DeepSeek over HTTPS.",
+        cancel = "Cancel",
+        gatewayNotice = "Chat, history and memory stay on this device. AI replies require your optional DeepSeek API key and go directly to DeepSeek over HTTPS. On-device AI inference is not available in this build.",
         you = "You",
         dashboardTitle = "Your workspace",
         dashboardBody = "A clear view of assistant capabilities and their connection status.",
@@ -221,8 +228,10 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         memory = "Memory",
         deviceTools = "Android tools",
         notConnected = "Not connected",
-        providerNotVerified = "Not yet verified",
-        providerResponding = "Responding",
+        providerConfigured = "DeepSeek configured · internet required",
+        providerNeedsKey = "DeepSeek API key required",
+        localAi = "On-device AI",
+        localAiUnavailable = "Unavailable — no on-device inference engine is installed.",
         historyTitle = "Conversation history",
         historyEmpty = "No saved conversations yet.",
         settingsTitle = "App settings",
@@ -259,7 +268,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ваш персональный помощник всегда под рукой.",
         composerHint = "Сообщение Miss Minutes",
         send = "Отправить",
-        gatewayNotice = "Чаты, история и память хранятся на этом устройстве. Ответы ИИ требуют необязательный API-ключ DeepSeek и отправляются напрямую в DeepSeek по HTTPS.",
+        cancel = "Отмена",
+        gatewayNotice = "Чаты, история и память хранятся на устройстве. Ответы ИИ требуют API-ключ DeepSeek и отправляются напрямую в DeepSeek по HTTPS. Локальный запуск модели ИИ в этой сборке недоступен.",
         you = "Вы",
         dashboardTitle = "Ваше пространство",
         dashboardBody = "Состояние возможностей помощника и подключённых сервисов.",
@@ -268,8 +278,10 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         memory = "Память",
         deviceTools = "Инструменты Android",
         notConnected = "Не подключено",
-        providerNotVerified = "Ещё не проверено",
-        providerResponding = "Отвечает",
+        providerConfigured = "DeepSeek настроен · нужен интернет",
+        providerNeedsKey = "Требуется API-ключ DeepSeek",
+        localAi = "Локальный ИИ",
+        localAiUnavailable = "Недоступно — локальный движок ИИ не установлен.",
         historyTitle = "История диалогов",
         historyEmpty = "Сохранённых диалогов пока нет.",
         settingsTitle = "Настройки приложения",
@@ -306,7 +318,8 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         welcomeBody = "Ёвари шахсии шумо ҳамеша омода аст.",
         composerHint = "Ба Miss Minutes паём нависед",
         send = "Фиристодан",
-        gatewayNotice = "Чат, таърих ва хотира дар ҳамин телефон нигоҳ дошта мешаванд. Барои ҷавобҳои AI калиди ихтиёрии DeepSeek лозим аст; дархост мустақиман тавассути HTTPS ба DeepSeek меравад.",
+        cancel = "Бекор кардан",
+        gatewayNotice = "Чат, таърих ва хотира дар ҳамин телефон нигоҳ дошта мешаванд. Барои ҷавобҳои AI калиди шахсии DeepSeek лозим аст; дархост тавассути HTTPS мустақиман ба DeepSeek меравад. Иҷрои модели AI дар худи телефон дар ин версия дастрас нест.",
         you = "Шумо",
         dashboardTitle = "Муҳити кории шумо",
         dashboardBody = "Ҳолати имкониятҳо ва пайвасти хидматҳои ёвар.",
@@ -315,8 +328,10 @@ private fun copyFor(language: AppLanguage): UiCopy = when (language) {
         memory = "Хотира",
         deviceTools = "Абзорҳои Android",
         notConnected = "Пайваст нест",
-        providerNotVerified = "Ҳанӯз санҷида нашудааст",
-        providerResponding = "Ҷавоб медиҳад",
+        providerConfigured = "DeepSeek танзим шудааст · интернет лозим",
+        providerNeedsKey = "Калиди API-и DeepSeek лозим аст",
+        localAi = "AI-и маҳаллӣ",
+        localAiUnavailable = "Дастнорас — муҳаррики маҳаллии AI насб нашудааст.",
         historyTitle = "Таърихи гуфтугӯҳо",
         historyEmpty = "Ҳоло гуфтугӯи сабтшуда нест.",
         settingsTitle = "Танзимоти барнома",
@@ -534,7 +549,14 @@ fun MissMinutesApp(
     var userEmail by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
-    var aiHasResponded by remember { mutableStateOf(false) }
+    var aiRequestJob by remember { mutableStateOf<Job?>(null) }
+    val cancelAiRequest: () -> Unit = {
+        aiRequestJob?.cancel()
+        aiRequestJob = null
+        conversationGeneration += 1L
+        isSending = false
+        chatError = null
+    }
     var speakingMessageId by remember { mutableStateOf<Long?>(null) }
     DisposableEffect(lifecycleOwner, ttsProvider) {
         val playbackGuard = TtsBackgroundPlaybackGuard(
@@ -756,6 +778,7 @@ fun MissMinutesApp(
     val copy = copyFor(language)
 
     suspend fun loadConversation(ownerId: String, preferredConversationId: String? = null) {
+        cancelAiRequest()
         val snapshot = withContext(Dispatchers.IO) {
             conversationStore.pruneExpired(ownerId)
             val initial = conversationStore.listConversations(ownerId)
@@ -782,7 +805,6 @@ fun MissMinutesApp(
         memoryItems = snapshot.third.second
         retentionDays = snapshot.third.third.first
         memoryContextEnabled = snapshot.third.third.second
-        aiHasResponded = messages.any { !it.isUser }
     }
 
     val createEncryptedBackup: () -> Unit = {
@@ -1294,7 +1316,7 @@ fun MissMinutesApp(
                 chatError = null
                 val requestGeneration = conversationGeneration
 
-                scope.launch {
+                val requestJob = scope.launch(start = CoroutineStart.LAZY) {
                     var requestConversationId: String? = null
                     try {
                         val ownerId = currentOwnerId ?: GUEST_OWNER_ID
@@ -1368,7 +1390,6 @@ fun MissMinutesApp(
                         if (requestGeneration != conversationGeneration) return@launch
                         if (activeConversationId == conversationId) {
                             messages = messages + ChatMessage(assistantMessageId, completion.content, false)
-                            aiHasResponded = true
                         }
                         conversationSummaries = withContext(Dispatchers.IO) {
                             conversationStore.listConversations(ownerId)
@@ -1384,10 +1405,6 @@ fun MissMinutesApp(
                                 AppLanguage.Russian -> "DeepSeek отклонил этот API-ключ. Проверьте его или замените в настройках."
                                 AppLanguage.English -> "DeepSeek rejected this API key. Check it or replace it in Settings."
                             }
-                        }
-                    } catch (_: AiProviderException.LocalWorkspaceUnavailable) {
-                        if (requestGeneration == conversationGeneration) {
-                            chatError = copy.sendFailed
                         }
                     } catch (_: ConversationLimitReachedException) {
                         if (requestGeneration == conversationGeneration &&
@@ -1417,8 +1434,13 @@ fun MissMinutesApp(
                         if (requestGeneration == conversationGeneration) {
                             isSending = false
                         }
+                        if (aiRequestJob === coroutineContext[Job]) {
+                            aiRequestJob = null
+                        }
                     }
                 }
+                aiRequestJob = requestJob
+                requestJob.start()
             }
         }
     }
@@ -1486,6 +1508,7 @@ fun MissMinutesApp(
         }
     }
     val deleteAllLocalData: () -> Unit = {
+        cancelAiRequest()
         currentOwnerId?.let { owner ->
             scope.launch {
                 withContext(Dispatchers.IO) { conversationStore.deleteAll(owner) }
@@ -1498,7 +1521,6 @@ fun MissMinutesApp(
                 exportPayload = null
                 exportError = null
                 pendingDeleteConversationId = null
-                aiHasResponded = false
             }
         }
     }
@@ -1620,6 +1642,7 @@ fun MissMinutesApp(
                                 error = chatError,
                                 onDraftChange = { draft = it },
                                 onSend = { submitMessage(null) },
+                                onCancel = cancelAiRequest,
                                 speakingMessageId = speakingMessageId,
                                 voiceError = voiceError,
                                 voicePreparing = copy.voicePreparing,
@@ -1631,11 +1654,12 @@ fun MissMinutesApp(
                             AppScreen.Dashboard -> DashboardScreen(
                                 copy = copy,
                                 accountLabel = userEmail,
-                                aiStatus = if (aiHasResponded) {
-                                    copy.providerResponding
+                                aiStatus = if (apiKeyConfigured) {
+                                    copy.providerConfigured
                                 } else {
-                                    copy.providerNotVerified
+                                    copy.providerNeedsKey
                                 },
+                                localAiStatus = copy.localAiUnavailable,
                                 voiceStatus = copy.voiceNeedsSetup
                             )
                             AppScreen.History -> HistoryScreen(
@@ -1822,6 +1846,7 @@ private fun ChatScreen(
     error: String?,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
+    onCancel: () -> Unit,
     speakingMessageId: Long?,
     voiceError: String?,
     voicePreparing: String,
@@ -1909,12 +1934,22 @@ private fun ChatScreen(
             ) {
                 Text(if (speechListening) copy.stopListening else copy.dictate)
             }
-            Button(
-                onClick = { focusManager.clearFocus(); onSend() },
-                enabled = draft.isNotBlank() && !isSending,
-                modifier = Modifier.testTag("chat_send")
-            ) {
-                Text(if (isSending) copy.sending else copy.send)
+            if (isSending) {
+                Text(copy.sending, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(
+                    onClick = onCancel,
+                    modifier = Modifier.testTag("chat_cancel")
+                ) {
+                    Text(copy.cancel)
+                }
+            } else {
+                Button(
+                    onClick = { focusManager.clearFocus(); onSend() },
+                    enabled = draft.isNotBlank(),
+                    modifier = Modifier.testTag("chat_send")
+                ) {
+                    Text(copy.send)
+                }
             }
         }
     }
@@ -1958,6 +1993,7 @@ private fun DashboardScreen(
     copy: UiCopy,
     accountLabel: String,
     aiStatus: String,
+    localAiStatus: String,
     voiceStatus: String
 ) {
     Column(
@@ -1970,6 +2006,7 @@ private fun DashboardScreen(
         Text(copy.dashboardBody, color = MaterialTheme.colorScheme.onSurfaceVariant)
         StatusCard(copy.account, accountLabel)
         StatusCard(copy.aiProvider, aiStatus)
+        StatusCard(copy.localAi, localAiStatus)
         StatusCard(copy.voice, voiceStatus)
         StatusCard(copy.memory, copy.notConnected)
         StatusCard(copy.deviceTools, copy.notConnected)

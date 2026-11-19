@@ -1,15 +1,19 @@
 package com.khayom1.missminutes.ai
 
 import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.JsonObject
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 
 enum class AiRole(val wireValue: String) {
     SYSTEM("system"),
@@ -96,10 +100,17 @@ data class AiCompletion(
 
 sealed class AiProviderException(message: String, cause: Throwable? = null) :
     Exception(message, cause) {
-    class LocalWorkspaceUnavailable : AiProviderException("The local workspace is not ready.")
     class MissingApiKey : AiProviderException("A DeepSeek API key must be added in Settings.")
     class InvalidApiKey : AiProviderException("The DeepSeek API key was rejected.")
     class RateLimited : AiProviderException("The AI service rate limit was reached.")
+    class Timeout(cause: Throwable? = null) :
+        AiProviderException("The AI service request timed out.", cause)
+    class ProviderRejected(val statusCode: Int) :
+        AiProviderException("The AI service rejected the request (HTTP $statusCode).") {
+        init {
+            require(statusCode in 400..499)
+        }
+    }
     class Unavailable(cause: Throwable? = null) :
         AiProviderException("The AI service is currently unavailable.", cause)
     class InvalidResponse(cause: Throwable? = null) :
@@ -124,43 +135,17 @@ interface AiHttpTransport {
 }
 
 /**
- * Adapter seam for an optional on-device runtime. It does not download a model
- * or assume that a model is installed. Tool execution is unavailable until the
- * local runtime exposes a structured tool-call contract.
+ * No on-device model runtime is bundled or initialized by this application.
+ * Keep this unavailable until a real, lifecycle-managed inference engine ships.
  */
-interface LocalInferenceRuntime {
-    fun isAvailable(): Boolean
-
-    suspend fun generate(
-        messages: List<AiMessage>,
-        maxOutputTokens: Int
-    ): String
-}
-
-class OptionalLocalAiProvider(
-    private val runtime: LocalInferenceRuntime
-) : AiProvider {
-    override suspend fun complete(request: AiRequest): AiCompletion {
-        if (!runtime.isAvailable() || request.tools.isNotEmpty() ||
-            request.messages.any { it.role == AiRole.TOOL || it.toolCalls.isNotEmpty() }
-        ) {
-            throw AiProviderException.Unavailable()
-        }
-
-        val output = try {
-            runtime.generate(request.messages, request.maxOutputTokens).trim()
-        } catch (error: IOException) {
-            throw AiProviderException.Unavailable(error)
-        }
-
-        if (output.isEmpty()) throw AiProviderException.InvalidResponse()
-        return AiCompletion(content = output, model = "local")
-    }
+object LocalInferenceStatus {
+    const val isAvailable: Boolean = false
+    const val reason: String = "No on-device inference engine is installed."
 }
 
 /**
- * Production OkHttp transport with a hard request timeout. Network work runs
- * on Dispatchers.IO and never blocks the Compose main thread.
+ * Production OkHttp transport with bounded timeouts. Requests use OkHttp's
+ * asynchronous dispatcher and cancel the underlying call with the coroutine.
  */
 class OkHttpAiHttpTransport(
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -175,7 +160,7 @@ class OkHttpAiHttpTransport(
         url: String,
         headers: Map<String, String>,
         body: String
-    ): AiHttpResponse = withContext(Dispatchers.IO) {
+    ): AiHttpResponse = suspendCancellableCoroutine { continuation ->
         val requestHeaders = Headers.Builder().apply {
             headers.forEach { (name, value) -> add(name, value) }
         }.build()
@@ -186,24 +171,50 @@ class OkHttpAiHttpTransport(
             .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
             .build()
 
-        try {
-            client.newCall(request).execute().use { response ->
-                val text = response.body?.source()?.use { source ->
-                    if (source.request(MAX_RESPONSE_BYTES + 1L)) {
-                        throw AiProviderException.InvalidResponse()
-                    }
-                    source.readUtf8()
-                }.orEmpty()
-                AiHttpResponse(statusCode = response.code, body = text)
+        val call = client.newCall(request)
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, error: IOException) {
+                if (continuation.isActive) {
+                    continuation.resumeWith(Result.failure(mapAiTransportIOException(error)))
+                }
             }
-        } catch (error: AiProviderException) {
-            throw error
-        } catch (error: IOException) {
-            throw AiProviderException.Unavailable(error)
-        }
+
+            override fun onResponse(call: Call, response: Response) {
+                val outcome: Result<AiHttpResponse> = try {
+                    response.use {
+                        val source = it.body?.source()
+                        val text = if (source == null) {
+                            ""
+                        } else {
+                            if (source.request(MAX_RESPONSE_BYTES + 1L)) {
+                                throw AiProviderException.InvalidResponse()
+                            }
+                            source.readUtf8()
+                        }
+                        Result.success(AiHttpResponse(statusCode = it.code, body = text))
+                    }
+                } catch (error: AiProviderException) {
+                    Result.failure(error)
+                } catch (error: IOException) {
+                    Result.failure(mapAiTransportIOException(error))
+                } catch (_: Exception) {
+                    Result.failure(AiProviderException.Unavailable())
+                }
+
+                if (continuation.isActive) continuation.resumeWith(outcome)
+            }
+        })
     }
 
     private companion object {
         const val MAX_RESPONSE_BYTES = 64 * 1024
     }
+}
+
+internal fun mapAiTransportIOException(error: IOException): AiProviderException {
+    val timedOut = error is SocketTimeoutException ||
+        (error is InterruptedIOException &&
+            error.message?.contains("timeout", ignoreCase = true) == true)
+    return if (timedOut) AiProviderException.Timeout(error) else AiProviderException.Unavailable(error)
 }

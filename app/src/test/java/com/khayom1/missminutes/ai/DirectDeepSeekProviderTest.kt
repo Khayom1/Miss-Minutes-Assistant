@@ -99,6 +99,17 @@ class DirectDeepSeekProviderTest {
     }
 
     @Test
+    fun rejectsNonJsonSuccessBody() = runBlocking {
+        val error = runCatching {
+            DirectDeepSeekProvider(
+                DeepSeekApiKeySource { "sk-user-owned-test-key-123456" },
+                FakeTransport(AiHttpResponse(200, "not-json"))
+            ).complete(request)
+        }.exceptionOrNull()
+        assertTrue(error is AiProviderException.InvalidResponse)
+    }
+
+    @Test
     fun sendsConnectedToolSchemaAndParsesFunctionCalls() = runBlocking {
         val response = AiHttpResponse(
             200,

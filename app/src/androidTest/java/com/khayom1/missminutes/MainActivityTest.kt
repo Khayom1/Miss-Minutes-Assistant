@@ -256,6 +256,37 @@ class MainActivityTest {
     }
 
     @Test
+    fun userCanCancelPendingProviderRequestWithoutRenderingALateReply() {
+        assertChatReady()
+        val pending = CompletableDeferred<AiCompletion>()
+        aiProvider.pendingCompletion = pending
+
+        composeRule.onNodeWithTag("chat_input").performTextInput("Cancel this request")
+        composeRule.onNodeWithTag("chat_send").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("chat_cancel").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("chat_cancel").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("chat_send").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        pending.complete(AiCompletion(content = "Cancelled late response", model = "test-mock"))
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithText("Cancelled late response").fetchSemanticsNodes().isEmpty())
+
+        val conversation = conversationStore.listConversations("guest-local").single()
+        val savedMessages = conversationStore.getMessages("guest-local", conversation.id)
+        assertTrue(savedMessages.any {
+            it.role == LocalConversationStore.ROLE_USER && it.content == "Cancel this request"
+        })
+        assertFalse(savedMessages.any {
+            it.role == LocalConversationStore.ROLE_ASSISTANT && it.content == "Cancelled late response"
+        })
+    }
+
+    @Test
     fun savedMemoryIsSentOnlyAfterExplicitOptIn() {
         assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
