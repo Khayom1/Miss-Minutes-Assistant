@@ -540,7 +540,7 @@ fun MissMinutesApp(
     DisposableEffect(lifecycleOwner, speechInputProvider) {
         val guard = SpeechInputBackgroundGuard(
             stopListening = speechInputProvider::stop,
-            onStopped = {
+            onForeground = {
                 speechListening = false
                 speechError = null
             }

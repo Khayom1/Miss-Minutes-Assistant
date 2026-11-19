@@ -12,17 +12,17 @@ class SpeechInputBackgroundGuardTest {
     }
 
     @Test
-    fun stopsRecognitionAndClearsUiWhenActivityStops() {
+    fun stopsRecognitionOnActivityStopWithoutMutatingUiDuringDisposal() {
         val owner = TestOwner()
         val events = mutableListOf<String>()
         val guard = SpeechInputBackgroundGuard(
             stopListening = { events += "stop" },
-            onStopped = { events += "clear-ui" }
+            onForeground = { events += "clear-ui" }
         )
 
         guard.onStateChanged(owner, Lifecycle.Event.ON_STOP)
 
-        assertEquals(listOf("stop", "clear-ui"), events)
+        assertEquals(listOf("stop"), events)
     }
 
     @Test
@@ -31,7 +31,7 @@ class SpeechInputBackgroundGuardTest {
         val events = mutableListOf<String>()
         val guard = SpeechInputBackgroundGuard(
             stopListening = { events += "stop" },
-            onStopped = { events += "clear-ui" }
+            onForeground = { events += "clear-ui" }
         )
 
         guard.onStateChanged(owner, Lifecycle.Event.ON_PAUSE)
@@ -45,52 +45,68 @@ class SpeechInputBackgroundGuardTest {
         val events = mutableListOf<String>()
         val guard = SpeechInputBackgroundGuard(
             stopListening = { events += "stop" },
-            onStopped = { events += "clear-ui" }
+            onForeground = { events += "clear-ui" }
         )
 
         guard.onStateChanged(owner, Lifecycle.Event.ON_STOP)
         guard.onStateChanged(owner, Lifecycle.Event.ON_STOP)
 
-        assertEquals(listOf("stop", "clear-ui"), events)
+        assertEquals(listOf("stop"), events)
     }
 
     @Test
-    fun nextForegroundSessionCanBeStoppedAgain() {
+    fun returningToForegroundClearsUiAfterBackgroundStop() {
         val owner = TestOwner()
         val events = mutableListOf<String>()
         val guard = SpeechInputBackgroundGuard(
             stopListening = { events += "stop" },
-            onStopped = { events += "clear-ui" }
+            onForeground = { events += "clear-ui" }
+        )
+
+        guard.onStateChanged(owner, Lifecycle.Event.ON_STOP)
+        guard.onStateChanged(owner, Lifecycle.Event.ON_START)
+
+        assertEquals(listOf("stop", "clear-ui"), events)
+    }
+
+    @Test
+    fun nextBackgroundSessionCanBeStoppedAgain() {
+        val owner = TestOwner()
+        val events = mutableListOf<String>()
+        val guard = SpeechInputBackgroundGuard(
+            stopListening = { events += "stop" },
+            onForeground = { events += "clear-ui" }
         )
 
         guard.onStateChanged(owner, Lifecycle.Event.ON_STOP)
         guard.onStateChanged(owner, Lifecycle.Event.ON_START)
         guard.onStateChanged(owner, Lifecycle.Event.ON_STOP)
 
-        assertEquals(listOf("stop", "clear-ui", "stop", "clear-ui"), events)
+        assertEquals(listOf("stop", "clear-ui", "stop"), events)
     }
 
     @Test
-    fun uiStateIsClearedEvenWhenRecognizerCleanupThrows() {
+    fun stateIsResetEvenWhenRecognizerCleanupThrows() {
         val owner = TestOwner()
         val events = mutableListOf<String>()
         val guard = SpeechInputBackgroundGuard(
             stopListening = { throw IllegalStateException("recognizer already destroyed") },
-            onStopped = { events += "clear-ui" }
+            onForeground = { events += "clear-ui" }
         )
 
         guard.onStateChanged(owner, Lifecycle.Event.ON_STOP)
+        guard.onStateChanged(owner, Lifecycle.Event.ON_START)
 
         assertEquals(listOf("clear-ui"), events)
     }
 
     @Test
-    fun startAndResumeEventsDoNotStartOrStopRecognition() {
+    fun startAndResumeEventsDoNotStopOrResetAnythingWithoutPriorStop() {
         val owner = TestOwner()
         val events = mutableListOf<String>()
         val guard = SpeechInputBackgroundGuard(
             stopListening = { events += "stop" },
-            onStopped = { events += "clear-ui" }
+            onForeground = { events += "clear-ui" }
         )
 
         guard.onStateChanged(owner, Lifecycle.Event.ON_CREATE)
