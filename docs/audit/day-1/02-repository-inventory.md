@@ -239,6 +239,7 @@ The recursive listing includes all nested source sets, resource directories, tes
 | `docs/audit/day-1/01-baseline.md` | Documentation | 11,848 | `85230b889352f79b1eb25f37842b4c64ecf364c5` |
 | `gradle.properties` | Build configuration | 158 | `ce96a98f6ca371784e10e24da9db65d4d997d492` |
 | `settings.gradle.kts` | Gradle Kotlin DSL | 331 | `2a073dcd01c48905417f882eccfc14911a4d58d4` |
+| `tools/audit-kotlin-reachability.py` | Python audit utility | 8,144 | `69c75b88d0add799c15a02b44c26b224c53d731f` |
 | `docs/audit/day-1/02-repository-inventory.md` | Documentation Markdown; post-baseline self-audit artifact | — (self-size excluded) | — (self-SHA excluded) |
 
 ## 4. Gradle modules, source sets, and package architecture
@@ -460,3 +461,63 @@ The immutable baseline tree at `ea21db7143781e7c58b54b2cd6d6ad941f4142df` contai
 The additional tracked file is this report, classified in Section 3 as **Documentation Markdown; post-baseline self-audit artifact**. Its self-size and self-SHA are intentionally omitted because embedding either value inside the file would make the value self-referential. Every other baseline blob is individually classified with exact byte size and blob SHA in Section 3.
 
 The locale reference check was run against the same source baseline. All 33 declared Android string keys have references, and the English/Russian/Tajik key sets are identical. The full Kotlin declaration reachability question remains a stated limitation; no dead-code claim is inferred from file mapping alone.
+
+
+## 14. Current-main reconciliation and Kotlin reachability triage
+
+**Current audited main SHA:** `360ed0bc7b7d8efa1a69a08848f60d530fab34ba`  
+**Current recursive tree:** `truncated: false`; 204 entries, 143 tracked files and 61 directories.  
+**Current Kotlin split:** 70 production files, 33 JVM test files and 24 instrumentation test files (127 Kotlin files total).  
+**Additional tracked artifacts since the original inventory:** this Python triage utility and its containing `tools/` directory. The original inventory remains a historical snapshot; the counts above describe the current main tree.
+
+### 14.1 Android and application entry-point reconciliation
+
+The production entry points were checked against `app/src/main/AndroidManifest.xml` and the Kotlin declarations:
+
+| Android entry point | Implementation | Reachability evidence |
+|---|---|---|
+| Launcher activity | `MainActivity` | Manifest MAIN/LAUNCHER activity declaration |
+| SMS broadcast receiver | `IncomingSmsReceiver` | Manifest `SMS_RECEIVED` receiver declaration |
+| Voice interaction service | `MissMinutesVoiceInteractionService` | Manifest `VoiceInteractionService` action |
+| Voice interaction session service | `MissMinutesVoiceInteractionSessionService` | Manifest service declaration and framework-created session |
+| Speech recognition service | `MissMinutesRecognitionService` | Manifest `android.speech.RecognitionService` action |
+| Wake-word foreground service | `MissMinutesWakeWordService` | Explicit service start/stop intents from application UI |
+| Accessibility service | `AccessibilityAutomationService` | Manifest `AccessibilityService` action and binding permission |
+| Overlay foreground service | `MissMinutesOverlayService` | Explicit service intents and notification actions |
+
+Additional non-Manifest framework execution is present: `AgentTaskWorker` is a WorkManager worker and must be traced through WorkManager enqueue/cancel APIs, not treated as an ordinary directly-instantiated class. Compose UI entry functions are reached from `MissMinutesApp` and its screen/settings composition tree. Plugin action handlers are stored and dispatched through `PluginRegistry` by stable action identifiers; handler reachability must be followed through registration and manifest/action metadata, not just direct calls.
+
+### 14.2 Dynamic and indirect invocation surfaces
+
+The source review identified these invocation mechanisms that a plain name-count scan cannot fully model:
+
+- Android framework callbacks and lifecycle overrides (Activity, Service, BroadcastReceiver, AccessibilityService, RecognitionService, VoiceInteractionService, TextToSpeech and SpeechRecognizer listeners).
+- WorkManager worker construction and persisted work scheduling.
+- Compose composition, callbacks, lambdas, state observers and activity-result launchers.
+- Plugin handlers stored in collections and dispatched by action IDs; plugin manifests are declarative and do not load arbitrary third-party code.
+- Android component names and intent actions declared as manifest strings.
+- Kotlin serialization/JSON decoding and enum-name-based decoding in persistence/backup code.
+
+No declaration is classified as dead solely because the Python scanner reports zero textual references.
+
+### 14.3 Reachability scanner execution and limitations
+
+The utility `tools/audit-kotlin-reachability.py` was added at commit `360ed0bc7b7d8efa1a69a08848f60d530fab34ba`. It scans tracked text files and records declaration names, textual reference locations, and review categories. The user ran it from the Termux checkout after fast-forwarding to this commit; the captured terminal output shows the JSON report was emitted.
+
+This scanner is intentionally **heuristic**. It is not a Kotlin PSI/compiler semantic call graph. It cannot prove control-flow reachability, resolve overloads or receiver types, fully parse multiline declarations, infer all generated code, or guarantee discovery of reflection/framework/Compose/DI dispatch. Text matches can also be comments, tests, documentation, or same-name declarations. Its zero-reference candidates require manual verification. It is a triage aid, not a dead-code verdict.
+
+The Android CI run for this current commit completed successfully: run `44523328613`, conclusion `success`. It executes JVM tests, Debug/Release builds, lint, dependency vulnerability scanning, Android instrumentation tests on API 35, and APK checksum/evidence upload. CI success validates build/test behavior; it does not prove every Kotlin declaration is reachable.
+
+### 14.4 Updated acceptance status
+
+- [x] Current main SHA and non-truncated recursive tree re-verified.
+- [x] Current file/directory totals and all 127 Kotlin source/test paths re-counted.
+- [x] Production Android component declarations reconciled with the manifest.
+- [x] Framework, WorkManager, Compose and plugin-registry indirect invocation surfaces documented.
+- [x] Heuristic Kotlin declaration/reference scanner committed and executed in the Termux checkout.
+- [x] Current-main Android CI completed successfully.
+- [ ] A compiler/PSI-backed declaration-level call graph proving every production declaration reachable or confirmed dead.
+- [ ] Manual disposition of every zero-reference candidate from the complete scanner output.
+- [ ] Local Android build/test execution on the user's device (not required for CI correctness, but not performed by this remote audit).
+
+**Step 02 status at this revision:** the exhaustive tracked-tree inventory, classification, feature/package map, manifest entry-point reconciliation, and CI verification are complete. The stronger claim that every Kotlin declaration has been semantically proven reachable or dead is **not** complete; no unsupported 100% reachability claim is made. No production code was changed as part of this inventory/reachability audit.
