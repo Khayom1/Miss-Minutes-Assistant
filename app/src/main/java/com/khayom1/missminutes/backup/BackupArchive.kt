@@ -244,7 +244,6 @@ class BackupArchive private constructor() {
         private val AAD = "com.khayom1.missminutes.backup.container.v1".toByteArray(Charsets.UTF_8)
         private val random = SecureRandom()
         private const val HEADER_BYTES = 8 + 4 + SALT_BYTES + IV_BYTES + 4
-        private const val MAX_ARCHIVE_BYTES_PLACEHOLDER = 0
         val instance = BackupArchive()
     }
 }
