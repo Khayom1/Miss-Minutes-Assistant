@@ -120,4 +120,40 @@ class PluginManifestArchiveTest {
         assertFalse(result.success)
         assertFalse(executed)
     }
+
+    @Test
+    fun legacyAlarmCapabilityIsMigratedWithoutChangingCalendarActions() {
+        val builtIn = AndroidDeviceStatusPlugin.manifest()
+        val legacyAlarmOnly = builtIn.copy(
+            version = "1.1.0",
+            capabilities = setOf(PluginCapability.CALENDAR_WRITE),
+            actions = listOf(
+                builtIn.actions.single { it.id == "set_alarm" }
+                    .copy(capability = PluginCapability.CALENDAR_WRITE)
+            )
+        )
+        val migratedAlarmOnly = PluginManifestArchive.decode(
+            PluginManifestArchive.encode(listOf(legacyAlarmOnly))
+        ).single()
+
+        assertEquals(PluginCapability.ALARM_SCHEDULE, migratedAlarmOnly.actions.single().capability)
+        assertEquals(setOf(PluginCapability.ALARM_SCHEDULE), migratedAlarmOnly.capabilities)
+
+        val legacyWithCalendar = legacyAlarmOnly.copy(
+            actions = listOf(
+                builtIn.actions.single { it.id == "create_reminder" },
+                legacyAlarmOnly.actions.single()
+            )
+        )
+        val migratedWithCalendar = PluginManifestArchive.decode(
+            PluginManifestArchive.encode(listOf(legacyWithCalendar))
+        ).single()
+
+        assertEquals(
+            setOf(PluginCapability.CALENDAR_WRITE, PluginCapability.ALARM_SCHEDULE),
+            migratedWithCalendar.capabilities
+        )
+        assertEquals(migratedWithCalendar.capabilities, migratedWithCalendar.actions.map { it.capability }.toSet())
+    }
+
 }
