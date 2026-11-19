@@ -473,13 +473,16 @@ class AgentOrchestrator(
 
     private fun requiresApproval(action: AgentAction): Boolean {
         if (action.approvalRequired) return true
-        val catalog = executor as? AgentActionCatalogProvider ?: return false
+
+        // A missing/unavailable catalog cannot prove that an action is read-only.
+        // Require explicit approval until a trusted connected descriptor is found.
+        val catalog = executor as? AgentActionCatalogProvider ?: return true
         return runCatching {
             catalog.availableTools()
                 .firstOrNull {
                     it.pluginId == action.request.pluginId && it.actionId == action.request.actionId
                 }
-                ?.requiresConfirmation ?: false
+                ?.requiresConfirmation ?: true
         }.getOrDefault(true)
     }
 

@@ -33,10 +33,41 @@ class AgentOrchestratorTest {
             )
         )
 
+    private class ReadOnlyCatalogExecutor(
+        private val action: (PluginExecutionRequest, String) -> PluginExecutionResult
+    ) : AgentActionExecutor, AgentActionCatalogProvider {
+        override fun availableTools() = listOf(
+            PluginToolDescriptor(
+                toolName = "plugin_device_status_read_info",
+                pluginId = "device_status",
+                actionId = "read_info",
+                pluginName = "Device status",
+                description = "Read device status.",
+                capability = PluginCapability.DEVICE_INFORMATION,
+                arguments = emptyMap(),
+                requiresConfirmation = false,
+                connected = true,
+                access = PluginAccessDecision.Granted,
+                sideEffect = false
+            )
+        )
+
+        override fun executeToolCall(
+            toolName: String,
+            argumentsJson: String,
+            userConfirmed: Boolean
+        ) = PluginExecutionResult(false, "not used", PluginCapability.DEVICE_INFORMATION)
+
+        override fun execute(
+            request: PluginExecutionRequest,
+            idempotencyKey: String
+        ) = action(request, idempotencyKey)
+    }
+
     private fun orchestrator(
         store: AgentTaskStateStore = InMemoryAgentTaskStateStore(),
         action: (PluginExecutionRequest, String) -> PluginExecutionResult
-    ) = AgentOrchestrator(store, AgentActionExecutor(action), clockMillis = { now })
+    ) = AgentOrchestrator(store, ReadOnlyCatalogExecutor(action), clockMillis = { now })
 
     private class ConfirmationFloorExecutor : AgentActionExecutor, AgentActionCatalogProvider {
         val requests = mutableListOf<PluginExecutionRequest>()
@@ -355,6 +386,61 @@ class AgentOrchestratorTest {
         val stopped = engine.advance("task_1") as AgentAdvanceResult.Finished
         assertEquals(AgentTaskStatus.FAILED, stopped.state.status)
         assertEquals(1, calls)
+    }
+
+    @Test
+    fun missingCatalogRequiresApprovalBeforeAnyActionIsDispatched() {
+        var calls = 0
+        val executor = AgentActionExecutor { _, _ ->
+            calls++
+            PluginExecutionResult(true, "unexpected", PluginCapability.DEVICE_INFORMATION)
+        }
+        val engine = AgentOrchestrator(
+            InMemoryAgentTaskStateStore(),
+            executor,
+            clockMillis = { now }
+        )
+        engine.create(plan(listOf(node("uncatalogued"))))
+
+        val blocked = engine.advance("task_1") as AgentAdvanceResult.BlockedForApproval
+
+        assertEquals("uncatalogued", blocked.nodeId)
+        assertEquals(AgentTaskStatus.WAITING_APPROVAL, blocked.state.status)
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun actionMissingFromConnectedCatalogRequiresApprovalBeforeDispatch() {
+        var calls = 0
+        val executor = object : AgentActionExecutor, AgentActionCatalogProvider {
+            override fun availableTools(): List<PluginToolDescriptor> = emptyList()
+
+            override fun executeToolCall(
+                toolName: String,
+                argumentsJson: String,
+                userConfirmed: Boolean
+            ) = PluginExecutionResult(false, "not used", PluginCapability.DEVICE_INFORMATION)
+
+            override fun execute(
+                request: PluginExecutionRequest,
+                idempotencyKey: String
+            ): PluginExecutionResult {
+                calls++
+                return PluginExecutionResult(true, "unexpected", PluginCapability.DEVICE_INFORMATION)
+            }
+        }
+        val engine = AgentOrchestrator(
+            InMemoryAgentTaskStateStore(),
+            executor,
+            clockMillis = { now }
+        )
+        engine.create(plan(listOf(node("missing_from_catalog"))))
+
+        val blocked = engine.advance("task_1") as AgentAdvanceResult.BlockedForApproval
+
+        assertEquals("missing_from_catalog", blocked.nodeId)
+        assertEquals(AgentTaskStatus.WAITING_APPROVAL, blocked.state.status)
+        assertEquals(0, calls)
     }
 
     private fun assertIllegalArgument(block: () -> Unit) {
