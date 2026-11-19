@@ -30,6 +30,7 @@ import com.khayom1.missminutes.agent.AgentTaskStatus
 import com.khayom1.missminutes.agent.AgentTaskWorker
 import com.khayom1.missminutes.plugins.AndroidDeviceStatusPlugin
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -70,6 +71,8 @@ internal fun AgentTaskPanel(
             error = null
             try {
                 taskState = withContext(Dispatchers.IO) { action() }
+            } catch (error: CancellationException) {
+                throw error
             } catch (_: Exception) {
                 error = when (language) {
                     AppLanguage.Tajik -> "Вазифа иҷро нашуд. Иҷозат ва сабти вазифаро санҷед."

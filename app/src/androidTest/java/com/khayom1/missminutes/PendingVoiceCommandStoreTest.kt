@@ -5,6 +5,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.khayom1.missminutes.voice.PendingVoiceCommandStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,6 +28,9 @@ class PendingVoiceCommandStoreTest {
 
         assertEquals("open settings", PendingVoiceCommandStore.peek(context))
         assertEquals("open settings", PendingVoiceCommandStore.peek(context))
+        val stored = context.getSharedPreferences("miss_minutes_pending_voice", android.content.Context.MODE_PRIVATE)
+            .getString("command_ciphertext", null)
+        assertFalse(stored.orEmpty().contains("open settings"))
 
         PendingVoiceCommandStore.acknowledge(context)
         assertNull(PendingVoiceCommandStore.peek(context))
@@ -36,4 +41,28 @@ class PendingVoiceCommandStoreTest {
         PendingVoiceCommandStore.save(context, "   ")
         assertNull(PendingVoiceCommandStore.peek(context))
     }
+    @Test
+    fun legacyPlaintextCommandIsDeletedInsteadOfReadAfterUpgrade() {
+        context.getSharedPreferences("miss_minutes_pending_voice", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putString("command", "private voice command")
+            .putLong("created_at", System.currentTimeMillis())
+            .commit()
+
+        assertNull(PendingVoiceCommandStore.peek(context))
+        assertNull(
+            context.getSharedPreferences("miss_minutes_pending_voice", android.content.Context.MODE_PRIVATE)
+                .getString("command", null)
+        )
+    }
+
+    @Test
+    fun blankReplacementClearsAnyPreviouslyPendingCommand() {
+        assertTrue(PendingVoiceCommandStore.save(context, "open settings"))
+
+        assertFalse(PendingVoiceCommandStore.save(context, "   "))
+        assertNull(PendingVoiceCommandStore.peek(context))
+    }
+
 }
+

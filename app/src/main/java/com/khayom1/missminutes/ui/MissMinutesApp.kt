@@ -121,6 +121,7 @@ import com.khayom1.missminutes.memory.LocalConversationStore
 import com.khayom1.missminutes.memory.MemoryItem
 import com.khayom1.missminutes.memory.RestoreConflictPolicy
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -410,10 +411,7 @@ fun MissMinutesApp(
                 if (intent?.action == MissMinutesWakeWordService.ACTION_STATE_CHANGED) {
                     wakeEnabled = intent.getBooleanExtra(MissMinutesWakeWordService.EXTRA_ENABLED, false)
                     wakeMessage = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_MESSAGE)
-                    val capturedCommand = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_COMMAND)
-                    if (!capturedCommand.isNullOrBlank()) {
-                        pendingVoiceCommand = PendingVoiceCommandStore.peek(context) ?: capturedCommand
-                    }
+                    pendingVoiceCommand = PendingVoiceCommandStore.peek(context)
                 }
             }
         }
@@ -585,6 +583,8 @@ fun MissMinutesApp(
                         AppLanguage.Tajik -> "Нусхаи рамзгузоришуда нигоҳ дошта шуд."
                     }
                     backupError = null
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     backupError = error.message ?: "Backup could not be saved."
                 } finally {
@@ -635,6 +635,8 @@ fun MissMinutesApp(
                     backupPreview = decoded.preview
                     pendingRestorePayload = restored
                     backupStatus = null
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     backupError = error.message ?: "Backup could not be read."
                 } finally {
@@ -663,6 +665,8 @@ fun MissMinutesApp(
                         AppLanguage.Tajik -> "Бастаи плагин содир шуд. Он танҳо метамаълумот дорад."
                     }
                     backupError = null
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     backupError = error.message ?: "Plugin package could not be saved."
                 } finally {
@@ -710,6 +714,8 @@ fun MissMinutesApp(
                         pluginPackageManager.previewImport(requireNotNull(bytes))
                     }
                     backupStatus = null
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     backupError = error.message ?: "Plugin package could not be read."
                 } finally {
@@ -791,6 +797,8 @@ fun MissMinutesApp(
                     }
                     pendingBackupBytes = bytes
                     createBackupLauncher.launch("miss-minutes-backup.mmb")
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     backupError = error.message ?: "Backup could not be created."
                     backupBusy = false
@@ -828,6 +836,8 @@ fun MissMinutesApp(
                     }
                     pendingBackupBytes = bytes
                     createBackupLauncher.launch("miss-minutes-chat.mmb")
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     backupError = error.message ?: "Conversation backup could not be created."
                     backupBusy = false
@@ -863,6 +873,8 @@ fun MissMinutesApp(
                     }
                     pendingBackupBytes = bytes
                     createBackupLauncher.launch("miss-minutes-plugin-$pluginId.mmb")
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     backupError = error.message ?: "Plugin backup could not be created."
                     backupBusy = false
@@ -883,7 +895,9 @@ fun MissMinutesApp(
                 }
                 pendingPluginPackageBytes = bytes
                 createPluginPackageLauncher.launch("$pluginId.missplugin.json")
-            } catch (error: Exception) {
+            } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
                 backupError = error.message ?: "Plugin package could not be exported."
                 backupBusy = false
             }
@@ -914,6 +928,8 @@ fun MissMinutesApp(
                         else ->
                             "Installed ${report.installedIds.size} plugin(s). They remain disconnected until you approve them."
                     }
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     backupError = error.message ?: "Plugin package installation failed."
                 } finally {
@@ -941,7 +957,9 @@ fun MissMinutesApp(
                 } else {
                     backupError = "Plugin could not be uninstalled safely."
                 }
-            } catch (error: Exception) {
+            } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
                 backupError = error.message ?: "Plugin could not be uninstalled."
             } finally {
                 backupBusy = false
@@ -958,18 +976,71 @@ fun MissMinutesApp(
             backupBusy = true
             backupError = null
             scope.launch {
-                val oldAppearance = appSettingsStore.loadAppearance()
-                val oldRetention = withContext(Dispatchers.IO) { conversationStore.getRetentionDays(owner) }
-                val oldMemoryContext = withContext(Dispatchers.IO) { conversationStore.isMemoryContextEnabled(owner) }
-                val oldPlugins = pluginRegistry.installedPlugins()
+                var oldAppearance: AndroidAppSettingsStore.Appearance? = null
+                var oldRetention: Int? = null
+                var oldMemoryContext: Boolean? = null
+                var oldPlugins: List<com.khayom1.missminutes.plugins.PluginManifest>? = null
+                var oldConsents: Map<String, Boolean> = emptyMap()
+                var oldChat: String? = null
                 val incomingPluginIds = incoming.pluginManifests.orEmpty().map { it.id }.toSet()
-                val oldConsents = incomingPluginIds.associateWith(pluginConsentStore::isGranted)
-                val oldChat = if (incoming.conversationExportJson != null) {
-                    withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
-                } else null
                 val newlyInstalled = mutableListOf<com.khayom1.missminutes.plugins.PluginManifest>()
                 var rejectedPlugins = 0
+                var mutationsStarted = false
+
+                suspend fun rollback(): Boolean = try {
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        newlyInstalled.asReversed().forEach { pluginRegistry.uninstall(it.id) }
+                        oldPlugins?.let(pluginManifestStore::replace)
+                        oldConsents.forEach { (id, granted) -> pluginConsentStore.setGranted(id, granted) }
+                        oldAppearance?.let { appSettingsStore.saveAppearance(it.language, it.darkMode) }
+                        oldRetention?.let { conversationStore.setRetentionDays(owner, it) }
+                        oldMemoryContext?.let { conversationStore.setMemoryContextEnabled(owner, it) }
+                        oldChat?.let {
+                            conversationStore.restoreAll(
+                                owner,
+                                it,
+                                RestoreConflictPolicy.REPLACE,
+                                restoreSettings = false
+                            )
+                        }
+                    }
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+
+                fun restoreUiSnapshot() {
+                    oldAppearance?.let { appearance ->
+                        selectedLanguageName = when (appearance.language) {
+                            "ru" -> AppLanguage.Russian.name
+                            "tg" -> AppLanguage.Tajik.name
+                            else -> AppLanguage.English.name
+                        }
+                        darkTheme = appearance.darkMode
+                    }
+                    oldConsents[AndroidDeviceStatusPlugin.PLUGIN_ID]?.let {
+                        androidPluginConsent = it
+                    }
+                    pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
+                        it.id to pluginConsentStore.isGranted(it.id)
+                    }
+                }
+
                 try {
+                    oldAppearance = appSettingsStore.loadAppearance()
+                    oldRetention = withContext(Dispatchers.IO) {
+                        conversationStore.getRetentionDays(owner)
+                    }
+                    oldMemoryContext = withContext(Dispatchers.IO) {
+                        conversationStore.isMemoryContextEnabled(owner)
+                    }
+                    oldPlugins = pluginRegistry.installedPlugins()
+                    oldConsents = incomingPluginIds.associateWith(pluginConsentStore::isGranted)
+                    oldChat = if (incoming.conversationExportJson != null) {
+                        withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
+                    } else null
+
+                    mutationsStarted = true
                     withContext(Dispatchers.IO) {
                         incoming.pluginManifests.orEmpty().forEach { manifest ->
                             pluginConsentStore.setGranted(manifest.id, false)
@@ -994,7 +1065,11 @@ fun MissMinutesApp(
                         }
                     }
                     incoming.settings?.let { settings ->
-                        selectedLanguageName = when (settings.language) { "ru" -> AppLanguage.Russian.name; "tg" -> AppLanguage.Tajik.name; else -> AppLanguage.English.name }
+                        selectedLanguageName = when (settings.language) {
+                            "ru" -> AppLanguage.Russian.name
+                            "tg" -> AppLanguage.Tajik.name
+                            else -> AppLanguage.English.name
+                        }
                         darkTheme = settings.darkMode
                     }
                     if (AndroidDeviceStatusPlugin.PLUGIN_ID in incomingPluginIds) {
@@ -1015,22 +1090,23 @@ fun MissMinutesApp(
                     backupPreview = null
                     pendingRestorePayload = null
                     backupPassword = ""
-                } catch (error: Exception) {
-                    withContext(Dispatchers.IO) {
-                        newlyInstalled.forEach { pluginRegistry.uninstall(it.id) }
-                        pluginManifestStore.replace(oldPlugins)
-                        oldConsents.forEach { (id, granted) -> pluginConsentStore.setGranted(id, granted) }
-                        appSettingsStore.saveAppearance(oldAppearance.language, oldAppearance.darkMode)
-                        conversationStore.setRetentionDays(owner, oldRetention)
-                        conversationStore.setMemoryContextEnabled(owner, oldMemoryContext)
-                        if (oldChat != null) {
-                            conversationStore.restoreAll(owner, oldChat, RestoreConflictPolicy.REPLACE, restoreSettings = false)
+                } catch (error: CancellationException) {
+                    if (mutationsStarted) {
+                        val rollbackSucceeded = rollback()
+                        restoreUiSnapshot()
+                        if (!rollbackSucceeded) {
+                            backupError = "Restore was cancelled, but rollback could not be verified. Check local data and plugin settings before retrying."
                         }
                     }
-                    pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
-                        it.id to pluginConsentStore.isGranted(it.id)
+                    throw error
+                } catch (error: Exception) {
+                    val rollbackSucceeded = if (mutationsStarted) rollback() else true
+                    if (mutationsStarted) restoreUiSnapshot()
+                    backupError = if (rollbackSucceeded) {
+                        error.message ?: "Backup restore failed and changes were rolled back."
+                    } else {
+                        "Backup restore failed and rollback could not be verified. Check local data and plugin settings before retrying."
                     }
-                    backupError = error.message ?: "Backup restore failed and changes were rolled back."
                 } finally {
                     backupBusy = false
                 }
@@ -1366,13 +1442,12 @@ fun MissMinutesApp(
     val exportLocalData: () -> Unit = {
         currentOwnerId?.let { owner ->
             scope.launch {
-                val result = runCatching {
-                    withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
-                }
-                result.onSuccess {
-                    exportPayload = it
+                try {
+                    exportPayload = withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
                     exportError = null
-                }.onFailure {
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
                     exportPayload = null
                     exportError = when (language) {
                         AppLanguage.English -> "Export is larger than the 2 MB safety limit. Delete older records and retry."
@@ -1405,13 +1480,14 @@ fun MissMinutesApp(
         val value = memoryDraft.trim()
         if (owner != null && value.isNotEmpty()) {
             scope.launch {
-                runCatching {
+                try {
                     withContext(Dispatchers.IO) { conversationStore.addMemory(owner, value) }
-                }.onSuccess {
                     memoryDraft = ""
                     memoryMessage = null
                     memoryItems = withContext(Dispatchers.IO) { conversationStore.listMemory(owner) }
-                }.onFailure {
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
                     memoryMessage = when (language) {
                         AppLanguage.English -> "Memory could not be saved. Keep it under 2,000 characters."
                         AppLanguage.Russian -> "Не удалось сохранить память. Ограничение — 2 000 символов."

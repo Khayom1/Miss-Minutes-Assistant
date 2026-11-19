@@ -330,14 +330,18 @@ class MissMinutesWakeWordService : Service() {
     }
 
     private fun publishPendingCommand(command: String, message: String) {
-        PendingVoiceCommandStore.save(this, command)
-        publishState(false, message)
+        val stored = PendingVoiceCommandStore.save(this, command)
+        val statusMessage = if (stored) {
+            message
+        } else {
+            "Voice command could not be saved securely. Please repeat it after reopening Miss Minutes."
+        }
+        publishState(false, statusMessage)
         sendBroadcast(
             Intent(ACTION_STATE_CHANGED)
                 .setPackage(packageName)
                 .putExtra(EXTRA_ENABLED, false)
-                .putExtra(EXTRA_MESSAGE, message)
-                .putExtra(EXTRA_COMMAND, command)
+                .putExtra(EXTRA_MESSAGE, statusMessage)
         )
     }
 
@@ -495,7 +499,6 @@ class MissMinutesWakeWordService : Service() {
         const val ACTION_STATE_CHANGED = "com.khayom1.missminutes.voice.WAKE_STATE_CHANGED"
         const val EXTRA_ENABLED = "wake_enabled"
         const val EXTRA_MESSAGE = "wake_message"
-        const val EXTRA_COMMAND = "wake_command"
         const val EXTRA_RECOGNITION_LANGUAGE = "recognition_language"
         const val CHANNEL_ID = "miss_minutes_wake_phrase"
         const val NOTIFICATION_ID = 7301
@@ -538,33 +541,66 @@ object WakeWordServiceState {
 /** One-shot command handoff; stale voice commands expire after ten minutes. */
 object PendingVoiceCommandStore {
     private const val PREFERENCES = "miss_minutes_pending_voice"
-    private const val COMMAND = "command"
+    private const val COMMAND = "command_ciphertext"
+    private const val LEGACY_COMMAND = "command"
     private const val CREATED_AT = "created_at"
     private const val MAX_AGE_MS = 10 * 60 * 1000L
+    private const val CIPHER_OWNER = "pending_voice_command_v1"
+    private val cipher by lazy {
+        com.khayom1.missminutes.memory.AndroidKeystoreConversationCipher(
+            "miss_minutes_pending_voice_aes_v1"
+        )
+    }
 
     @Synchronized
-    fun save(context: Context, command: String) {
+    fun save(context: Context, command: String): Boolean {
         val safeCommand = command.trim().take(8_000)
-        if (safeCommand.isEmpty()) return
-        context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-            .edit()
-            .putString(COMMAND, safeCommand)
-            .putLong(CREATED_AT, System.currentTimeMillis())
-            .apply()
+        if (safeCommand.isEmpty()) {
+            acknowledge(context)
+            return false
+        }
+        val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+        return try {
+            val encrypted = cipher.encrypt(CIPHER_OWNER, safeCommand)
+            val committed = preferences.edit()
+                .remove(LEGACY_COMMAND)
+                .putString(COMMAND, encrypted)
+                .putLong(CREATED_AT, System.currentTimeMillis())
+                .commit()
+            if (!committed) acknowledge(context)
+            committed
+        } catch (_: Exception) {
+            preferences.edit()
+                .remove(COMMAND)
+                .remove(LEGACY_COMMAND)
+                .remove(CREATED_AT)
+                .commit()
+            false
+        }
     }
 
     @Synchronized
     fun peek(context: Context): String? {
         val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-        val command = preferences.getString(COMMAND, null)
+        if (preferences.contains(LEGACY_COMMAND)) {
+            preferences.edit().remove(COMMAND).remove(LEGACY_COMMAND).remove(CREATED_AT).commit()
+            return null
+        }
+        val encrypted = preferences.getString(COMMAND, null)
         val createdAt = preferences.getLong(CREATED_AT, 0L)
-        if (command.isNullOrBlank() || createdAt <= 0L ||
+        if (encrypted.isNullOrBlank() || createdAt <= 0L ||
             System.currentTimeMillis() - createdAt !in 0..MAX_AGE_MS
         ) {
             acknowledge(context)
             return null
         }
-        return command
+        return runCatching { cipher.decrypt(CIPHER_OWNER, encrypted) }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() && it.length <= 8_000 }
+            ?: run {
+                acknowledge(context)
+                null
+            }
     }
 
     @Synchronized
@@ -572,7 +608,8 @@ object PendingVoiceCommandStore {
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .edit()
             .remove(COMMAND)
+            .remove(LEGACY_COMMAND)
             .remove(CREATED_AT)
-            .apply()
+            .commit()
     }
 }
