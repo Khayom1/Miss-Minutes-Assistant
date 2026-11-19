@@ -394,14 +394,14 @@ class MainActivityTest {
         composeRule.waitUntil(timeoutMillis = 2_000) {
             composeRule.onAllNodesWithText("Настройки приложения").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onAllNodesWithText("Настройки приложения").get(0).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Настройки приложения").get(0).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Язык").performScrollTo().assertIsDisplayed()
 
         composeRule.onNodeWithText("Тоҷикӣ").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) {
             composeRule.onAllNodesWithText("Танзимоти барнома").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onAllNodesWithText("Танзимоти барнома").get(0).assertIsDisplayed()
+        composeRule.onAllNodesWithText("Танзимоти барнома").get(0).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Забон").performScrollTo().assertIsDisplayed()
     }
 
