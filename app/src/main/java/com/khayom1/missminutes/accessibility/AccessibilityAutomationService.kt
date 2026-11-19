@@ -303,17 +303,43 @@ class AccessibilityAutomationService : AccessibilityService() {
             }
             val result = AtomicReference<String?>()
             val latch = CountDownLatch(1)
+            val gate = AccessibilityInvocationGate()
             val posted = mainHandler.post {
-                result.set(
-                    runCatching { action(service) }.getOrElse {
-                        failure("The foreground app could not be controlled safely.")
+                try {
+                    if (gate.tryStart()) {
+                        result.set(
+                            runCatching { action(service) }.getOrElse {
+                                failure("The foreground app could not be controlled safely.")
+                            }
+                        )
                     }
-                )
-                latch.countDown()
+                } finally {
+                    gate.finish()
+                    latch.countDown()
+                }
             }
-            if (!posted) return failure("Android's UI automation thread is unavailable.")
-            if (!latch.await(SERVICE_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                return failure("The foreground app did not respond before the automation timeout.")
+            if (!posted) {
+                gate.abandonIfPending()
+                return failure("Android's UI automation thread is unavailable.")
+            }
+            val completed = try {
+                latch.await(SERVICE_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
+                val abandonedBeforeStart = gate.abandonIfPending()
+                Thread.currentThread().interrupt()
+                return if (abandonedBeforeStart) {
+                    failure("The accessibility action was cancelled before it started.")
+                } else {
+                    failure("The accessibility action had already started when interrupted. Its outcome is uncertain; verify the screen before retrying.")
+                }
+            }
+            if (!completed) {
+                val abandonedBeforeStart = gate.abandonIfPending()
+                if (abandonedBeforeStart) {
+                    return failure("The accessibility action timed out before it started and was cancelled.")
+                }
+                return result.get()
+                    ?: failure("The accessibility action started but did not finish before the timeout. Its outcome is uncertain; verify the screen before retrying.")
             }
             return result.get() ?: failure("The accessibility action returned no result.")
         }
