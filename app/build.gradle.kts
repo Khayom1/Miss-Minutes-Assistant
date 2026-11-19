@@ -62,6 +62,14 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // Align vulnerable transitive networking and serialization libraries to patched releases.
+    implementation(platform("io.netty:netty-bom:4.1.137.Final"))
+    constraints {
+        implementation("com.google.guava:guava:33.8.0-jre")
+        implementation("com.google.protobuf:protobuf-java:3.25.9")
+        implementation("com.google.protobuf:protobuf-kotlin:3.25.9")
+    }
+
     testImplementation("junit:junit:4.13.2")
 
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.04.01"))

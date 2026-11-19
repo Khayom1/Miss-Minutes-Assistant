@@ -94,13 +94,13 @@ jobs:
 
       - name: Install pinned emulator packages
         run: |
-          sdkmanager --install "platforms;android-35" "system-images;android-35;google_apis;x86_64" "emulator" "platform-tools"
+          sdkmanager --install "platforms;android-34" "system-images;android-34;google_apis;x86_64" "emulator" "platform-tools"
 
-      - name: Run Android instrumentation tests (API 35)
+      - name: Run Android instrumentation tests (API 34)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           disable-linux-hw-accel: false
-          api-level: 35
+          api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel_2
