@@ -21,7 +21,9 @@ enum class AiRole(val wireValue: String) {
 data class AiToolDefinition(
     val name: String,
     val description: String,
-    val parameters: JsonObject
+    val parameters: JsonObject,
+    /** True only for actions whose execution can change external state. */
+    val sideEffect: Boolean = false
 ) {
     init {
         require(name.matches(Regex("^[a-zA-Z0-9_-]{1,64}$")))
