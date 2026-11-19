@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Settings
 import com.khayom1.missminutes.accessibility.AccessibilityAutomationService
+import com.khayom1.missminutes.device.DeviceToolAuthorization
+import com.khayom1.missminutes.device.DeviceToolCapability
+import com.khayom1.missminutes.device.SharedPreferencesDeviceToolAuthorization
 
 fun interface PluginCredentialChecker {
     fun isConfigured(pluginId: String, capability: PluginCapability): Boolean
@@ -17,7 +20,8 @@ fun interface PluginCredentialChecker {
  */
 class AndroidPluginAccessChecker(
     context: Context,
-    private val credentialChecker: PluginCredentialChecker = PluginCredentialChecker { _, _ -> false }
+    private val credentialChecker: PluginCredentialChecker = PluginCredentialChecker { _, _ -> false },
+    private val deviceAuthorization: DeviceToolAuthorization = SharedPreferencesDeviceToolAuthorization(context)
 ) : PluginAccessChecker {
     private val appContext = context.applicationContext
 
@@ -70,6 +74,14 @@ class AndroidPluginAccessChecker(
             PluginCapability.LOCATION_PRECISE -> Unit
         }
 
+        val requiredDeviceCapability = requiredDeviceCapability(action.id)
+        if (requiredDeviceCapability != null && !deviceAuthorization.isGranted(requiredDeviceCapability)) {
+            return PluginAccessDecision.UserAuthorizationRequired(
+                authorizationId = requiredDeviceCapability.name,
+                explanation = "${requiredDeviceCapability.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} must be enabled in Device tools settings."
+            )
+        }
+
         val missingPermission = requiredPermissions(action.capability).firstOrNull { permission ->
             appContext.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED
         } ?: return PluginAccessDecision.Granted
@@ -80,6 +92,18 @@ class AndroidPluginAccessChecker(
             explanation = "${permissionLabel(missingPermission)} is required for this action.",
             androidPermission = missingPermission
         )
+    }
+
+    private fun requiredDeviceCapability(actionId: String): DeviceToolCapability? = when (actionId) {
+        "device_info" -> DeviceToolCapability.DEVICE_INFO
+        "battery_status" -> DeviceToolCapability.BATTERY_STATUS
+        "current_time" -> DeviceToolCapability.CURRENT_TIME
+        "calendar_summary" -> DeviceToolCapability.READ_CALENDAR
+        "create_reminder" -> DeviceToolCapability.CREATE_REMINDER
+        "contacts_summary" -> DeviceToolCapability.READ_CONTACTS_SUMMARY
+        "set_alarm" -> DeviceToolCapability.SET_ALARM
+        "open_app" -> DeviceToolCapability.OPEN_APP_BY_PACKAGE
+        else -> null
     }
 
     private fun hasNotificationAccess(): Boolean {
