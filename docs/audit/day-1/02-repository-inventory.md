@@ -2,11 +2,12 @@
 
 **Repository:** `Khayom1/Miss-Minutes-Assistant`  
 **Branch:** `main`  
-**Pinned commit:** `ea21db7143781e7c58b54b2cd6d6ad941f4142df`  
+**Pinned tree baseline:** `ea21db7143781e7c58b54b2cd6d6ad941f4142df`  
+**Main reconciliation before this completion update:** `4deefee947adf7ab38dd235f4fac025282e1eaf9`  
 **Audit mode:** Recursive Git tree inventory plus source/configuration inspection through the GitHub repository API.  
 **Tree completeness:** GitHub recursive tree response reported `truncated: false`.
 
-> Scope is strictly this immutable commit. The GitHub main ref was read immediately before the recursive tree request and resolved to the SHA above. All inventory rows below include the blob SHA and byte size returned by GitHub. Directories are Git tree entries and are listed separately; directory entries are not counted as files.
+> The complete 141-file / 60-directory inventory below is pinned to the immutable pre-report tree baseline. A later read of `main` at `4deefee947adf7ab38dd235f4fac025282e1eaf9` showed that the only path added between the baseline and that head was this report itself; the commit-range comparison contained no application, test, build, resource, or workflow changes. The current post-report tree therefore contains 142 tracked files and the same 60 directories. This report is listed explicitly as a self-audit artifact in Section 3; its own final blob size and SHA are intentionally excluded from its own contents to avoid a self-referential checksum.
 
 ## 1. Completeness and classification totals
 
@@ -238,6 +239,7 @@ The recursive listing includes all nested source sets, resource directories, tes
 | `docs/audit/day-1/01-baseline.md` | Documentation | 11,848 | `85230b889352f79b1eb25f37842b4c64ecf364c5` |
 | `gradle.properties` | Build configuration | 158 | `ce96a98f6ca371784e10e24da9db65d4d997d492` |
 | `settings.gradle.kts` | Gradle Kotlin DSL | 331 | `2a073dcd01c48905417f882eccfc14911a4d58d4` |
+| `docs/audit/day-1/02-repository-inventory.md` | Documentation Markdown; post-baseline self-audit artifact | — (self-size excluded) | — (self-SHA excluded) |
 
 ## 4. Gradle modules, source sets, and package architecture
 
@@ -266,7 +268,7 @@ The recursive listing includes all nested source sets, resource directories, tes
 - **`ai`** (10 production files): `AiProvider.kt`, `AiToolApprovalGate.kt`, `AiToolExecutionLoop.kt`, `AndroidDeepSeekApiKeyStore.kt`, `AndroidSpeechInputProvider.kt`, `AndroidTtsProvider.kt`, `ConversationContextBuilder.kt`, `DirectDeepSeekProvider.kt`, `SpeechInputBackgroundGuard.kt`, `TtsBackgroundPlaybackGuard.kt`
 - **`assistant`** (5 production files): `AndroidAssistantRole.kt`, `MissMinutesRecognitionService.kt`, `MissMinutesVoiceInteractionService.kt`, `MissMinutesVoiceInteractionSessionService.kt`, `RecognitionSession.kt`
 - **`backup`** (4 production files): `AndroidAppSettingsStore.kt`, `BackupArchive.kt`, `BackupPayloadAdapters.kt`, `SettingsBackupAdapter.kt`
-- **`communication`** (7 production files): `IncomingSmsReceiver.kt`, `LocalSmsClassifier.kt`, `SmsAccessPolicy.kt`, `SmsInboxScanner.kt`, `SmsTriageNotification.kt`, `SmsTriageProcessor.kt`, `SmsTriageStore.kt`
+- **`communication.sms`** (7 production files): `IncomingSmsReceiver.kt`, `LocalSmsClassifier.kt`, `SmsAccessPolicy.kt`, `SmsInboxScanner.kt`, `SmsTriageNotification.kt`, `SmsTriageProcessor.kt`, `SmsTriageStore.kt`
 - **`device`** (4 production files): `AndroidDeviceToolHost.kt`, `CalendarReminderWriter.kt`, `DeviceToolEngine.kt`, `SharedPreferencesDeviceToolAuthorization.kt`
 - **`memory`** (2 production files): `ConversationCipher.kt`, `LocalConversationStore.kt`
 - **`overlay`** (2 production files): `MissMinutesOverlayService.kt`, `OverlayServicePolicy.kt`
@@ -301,7 +303,7 @@ The manifest also declares permissions for Internet, microphone, notifications, 
 
 ## 6. Feature-to-implementation, test, and dependency map
 
-This map is based on package contents, inspected class/API implementations, manifest registrations, Gradle dependencies, and test names. It records the concrete code locations; it does not imply that every end-to-end behavior has been validated on a physical device.
+This map is based on package contents, inspected class/API implementations, manifest registrations, Gradle dependencies, and test names. A cross-check against the complete tracked source/test path sets found all 70/70 production Kotlin files and all 57/57 test Kotlin files represented in the feature map. It records the concrete code locations; it does not imply that every end-to-end behavior has been validated on a physical device.
 
 | Feature / subsystem | Implementation files | Tests | Principal dependencies / platform APIs |
 |---|---|---|---|
@@ -411,8 +413,9 @@ Size is a review signal, not proof of a defect. No file was split or edited duri
 - The tree has no obvious abandoned top-level prototype directory, sample application, legacy Java source tree, or alternate renderer.
 - No source file or resource is marked dead solely from its filename.
 - Resource directories contain three string-resource sets (`values`, `values-ru`, `values-tg`) and three service configuration XML files. Manifest references are explicit for the service XML and app label resources.
-- The locale resource sets exist, while the main UI also defines internal language/copy state in `MissMinutesApp.kt`. A complete resource-key-to-callsite and locale-parity analysis is required before asserting that every string resource is consumed or every UI string is localized.
-- No image/drawable/layout/menu/raw resource directory is present. The app currently has no committed visual/model asset library.
+- The three locale files contain exactly 33 string keys each, with exact key-set parity across English, Russian, and Tajik: `app/src/main/res/values/strings.xml:3-37`, `app/src/main/res/values-ru/strings.xml:3-37`, and `app/src/main/res/values-tg/strings.xml:3-37`. A reference scan found a source, manifest, or XML use for every key; no unreferenced string key was found. References are grouped in `ui/AssistantRoleSettingsPanel.kt:32-92`, `ui/SmsTriageSettingsPanel.kt:57-180`, `communication/sms/SmsTriageNotification.kt:28-68`, `assistant/MissMinutesVoiceInteractionSessionService.kt:37-50`, `AndroidManifest.xml`, and `res/xml/miss_minutes_accessibility_service.xml`.
+- This key-level result is distinct from UI copy completeness: `MissMinutesApp.kt` also defines internal language/copy state, so it is not evidence that every visible hard-coded UI string has full locale parity. The 33 Android string-resource keys themselves are all referenced and locale-parity checked.
+- The tracked tree contains no image/drawable/layout/menu/raw resource directory. The app currently has no committed visual/model asset library.
 - No native binaries or JNI/CMake/NDK source files are present.
 
 ## 10. Documentation and repository hygiene
@@ -426,7 +429,8 @@ The prior Step 01 document records a different main SHA (`cdb27a37b4a53e5f220817
 - GitHub's recursive tree response is complete (`truncated: false`) and provides the authoritative tracked path inventory for this commit.
 - Binary blobs are represented by Git tree metadata; no binary file exists in the tracked tree to inspect.
 - Code search returned zero 3D-related matches, but GitHub code-search indexing availability was not independently confirmed. The absence conclusion is therefore grounded primarily in the complete tree, package/file inventory, and direct Gradle dependency declarations.
-- A complete proof of dead code, unused resource keys, all Kotlin symbol references, and exact line-level class responsibility requires a local recursive source checkout and static analysis. Such conclusions are not fabricated here.
+- Resource-key reachability and locale key parity were checked as described in Section 9; all 33 keys are referenced and no locale key mismatch was found. No confirmed dead production source declaration was established from the remote evidence. A complete proof that every Kotlin declaration is reachable across reflection, framework callbacks, Compose navigation, manifest registration, and indirect dispatch still requires a local full-source semantic/static-analysis run. Such conclusions are not fabricated here.
+- The feature/path matrix accounts for every production and test Kotlin file; file mapping does not, by itself, prove that every declaration inside those files is live.
 - No application source, build configuration, workflow, existing branch, or prior audit artifact was modified by the audit process. The only intended write is this new documentation file.
 
 ## 12. Step 02 acceptance checklist
@@ -440,8 +444,19 @@ The prior Step 01 document records a different main SHA (`cdb27a37b4a53e5f220817
 - [x] Mapped feature implementation paths to test paths and direct dependency families.
 - [x] Inspected and recorded the large-file/responsibility hotspots.
 - [x] Audited tracked assets, native files, 3D references and rendering dependencies.
-- [ ] Proved every Kotlin declaration and resource key is used or dead (requires full local symbol/resource analysis; not claimed).
-- [ ] Executed project build/tests in a local checkout (not part of this read-only remote inventory).
+- [x] Compared the feature map against the complete tracked path sets: all 70 production Kotlin files and all 57 JVM/instrumentation test files are represented.
+- [x] Compared all 33 Android string-resource keys across English/Russian/Tajik and scanned their source/manifest/XML references: exact locale key parity and zero unreferenced keys.
+- [ ] Proved every Kotlin declaration has a live call path or is dead; declaration-level reachability remains unproven without local semantic/static analysis.
+- [ ] Executed project build/tests in a local checkout; no local checkout was available in this remote-only inventory.
 - [x] Prepared a complete tracked-file inventory with byte sizes and blob SHAs.
 
 **Step 02 status:** The recursive tracked-tree inventory and architecture/feature map are complete for the verified commit. Dead-code/resource reachability and line-by-line responsibility findings remain explicitly unproven rather than being guessed.
+
+
+## 13. Post-write current-main reconciliation
+
+The immutable baseline tree at `ea21db7143781e7c58b54b2cd6d6ad941f4142df` contained 141 blobs and 60 trees. Before this completion update, `main` resolved to `4deefee947adf7ab38dd235f4fac025282e1eaf9`; its recursive tree was not truncated and contained 142 blobs and the same 60 trees. The compare operation from the baseline to that head reported two commits ahead and exactly one changed path: `docs/audit/day-1/02-repository-inventory.md`. No application source, test, manifest, resource, Gradle, or workflow path changed in that range.
+
+The additional tracked file is this report, classified in Section 3 as **Documentation Markdown; post-baseline self-audit artifact**. Its self-size and self-SHA are intentionally omitted because embedding either value inside the file would make the value self-referential. Every other baseline blob is individually classified with exact byte size and blob SHA in Section 3.
+
+The locale reference check was run against the same source baseline. All 33 declared Android string keys have references, and the English/Russian/Tajik key sets are identical. The full Kotlin declaration reachability question remains a stated limitation; no dead-code claim is inferred from file mapping alone.
