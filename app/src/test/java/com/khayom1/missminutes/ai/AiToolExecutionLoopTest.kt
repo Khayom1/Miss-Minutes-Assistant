@@ -156,7 +156,6 @@ class AiToolExecutionLoopTest {
 
         assertTrue(error is AiProviderException.InvalidResponse)
     }
-}
 
     @Test
     fun duplicateSideEffectCallsWithDifferentIdsAreRejectedBeforeExecution() = runBlocking {
@@ -209,3 +208,4 @@ class AiToolExecutionLoopTest {
         assertTrue(error is AiProviderException.InvalidResponse)
         assertEquals(1, executions)
     }
+}
