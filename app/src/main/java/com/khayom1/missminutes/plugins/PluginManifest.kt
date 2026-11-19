@@ -73,6 +73,7 @@ enum class PluginExecutionStatus {
     HANDLER_UNAVAILABLE,
     PLUGIN_NOT_CONNECTED,
     PERMISSION_REQUIRED,
+    USER_AUTHORIZATION_REQUIRED,
     CREDENTIAL_REQUIRED,
     ACCESS_UNAVAILABLE,
     CONFIRMATION_REQUIRED,
@@ -112,6 +113,11 @@ sealed interface PluginAccessDecision {
         val explanation: String,
         val androidPermission: String? = null,
         val settingsAction: String? = null
+    ) : PluginAccessDecision
+
+    data class UserAuthorizationRequired(
+        val authorizationId: String,
+        val explanation: String
     ) : PluginAccessDecision
 
     data class CredentialRequired(
