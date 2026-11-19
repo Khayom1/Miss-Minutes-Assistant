@@ -2751,7 +2751,7 @@ private fun SettingsScreen(
                                 when (language) {
                                     AppLanguage.Tajik -> "Барои иҷозатдиҳӣ гузариши «$capabilityLabel»-ро дар танзимоти амалҳои дастгоҳ фаъол кунед."
                                     AppLanguage.Russian -> "Чтобы разрешить действие, включите переключатель «$capabilityLabel» в настройках действий устройства."
-                                    AppLanguage.English -> "Enable the "$capabilityLabel" switch in Device tools settings to authorize this action."
+                                    AppLanguage.English -> "Enable the “$capabilityLabel” switch in Device tools settings to authorize this action."
                                 },
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodySmall
