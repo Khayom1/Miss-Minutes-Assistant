@@ -83,6 +83,7 @@ class MainActivityTest {
         context.getSharedPreferences("app_preferences", 0).edit().clear().commit()
         context.getSharedPreferences("plugin_manifest_store", 0).edit().clear().commit()
         context.getSharedPreferences("plugin_user_consent", 0).edit().clear().commit()
+        context.getSharedPreferences("device_tool_permissions", 0).edit().clear().commit()
         conversationDatabaseName = "ui-memory-test-${UUID.randomUUID()}.db"
         conversationStore = LocalConversationStore(
             context,
@@ -440,6 +441,9 @@ class MainActivityTest {
     fun connectedPluginToolsAreAutomaticallyInjectedIntoModelRequests() {
         assertChatReady()
         composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithTag("device_capability_device_info")
+            .performScrollTo()
+            .performClick()
         composeRule.onNodeWithTag("plugin_consent_android_device_status")
             .performScrollTo()
             .performClick()
