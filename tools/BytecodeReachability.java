@@ -17,6 +17,8 @@ public final class BytecodeReachability {
     String key() { return owner.replace('/','.') + "#" + name + desc; }
   }
   static final Map<String, Set<Method>> methodsByOwner = new HashMap<>();
+  static final Map<String, String> superNameByOwner = new HashMap<>();
+  static final Map<String, Set<String>> interfacesByOwner = new HashMap<>();
   static final Map<Method, Set<Method>> edges = new HashMap<>();
   static final Map<Method, Set<String>> virtualCalls = new HashMap<>();
   static final Map<String, List<Method>> virtualTargets = new HashMap<>();
@@ -31,6 +33,8 @@ public final class BytecodeReachability {
       for(Path p:(Iterable<Path>)stream.filter(x->x.toString().endsWith(".class"))::iterator) {
         ClassReader cr=new ClassReader(Files.readAllBytes(p));
         String owner=cr.getClassName(); classes.add(owner);
+        if(cr.getSuperName()!=null) superNameByOwner.put(owner,cr.getSuperName());
+        interfacesByOwner.put(owner,new HashSet<>(Arrays.asList(cr.getInterfaces())));
         cr.accept(new ClassVisitor(Opcodes.ASM9) {
           public MethodVisitor visitMethod(int access,String name,String desc,String signature,String[] exceptions) {
             Method from=new Method(owner,name,desc); methods.add(from);
@@ -93,6 +97,26 @@ public final class BytecodeReachability {
       }
     }
   }
+  static boolean isWorkerType(String owner, Set<String> seen) {
+    if(owner==null || !seen.add(owner)) return false;
+    if(owner.equals("androidx/work/ListenableWorker") ||
+       owner.equals("androidx/work/Worker") ||
+       owner.equals("androidx/work/CoroutineWorker") ||
+       owner.equals("androidx/work/RxWorker")) return true;
+    if(isWorkerType(superNameByOwner.get(owner),seen)) return true;
+    for(String iface:interfacesByOwner.getOrDefault(owner,Set.of()))
+      if(isWorkerType(iface,seen)) return true;
+    return false;
+  }
+  static void workerRoots() {
+    for(String owner:classes) {
+      if(!isWorkerType(superNameByOwner.get(owner),new HashSet<>()) &&
+         interfacesByOwner.getOrDefault(owner,Set.of()).stream()
+           .noneMatch(i->isWorkerType(i,new HashSet<>()))) continue;
+      for(Method m:methodsByOwner.getOrDefault(owner,Set.of()))
+        if(m.name().equals("<init>") || m.name().equals("doWork")) roots.add(m);
+    }
+  }
   static void walk(Set<Method> reachable) {
     ArrayDeque<Method> q=new ArrayDeque<>(roots);
     while(!q.isEmpty()) {
@@ -110,6 +134,7 @@ public final class BytecodeReachability {
     if(a.length<3) throw new IllegalArgumentException("usage: BytecodeReachability <manifest> <out.json> <class-dir>...");
     for(int i=2;i<a.length;i++) scan(Path.of(a[i]));
     manifestRoots(Path.of(a[0]));
+    workerRoots();
     // MainActivity is an app entry root even if a manifest merger changes its declaration.
     for(Method m:methods) if(m.owner().equals("com/khayom1/missminutes/MainActivity") && isFrameworkEntry(m)) roots.add(m);
     Set<Method> reachable=new TreeSet<>(Comparator.comparing(Method::key)); walk(reachable);
