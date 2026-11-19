@@ -9,7 +9,7 @@ object AndroidDeviceStatusPlugin {
 
     fun manifest() = PluginManifest(
         id = PLUGIN_ID,
-        version = "1.1.0",
+        version = "1.2.0",
         displayName = "Android device tools",
         description = "Read device status, calendar, contacts summary, set alarms and create reminders. Write actions require explicit confirmation.",
         capabilities = setOf(
@@ -17,6 +17,7 @@ object AndroidDeviceStatusPlugin {
             PluginCapability.BATTERY_STATUS,
             PluginCapability.CALENDAR_READ,
             PluginCapability.CALENDAR_WRITE,
+            PluginCapability.ALARM_SCHEDULE,
             PluginCapability.CONTACTS_READ
         ),
         actions = listOf(
@@ -37,7 +38,7 @@ object AndroidDeviceStatusPlugin {
             PluginActionSpec("contacts_summary", PluginCapability.CONTACTS_READ),
             PluginActionSpec(
                 "set_alarm",
-                PluginCapability.CALENDAR_WRITE,
+                PluginCapability.ALARM_SCHEDULE,
                 arguments = mapOf(
                     "hour" to PluginFieldSpec("hour", PluginValueType.INTEGER, required = true, minimum = 0, maximum = 23),
                     "minute" to PluginFieldSpec("minute", PluginValueType.INTEGER, required = true, minimum = 0, maximum = 59),
@@ -126,7 +127,7 @@ object AndroidDeviceStatusPlugin {
             override val actionId = "set_alarm"
             override val sideEffect = true
             override val argumentSchema = argumentsFor("set_alarm")
-            override val capability = PluginCapability.CALENDAR_WRITE
+            override val capability = PluginCapability.ALARM_SCHEDULE
             override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
                 val hour = (arguments["hour"] as? PluginValue.Number)?.value?.toInt()
                     ?: return PluginActionOutput(false, "hour is required")
