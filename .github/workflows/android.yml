@@ -49,6 +49,12 @@ jobs:
           test -f app/src/main/java/com/khayom1/missminutes/MainActivity.kt
           test ! -d app/src/main/assets/models
 
+      - name: Generate Kotlin declaration reachability triage
+        run: |
+          python3 tools/audit-kotlin-reachability.py --out build/kotlin-reachability
+          test -s build/kotlin-reachability/kotlin-reachability.json
+          test -s build/kotlin-reachability/kotlin-reachability-summary.md
+
       - name: Scan tracked working tree for secrets
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
 
@@ -104,5 +110,6 @@ jobs:
             app/build/outputs/apk/release/app-release-unsigned.apk
             app/build/release-evidence/
             app/gradle.lockfile
+            build/kotlin-reachability/
           if-no-files-found: error
           retention-days: 14
