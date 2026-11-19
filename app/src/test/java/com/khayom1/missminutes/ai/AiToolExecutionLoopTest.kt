@@ -26,8 +26,8 @@ class AiToolExecutionLoopTest {
     @Test
     fun executesOnlyAdvertisedToolAndReturnsResultToModel() = runBlocking {
         val provider = ScriptedProvider(
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
-            AiCompletion("Battery is 78 percent.", "deepseek-chat")
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
+            AiCompletion("Battery is 78 percent.", "deepseek-flash")
         )
         var executions = 0
         val result = AiToolExecutionLoop(
@@ -53,7 +53,7 @@ class AiToolExecutionLoopTest {
     @Test
     fun unknownToolNameIsRejectedBeforeAnyExecution() = runBlocking {
         val provider = ScriptedProvider(
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "unadvertised_tool", "{}")))
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_1", "unadvertised_tool", "{}")))
         )
         var executions = 0
         val error = runCatching {
@@ -75,8 +75,8 @@ class AiToolExecutionLoopTest {
     @Test
     fun reusedToolCallIdsAcrossRoundsAreRejectedBeforeSecondExecution() = runBlocking {
         val provider = ScriptedProvider(
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}")))
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_1", "plugin_status", "{}")))
         )
         var executions = 0
         val error = runCatching {
@@ -98,8 +98,8 @@ class AiToolExecutionLoopTest {
     @Test
     fun toolResultsAreTruncatedToRemainingConversationBudget() = runBlocking {
         val provider = ScriptedProvider(
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
-            AiCompletion("done", "deepseek-chat")
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
+            AiCompletion("done", "deepseek-flash")
         )
         val initialMessages = listOf(
             AiMessage(AiRole.SYSTEM, "a".repeat(8_000)),
@@ -119,7 +119,7 @@ class AiToolExecutionLoopTest {
     @Test
     fun toolLoopRejectsMessageCountOverflowBeforeExecuting() = runBlocking {
         val provider = ScriptedProvider(
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}")))
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_1", "plugin_status", "{}")))
         )
         val messages = (1..31).map { AiMessage(AiRole.SYSTEM, "system") } +
             AiMessage(AiRole.USER, "final user message")
@@ -138,8 +138,8 @@ class AiToolExecutionLoopTest {
     @Test
     fun toolRoundLimitStopsUnboundedModelLoops() = runBlocking {
         val provider = ScriptedProvider(
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_2", "plugin_status", "{}")))
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_2", "plugin_status", "{}")))
         )
         val error = runCatching {
             AiToolExecutionLoop(
@@ -162,7 +162,7 @@ class AiToolExecutionLoopTest {
         val provider = ScriptedProvider(
             AiCompletion(
                 "",
-                "deepseek-chat",
+                "deepseek-flash",
                 listOf(
                     AiToolCall("call_1", "plugin_status", "{}"),
                     AiToolCall("call_2", "plugin_status", "{}")
@@ -189,8 +189,8 @@ class AiToolExecutionLoopTest {
     @Test
     fun duplicateSideEffectCallsAcrossRoundsAreRejectedEvenWithNewCallIds() = runBlocking {
         val provider = ScriptedProvider(
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
-            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_2", "plugin_status", "{}")))
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
+            AiCompletion("", "deepseek-flash", listOf(AiToolCall("call_2", "plugin_status", "{}")))
         )
         var executions = 0
         val error = runCatching {
@@ -213,7 +213,7 @@ class AiToolExecutionLoopTest {
         val provider = ScriptedProvider(
             AiCompletion(
                 "",
-                "deepseek-chat",
+                "deepseek-flash",
                 listOf(
                     AiToolCall("call_1", "plugin_status", """{"x":1,"y":2}"""),
                     AiToolCall("call_2", "plugin_status", """{"y":2,"x":1}""")
@@ -243,13 +243,13 @@ class AiToolExecutionLoopTest {
         val provider = ScriptedProvider(
             AiCompletion(
                 "",
-                "deepseek-chat",
+                "deepseek-flash",
                 listOf(
                     AiToolCall("call_1", "plugin_status", "{}"),
                     AiToolCall("call_2", "plugin_status", "{}")
                 )
             ),
-            AiCompletion("Status checked twice.", "deepseek-chat")
+            AiCompletion("Status checked twice.", "deepseek-flash")
         )
         var executions = 0
         val result = AiToolExecutionLoop(provider, AiToolExecutor {

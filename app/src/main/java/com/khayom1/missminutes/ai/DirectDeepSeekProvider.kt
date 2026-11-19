@@ -20,8 +20,14 @@ private data class DeepSeekRequest(
     val messages: List<DeepSeekWireMessage>,
     @SerialName("max_tokens") val maxTokens: Int,
     val stream: Boolean,
+    val thinking: DeepSeekThinking,
     val tools: List<DeepSeekTool>? = null,
     @SerialName("tool_choice") val toolChoice: String? = null
+)
+
+@Serializable
+private data class DeepSeekThinking(
+    val type: String
 )
 
 @Serializable
@@ -79,7 +85,7 @@ class DirectDeepSeekProvider(
     private val keySource: DeepSeekApiKeySource,
     private val transport: AiHttpTransport,
     private val json: Json = Json { ignoreUnknownKeys = true; explicitNulls = false },
-    private val model: String = "deepseek-chat"
+    private val model: String = "deepseek-flash"
 ) : AiProvider {
     override suspend fun complete(request: AiRequest): AiCompletion {
         val key = withContext(Dispatchers.IO) { keySource.currentApiKey() }
@@ -108,6 +114,7 @@ class DirectDeepSeekProvider(
                     },
                     maxTokens = request.maxOutputTokens,
                     stream = false,
+                    thinking = DeepSeekThinking(type = "disabled"),
                     tools = request.tools.takeIf { it.isNotEmpty() }?.map { tool ->
                         DeepSeekTool(
                             type = "function",

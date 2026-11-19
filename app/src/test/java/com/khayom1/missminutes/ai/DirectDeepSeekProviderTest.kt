@@ -15,7 +15,7 @@ class DirectDeepSeekProviderTest {
     private class FakeTransport(
         private val response: AiHttpResponse = AiHttpResponse(
             200,
-            """{"model":"deepseek-chat","choices":[{"message":{"content":"Hello from DeepSeek"}}]}"""
+            """{"model":"deepseek-flash","choices":[{"message":{"content":"Hello from DeepSeek"}}]}"""
         ),
         private val failure: Throwable? = null
     ) : AiHttpTransport {
@@ -43,14 +43,18 @@ class DirectDeepSeekProviderTest {
         val result = provider.complete(request)
 
         assertEquals("Hello from DeepSeek", result.content)
-        assertEquals("deepseek-chat", result.model)
+        assertEquals("deepseek-flash", result.model)
         assertEquals("https://api.deepseek.com/chat/completions", transport.url)
         assertEquals("Bearer sk-user-owned-test-key-123456", transport.headers["Authorization"])
         assertEquals("application/json", transport.headers["Content-Type"])
         assertFalse(transport.headers.values.any { it.contains("supabase") })
         val payload = Json.parseToJsonElement(transport.body!!).jsonObject
-        assertEquals("deepseek-chat", payload["model"]!!.jsonPrimitive.content)
+        assertEquals("deepseek-flash", payload["model"]!!.jsonPrimitive.content)
         assertEquals("false", payload["stream"]!!.jsonPrimitive.content)
+        assertEquals(
+            "disabled",
+            payload["thinking"]!!.jsonObject["type"]!!.jsonPrimitive.content
+        )
         assertEquals("user", payload["messages"]!!.jsonArray.single().jsonObject["role"]!!.jsonPrimitive.content)
     }
 
@@ -157,7 +161,7 @@ class DirectDeepSeekProviderTest {
     fun sendsConnectedToolSchemaAndParsesFunctionCalls() = runBlocking {
         val response = AiHttpResponse(
             200,
-            """{"model":"deepseek-chat","choices":[{"message":{"content":null,"tool_calls":[{"id":"call_status_1","type":"function","function":{"name":"plugin_status","arguments":"{}"}}]}}]}"""
+            """{"model":"deepseek-flash","choices":[{"message":{"content":null,"tool_calls":[{"id":"call_status_1","type":"function","function":{"name":"plugin_status","arguments":"{}"}}]}}]}"""
         )
         val transport = FakeTransport(response)
         val schema = Json.parseToJsonElement(
@@ -221,7 +225,7 @@ class DirectDeepSeekProviderTest {
     fun rejectsNonFunctionToolCallTypes() = runBlocking {
         val response = AiHttpResponse(
             200,
-            """{"model":"deepseek-chat","choices":[{"message":{"content":null,"tool_calls":[{"id":"call_1","type":"shell","function":{"name":"plugin_status","arguments":"{}"}}]}}]}"""
+            """{"model":"deepseek-flash","choices":[{"message":{"content":null,"tool_calls":[{"id":"call_1","type":"shell","function":{"name":"plugin_status","arguments":"{}"}}]}}]}"""
         )
         val schema = Json.parseToJsonElement(
             """{"type":"object","properties":{},"required":[],"additionalProperties":false}"""
