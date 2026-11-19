@@ -36,7 +36,8 @@ class BuiltInDevicePluginManifestTest {
             registry.installedPlugins().map { it.id }.toSet()
         )
         assertEquals(
-            manifest.actions.map { it.id }.toSet(),
+            (manifest.actions + AndroidAccessibilityAutomationPlugin.manifest().actions)
+                .map { it.id }.toSet(),
             registry.toolCatalog().map { it.actionId }.toSet()
         )
     }
