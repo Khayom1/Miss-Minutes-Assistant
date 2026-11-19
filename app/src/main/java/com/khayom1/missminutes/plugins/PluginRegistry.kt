@@ -84,7 +84,7 @@ class PluginRegistry(
     }
 
     @Synchronized
-    fun installedPlugins(): List<PluginManifest> = manifests.values.toList()
+    fun installedPlugins(): List<PluginManifest> = manifests.values.map(::snapshotManifest)
 
     /** Connect is a one-time user action. The durable grant is reused for later turns. */
     @Synchronized
@@ -118,7 +118,7 @@ class PluginRegistry(
 
     @Synchronized
     fun connectedPlugins(): List<PluginManifest> =
-        manifests.values.filter { consentState(it.id) == true }.sortedBy { it.id }
+        manifests.values.filter { consentState(it.id) == true }.sortedBy { it.id }.map(::snapshotManifest)
 
     /**
      * Full local catalog for the assistant and settings UI. It describes only
@@ -332,7 +332,7 @@ class PluginRegistry(
                 )
             }
         } catch (_: TimeoutException) {
-            task.cancel(true)
+            cancelTask(task)
             record(PluginAuditEntry(now, manifest.id, action.id, "timeout"))
             PluginExecutionResult(
                 false, "Plugin exceeded its execution budget.", action.capability,
@@ -355,7 +355,7 @@ class PluginRegistry(
                 PluginExecutionStatus.FAILED
             )
         } catch (_: InterruptedException) {
-            task.cancel(true)
+            cancelTask(task)
             Thread.currentThread().interrupt()
             record(PluginAuditEntry(now, manifest.id, action.id, "cancelled"))
             PluginExecutionResult(
@@ -415,10 +415,12 @@ class PluginRegistry(
 
     /** Called with the registry monitor held. */
     private fun cancelExecutionsLocked(pluginId: String) {
-        activeExecutions[pluginId]?.toList()?.forEach { task ->
-            task.cancel(true)
-            if (task is Runnable) EXECUTOR.remove(task)
-        }
+        activeExecutions[pluginId]?.toList()?.forEach(::cancelTask)
+    }
+
+    private fun cancelTask(task: Future<PluginActionOutput>) {
+        task.cancel(true)
+        if (task is Runnable) EXECUTOR.remove(task)
         EXECUTOR.purge()
     }
 
@@ -469,6 +471,11 @@ class PluginRegistry(
             }
             require(action.arguments == handler.argumentSchema) {
                 "Manifest argument schema does not match the compiled handler schema."
+            }
+            require(manifests.values.none { existing ->
+                existing.id != manifest.id && existing.actions.any { it.id == action.id }
+            }) {
+                "Compiled action identity is already registered to another plugin."
             }
             require(action.arguments.size <= 8)
             action.arguments.forEach { (key, field) ->
