@@ -78,6 +78,10 @@ jobs:
           mkdir -p app/build/release-evidence
           ./gradlew --no-daemon -p app dependencies --write-locks > app/build/release-evidence/resolved-dependencies.txt
           test -s app/gradle.lockfile
+          if grep -E '^(com\\.google\\.guava:guava:(32\\.0\\.1-jre|33\\.3\\.1-jre)|com\\.google\\.protobuf:protobuf-(java|kotlin):3\\.24\\.4|io\\.netty:[^:]+:4\\.1\\.(93|110)\\.Final)=' app/gradle.lockfile; then
+            echo "::error::A previously identified vulnerable dependency version remains locked"
+            exit 1
+          fi
 
       - name: Scan resolved dependencies for known vulnerabilities (OSV)
         uses: google/osv-scanner-action/osv-scanner-action@v2.7.1
