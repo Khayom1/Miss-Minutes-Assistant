@@ -50,6 +50,7 @@ class PluginToolSchemaFactoryTest {
         ).single()
 
         assertTrue(definition.description.contains("Requires explicit user confirmation before execution."))
+        assertTrue(definition.sideEffect)
     }
 
     @Test
