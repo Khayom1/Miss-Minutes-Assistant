@@ -27,7 +27,8 @@ class PluginToolSchemaFactoryTest {
         ),
         requiresConfirmation = requiresConfirmation,
         connected = connected,
-        access = PluginAccessDecision.Granted
+        access = PluginAccessDecision.Granted,
+        sideEffect = requiresConfirmation
     )
 
     @Test
@@ -50,6 +51,7 @@ class PluginToolSchemaFactoryTest {
         ).single()
 
         assertTrue(definition.description.contains("Requires explicit user confirmation before execution."))
+        assertTrue(definition.sideEffect)
     }
 
     @Test

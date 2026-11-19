@@ -94,6 +94,7 @@ object AndroidAccessibilityAutomationPlugin {
         override val capability: PluginCapability = PluginCapability.ACCESSIBILITY_AUTOMATION
         override val argumentSchema: Map<String, PluginFieldSpec> = schema
         override val requiresConfirmation: Boolean = requiresConfirmation
+        override val sideEffect: Boolean = id != "inspect_screen"
 
         override fun execute(arguments: Map<String, PluginValue>): PluginActionOutput {
             val message = operation(arguments)

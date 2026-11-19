@@ -27,6 +27,7 @@ class AiToolExecutionLoop(
 
     suspend fun complete(request: AiRequest): AiCompletion {
         val allowedNames = request.tools.map { it.name }.toSet()
+        val sideEffectNames = request.tools.filter { it.sideEffect }.map { it.name }.toSet()
         val messages = request.messages.toMutableList()
         val seenCallIds = mutableSetOf<String>()
         val seenActionFingerprints = mutableSetOf<String>()
@@ -39,7 +40,7 @@ class AiToolExecutionLoop(
                 throw AiProviderException.InvalidResponse()
             }
             val calls = completion.toolCalls
-            val actionFingerprints = calls.map(::actionFingerprint)
+            val actionFingerprints = calls.filter { it.name in sideEffectNames }.map(::actionFingerprint)
             if (calls.size > 4 ||
                 calls.map { it.id }.distinct().size != calls.size ||
                 calls.any { it.id in seenCallIds || it.name !in allowedNames } ||

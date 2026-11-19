@@ -137,7 +137,8 @@ data class PluginToolDescriptor(
     val arguments: Map<String, PluginFieldSpec>,
     val requiresConfirmation: Boolean,
     val connected: Boolean,
-    val access: PluginAccessDecision
+    val access: PluginAccessDecision,
+    val sideEffect: Boolean = false
 )
 
 data class PluginAuditEntry(
@@ -167,5 +168,7 @@ interface PluginActionHandler {
     val argumentSchema: Map<String, PluginFieldSpec> get() = emptyMap()
     /** Compiled safety floor: a manifest may require more confirmation, never less. */
     val requiresConfirmation: Boolean get() = false
+    /** Compiled safety floor for duplicate-action suppression. */
+    val sideEffect: Boolean get() = false
     fun execute(arguments: Map<String, PluginValue>): PluginActionOutput
 }

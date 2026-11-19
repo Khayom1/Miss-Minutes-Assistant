@@ -37,7 +37,8 @@ object PluginToolSchemaFactory {
                         (if (tool.requiresConfirmation) "Requires explicit user confirmation before execution. " else "") +
                         tool.description
                     ).take(512),
-                parameters = parametersSchema(tool.arguments)
+                parameters = parametersSchema(tool.arguments),
+                sideEffect = tool.requiresConfirmation
             )
         }
     }
