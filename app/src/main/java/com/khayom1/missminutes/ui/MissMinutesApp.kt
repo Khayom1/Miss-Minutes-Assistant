@@ -115,6 +115,8 @@ import com.khayom1.missminutes.plugins.PluginRegistry
 import com.khayom1.missminutes.plugins.PluginToolSchemaFactory
 import com.khayom1.missminutes.plugins.AndroidPluginAccessChecker
 import com.khayom1.missminutes.plugins.PluginCapability
+import com.khayom1.missminutes.plugins.PluginAccessDecision
+import com.khayom1.missminutes.plugins.PluginToolDescriptor
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
 import com.khayom1.missminutes.voice.WakeWordServiceState
 import com.khayom1.missminutes.voice.PendingVoiceCommandStore
@@ -404,6 +406,43 @@ fun MissMinutesApp(
     val pluginPackageManager = remember(pluginRegistry, pluginConsentStore, pluginManifestStore) {
         LocalPluginPackageManager(pluginRegistry, pluginConsentStore, pluginManifestStore)
     }
+    var pluginToolCatalogRevision by remember(pluginRegistry) { mutableStateOf(0) }
+    val pluginToolCatalog = remember(pluginRegistry, pluginToolCatalogRevision) {
+        pluginRegistry.toolCatalog()
+    }
+    var pluginAccessMessage by remember(pluginRegistry) { mutableStateOf<String?>(null) }
+    val pluginPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        pluginAccessMessage = if (granted) null else when (language) {
+            AppLanguage.Tajik -> "Иҷозати Android дода нашуд."
+            AppLanguage.Russian -> "Разрешение Android не предоставлено."
+            AppLanguage.English -> "Android permission was not granted."
+        }
+        pluginToolCatalogRevision++
+    }
+    val openPluginAccess: (PluginAccessDecision.PermissionRequired) -> Unit = { access ->
+        pluginAccessMessage = null
+        when {
+            access.androidPermission != null -> pluginPermissionLauncher.launch(access.androidPermission)
+            access.settingsAction != null -> runCatching {
+                context.startActivity(
+                    Intent(access.settingsAction).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.onFailure {
+                pluginAccessMessage = when (language) {
+                    AppLanguage.Tajik -> "Танзимоти иҷозати Android кушода нашуд."
+                    AppLanguage.Russian -> "Не удалось открыть настройки разрешений Android."
+                    AppLanguage.English -> "Android permission settings could not be opened."
+                }
+            }
+            else -> pluginAccessMessage = when (language) {
+                AppLanguage.Tajik -> "Барои ин амал роҳи иҷозат дастрас нест."
+                AppLanguage.Russian -> "Для этого действия нет доступного способа выдать разрешение."
+                AppLanguage.English -> "No supported permission flow is available for this action."
+            }
+        }
+    }
     var pluginConsentSnapshot by remember(pluginRegistry) {
         mutableStateOf(
             pluginRegistry.installedPlugins().associate { it.id to pluginConsentStore.isGranted(it.id) }
@@ -455,6 +494,7 @@ fun MissMinutesApp(
     LaunchedEffect(isAppResumed) {
         if (isAppResumed) {
             accessibilityEnabled = AccessibilityAutomationService.isServiceEnabled(context)
+            pluginToolCatalogRevision++
         }
     }
     val wakePermissions = remember {
@@ -968,6 +1008,7 @@ fun MissMinutesApp(
                     pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
                         it.id to pluginConsentStore.isGranted(it.id)
                     }
+                    pluginToolCatalogRevision++
                     pendingPluginImport = null
                     backupStatus = when {
                         report.installedIds.isEmpty() && report.rejectedIds.isNotEmpty() ->
@@ -998,6 +1039,7 @@ fun MissMinutesApp(
                 }
                 if (removed) {
                     pluginConsentSnapshot = pluginConsentSnapshot - pluginId
+                    pluginToolCatalogRevision++
                     backupStatus = when (language) {
                         AppLanguage.English -> "Plugin uninstalled and its connection revoked."
                         AppLanguage.Russian -> "Плагин удалён, его подключение отозвано."
@@ -1127,6 +1169,7 @@ fun MissMinutesApp(
                     pluginConsentSnapshot = pluginRegistry.installedPlugins().associate {
                         it.id to pluginConsentStore.isGranted(it.id)
                     }
+                    pluginToolCatalogRevision++
                     loadConversation(owner)
                     backupStatus = when {
                         incoming.singleConversation && backupConflictPolicy == RestoreConflictPolicy.REPLACE ->
@@ -1719,12 +1762,16 @@ fun MissMinutesApp(
                                 memoryContextEnabled = memoryContextEnabled,
                                 deviceGrants = deviceGrants,
                                 pluginConsent = androidPluginConsent,
+                                pluginTools = pluginToolCatalog,
+                                pluginAccessMessage = pluginAccessMessage,
+                                onOpenPluginAccess = openPluginAccess,
                                 onPluginConsentChange = { granted ->
                                     val updated = if (granted) pluginRegistry.connect(AndroidDeviceStatusPlugin.PLUGIN_ID)
                                     else pluginRegistry.revokeConsent(AndroidDeviceStatusPlugin.PLUGIN_ID)
                                     if (updated) {
                                         androidPluginConsent = pluginConsentStore.isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID)
                                         pluginConsentSnapshot = pluginConsentSnapshot + (AndroidDeviceStatusPlugin.PLUGIN_ID to androidPluginConsent)
+                                        pluginToolCatalogRevision++
                                     }
                                 },
                                 onRunPluginAction = { actionId ->
@@ -1785,7 +1832,10 @@ fun MissMinutesApp(
                                 pluginConsentStates = pluginConsentSnapshot,
                                 onDeclarativePluginConsentChange = { pluginId, granted ->
                                     val updated = if (granted) pluginRegistry.connect(pluginId) else pluginRegistry.revokeConsent(pluginId)
-                                    if (updated) pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to pluginConsentStore.isGranted(pluginId))
+                                    if (updated) {
+                                        pluginConsentSnapshot = pluginConsentSnapshot + (pluginId to pluginConsentStore.isGranted(pluginId))
+                                        pluginToolCatalogRevision++
+                                    }
                                 },
                                 onExportPlugin = exportSelectedPlugin,
                                 onImportPluginPackage = {
