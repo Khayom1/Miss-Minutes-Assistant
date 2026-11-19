@@ -41,9 +41,10 @@ class PluginRegistry(
 
     @Synchronized
     fun install(manifest: PluginManifest): Boolean {
-        validateManifest(manifest)
-        if (manifests.containsKey(manifest.id)) return false
-        manifests[manifest.id] = snapshotManifest(manifest)
+        val snapshot = snapshotManifest(manifest)
+        validateManifest(snapshot)
+        if (manifests.containsKey(snapshot.id)) return false
+        manifests[snapshot.id] = snapshot
         return true
     }
 
