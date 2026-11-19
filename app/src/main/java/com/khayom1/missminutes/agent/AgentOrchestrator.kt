@@ -3,6 +3,7 @@ package com.khayom1.missminutes.agent
 import com.khayom1.missminutes.plugins.PluginExecutionRequest
 import com.khayom1.missminutes.plugins.PluginExecutionResult
 import com.khayom1.missminutes.plugins.PluginToolDescriptor
+import java.util.concurrent.ConcurrentHashMap
 
 /** A single, explicitly allowlisted plugin invocation in an inspectable task graph. */
 data class AgentAction(
@@ -121,6 +122,11 @@ class AgentOrchestrator(
         require(maxPlanNodes in 1..64)
     }
 
+    // Cancellation is signalled without waiting for the synchronized task transition.
+    private val cancellationLock = Any()
+    private val cancellationRequests = ConcurrentHashMap.newKeySet<String>()
+    private val activeExecutions = ConcurrentHashMap<String, Thread>()
+
     @Synchronized
     fun create(plan: AgentTaskPlan): AgentTaskState {
         // A serialized/model-authored request is never a source of user approval.
@@ -180,25 +186,50 @@ class AgentOrchestrator(
         else current.copy(status = deriveStatus(current.nodes, current.completedSteps))
     }
 
-    @Synchronized
-    fun cancel(taskId: String): AgentTaskState = update(taskId) { current ->
-        if (current.status in TERMINAL) current
-        else {
-            val nodes = current.nodes.mapValues { (_, node) ->
-                if (node.status == AgentNodeStatus.PENDING ||
-                    node.status == AgentNodeStatus.WAITING_APPROVAL
-                ) {
-                    node.copy(
-                        status = AgentNodeStatus.CANCELLED,
-                        message = "Cancelled by user.",
-                        approved = false,
-                        approvedAtMillis = null
-                    )
-                } else {
-                    node.copy(approved = false, approvedAtMillis = null)
+    fun cancel(taskId: String): AgentTaskState {
+        synchronized(cancellationLock) {
+            cancellationRequests.add(taskId)
+            activeExecutions[taskId]?.interrupt()
+        }
+        return synchronized(this) {
+            try {
+                update(taskId) { current ->
+                    if (current.status in TERMINAL) current
+                    else {
+                        val hasRunningAction = current.nodes.values.any {
+                            it.status == AgentNodeStatus.RUNNING
+                        }
+                        val nodes = current.nodes.mapValues { (_, node) ->
+                            when (node.status) {
+                                AgentNodeStatus.RUNNING -> node.copy(
+                                    status = AgentNodeStatus.RECOVERY_REQUIRED,
+                                    message = "Cancellation interrupted an external action; verify its effect before retrying.",
+                                    approved = false,
+                                    approvedAtMillis = null
+                                )
+                                AgentNodeStatus.PENDING,
+                                AgentNodeStatus.WAITING_APPROVAL -> node.copy(
+                                    status = AgentNodeStatus.CANCELLED,
+                                    message = "Cancelled by user.",
+                                    approved = false,
+                                    approvedAtMillis = null
+                                )
+                                else -> node.copy(approved = false, approvedAtMillis = null)
+                            }
+                        }
+                        current.copy(
+                            nodes = nodes,
+                            status = if (hasRunningAction) {
+                                AgentTaskStatus.RECOVERY_REQUIRED
+                            } else {
+                                AgentTaskStatus.CANCELLED
+                            }
+                        )
+                    }
                 }
+            } finally {
+                synchronized(cancellationLock) { cancellationRequests.remove(taskId) }
             }
-            current.copy(nodes = nodes, status = AgentTaskStatus.CANCELLED)
         }
     }
 
@@ -325,6 +356,28 @@ class AgentOrchestrator(
         current = current.copy(nodes = running, status = AgentTaskStatus.RUNNING, updatedAtMillis = now)
         store.save(current)
 
+        val executingThread = Thread.currentThread()
+        activeExecutions[taskId] = executingThread
+        val cancelledBeforeDispatch = synchronized(cancellationLock) {
+            cancellationRequests.contains(taskId)
+        }
+        if (cancelledBeforeDispatch) {
+            activeExecutions.remove(taskId, executingThread)
+            val cancelledNode = running.getValue(pending.id).copy(
+                status = AgentNodeStatus.CANCELLED,
+                message = "Cancelled before the external action was dispatched.",
+                approved = false,
+                approvedAtMillis = null
+            )
+            current = current.copy(
+                nodes = running + (pending.id to cancelledNode),
+                status = AgentTaskStatus.CANCELLED,
+                updatedAtMillis = clockMillis()
+            )
+            store.save(current)
+            return AgentAdvanceResult.Finished(current)
+        }
+
         val result = try {
             executor.execute(
                 pending.action.request.copy(userConfirmed = confirmationRequired && approvalFresh),
@@ -332,29 +385,49 @@ class AgentOrchestrator(
             )
         } catch (_: Exception) {
             PluginExecutionResult(false, "Action failed safely.", pending.action.requestCapability())
+        } finally {
+            activeExecutions.remove(taskId, executingThread)
         }
 
-        val finalNode = running.getValue(pending.id).copy(
-            status = if (result.success) AgentNodeStatus.SUCCEEDED else AgentNodeStatus.FAILED,
-            message = result.message.take(MAX_RESULT_CHARACTERS),
-            approved = false,
-            approvedAtMillis = null
-        )
-        val finalNodes = running + (pending.id to finalNode)
-        val completed = current.completedSteps + 1
-        val nextStatus = when {
-            !result.success -> AgentTaskStatus.FAILED
-            finalNodes.values.all { it.status == AgentNodeStatus.SUCCEEDED } -> AgentTaskStatus.SUCCEEDED
-            else -> AgentTaskStatus.READY
+        return synchronized(cancellationLock) {
+            if (cancellationRequests.contains(taskId)) {
+                val recoveryNode = running.getValue(pending.id).copy(
+                    status = AgentNodeStatus.RECOVERY_REQUIRED,
+                    message = "Cancellation interrupted an external action; verify its effect before retrying.",
+                    approved = false,
+                    approvedAtMillis = null
+                )
+                current = current.copy(
+                    nodes = running + (pending.id to recoveryNode),
+                    status = AgentTaskStatus.RECOVERY_REQUIRED,
+                    updatedAtMillis = clockMillis()
+                )
+                store.save(current)
+                return@synchronized AgentAdvanceResult.Finished(current)
+            }
+
+            val finalNode = running.getValue(pending.id).copy(
+                status = if (result.success) AgentNodeStatus.SUCCEEDED else AgentNodeStatus.FAILED,
+                message = result.message.take(MAX_RESULT_CHARACTERS),
+                approved = false,
+                approvedAtMillis = null
+            )
+            val finalNodes = running + (pending.id to finalNode)
+            val completed = current.completedSteps + 1
+            val nextStatus = when {
+                !result.success -> AgentTaskStatus.FAILED
+                finalNodes.values.all { it.status == AgentNodeStatus.SUCCEEDED } -> AgentTaskStatus.SUCCEEDED
+                else -> AgentTaskStatus.READY
+            }
+            current = current.copy(
+                nodes = finalNodes,
+                status = nextStatus,
+                completedSteps = completed,
+                updatedAtMillis = clockMillis()
+            )
+            store.save(current)
+            AgentAdvanceResult.Progress(current, pending.id)
         }
-        current = current.copy(
-            nodes = finalNodes,
-            status = nextStatus,
-            completedSteps = completed,
-            updatedAtMillis = clockMillis()
-        )
-        store.save(current)
-        return AgentAdvanceResult.Progress(current, pending.id)
     }
 
     private fun requiresApproval(action: AgentAction): Boolean {

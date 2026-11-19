@@ -9,6 +9,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class AgentOrchestratorTest {
     private var now = 1_000L
@@ -231,6 +233,39 @@ class AgentOrchestratorTest {
             (engine.advance("task_1") as AgentAdvanceResult.Finished).state.status
         )
         assertEquals(0, calls)
+    }
+
+    @Test
+    fun cancellingRunningActionInterruptsItAndRequiresRecoveryVerification() {
+        val started = CountDownLatch(1)
+        val interrupted = CountDownLatch(1)
+        val engine = orchestrator { _, _ ->
+            started.countDown()
+            try {
+                CountDownLatch(1).await()
+            } catch (error: InterruptedException) {
+                interrupted.countDown()
+                throw error
+            }
+            PluginExecutionResult(true, "unexpected completion", PluginCapability.DEVICE_INFORMATION)
+        }
+        engine.create(plan(listOf(node("external"))))
+
+        val worker = Thread { engine.advance("task_1") }
+        worker.start()
+        assertTrue(started.await(2, TimeUnit.SECONDS))
+
+        val cancelled = engine.cancel("task_1")
+        assertTrue(interrupted.await(2, TimeUnit.SECONDS))
+        worker.join(2_000L)
+
+        assertFalse(worker.isAlive)
+        assertEquals(AgentTaskStatus.RECOVERY_REQUIRED, cancelled.status)
+        assertEquals(AgentTaskStatus.RECOVERY_REQUIRED, engine.state("task_1")?.status)
+        assertEquals(
+            AgentNodeStatus.RECOVERY_REQUIRED,
+            engine.state("task_1")?.nodes?.getValue("external")?.status
+        )
     }
 
     @Test
