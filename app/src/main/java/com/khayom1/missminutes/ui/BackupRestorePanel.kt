@@ -65,6 +65,7 @@ internal fun BackupRestorePanel(
             PluginCapability.BATTERY_STATUS -> if (isTajik) "Ҳолати батарея" else if (isRussian) "Состояние батареи" else "Battery status"
             PluginCapability.CALENDAR_READ -> if (isTajik) "Хондани тақвим" else if (isRussian) "Чтение календаря" else "Read calendar"
             PluginCapability.CALENDAR_WRITE -> if (isTajik) "Тағйири тақвим" else if (isRussian) "Изменение календаря" else "Modify calendar"
+            PluginCapability.ALARM_SCHEDULE -> if (isTajik) "Танзими зангдор" else if (isRussian) "Установка будильника" else "Schedule alarm"
             PluginCapability.CONTACTS_READ -> if (isTajik) "Хондани тамосҳо" else if (isRussian) "Чтение контактов" else "Read contacts"
             PluginCapability.LOCATION_APPROXIMATE -> if (isTajik) "Ҷойгиршавии тахминӣ" else if (isRussian) "Приблизительное местоположение" else "Approximate location"
             PluginCapability.LOCATION_PRECISE -> if (isTajik) "Ҷойгиршавии дақиқ" else if (isRussian) "Точное местоположение" else "Precise location"
@@ -74,6 +75,7 @@ internal fun BackupRestorePanel(
             PluginCapability.GITHUB_REPOSITORY_WRITE -> if (isTajik) "Тағйири GitHub" else if (isRussian) "Изменение репозитория GitHub" else "Modify GitHub repository"
         }
         val requiresConfirmation = capability == PluginCapability.CALENDAR_WRITE ||
+            capability == PluginCapability.ALARM_SCHEDULE ||
             capability == PluginCapability.GITHUB_REPOSITORY_WRITE
         return if (!requiresConfirmation) label else label + when {
             isTajik -> " (тасдиқ ҳатмист)"
