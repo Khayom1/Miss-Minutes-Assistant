@@ -110,7 +110,7 @@ class CalendarReminderWriterTest {
     )
 
     private class FakeCalendarGateway(
-        private val reminderResult: Boolean,
+        private val reminderResult: Boolean = false,
         private val calendars: List<WritableCalendar> = listOf(
             WritableCalendar(
                 id = 1,
