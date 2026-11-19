@@ -1730,7 +1730,7 @@ private fun ChatScreen(
     val messageListState = rememberLazyListState()
     LaunchedEffect(messages.lastOrNull()?.id) {
         if (messages.isNotEmpty()) {
-            messageListState.animateScrollToItem(messages.lastIndex)
+            messageListState.scrollToItem(messages.lastIndex)
         }
     }
 
