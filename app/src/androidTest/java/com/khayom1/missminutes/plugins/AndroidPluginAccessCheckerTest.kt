@@ -6,6 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import com.khayom1.missminutes.device.DeviceToolCapability
+import com.khayom1.missminutes.device.DeviceToolAuthorization
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -28,9 +30,14 @@ class AndroidPluginAccessCheckerTest {
 
     @Test
     fun missingCalendarPermissionIsReportedAtExecutionTime() {
-        val checker = AndroidPluginAccessChecker(context)
+        val checker = AndroidPluginAccessChecker(
+            context,
+            deviceAuthorization = DeviceToolAuthorization {
+                it == DeviceToolCapability.READ_CALENDAR
+            }
+        )
         val action = PluginActionSpec(
-            id = "read_calendar",
+            id = "calendar_summary",
             capability = PluginCapability.CALENDAR_READ
         )
         assertTrue(checker.inspect("calendar_plugin", action) is PluginAccessDecision.PermissionRequired)
@@ -38,7 +45,12 @@ class AndroidPluginAccessCheckerTest {
 
     @Test
     fun alarmSchedulingUsesItsDeclaredPermissionInsteadOfCalendarRuntimeGrants() {
-        val checker = AndroidPluginAccessChecker(context)
+        val checker = AndroidPluginAccessChecker(
+            context,
+            deviceAuthorization = DeviceToolAuthorization {
+                it == DeviceToolCapability.SET_ALARM
+            }
+        )
         val action = PluginActionSpec(
             id = "set_alarm",
             capability = PluginCapability.ALARM_SCHEDULE
@@ -52,4 +64,24 @@ class AndroidPluginAccessCheckerTest {
         val appInfo = context.packageManager.getApplicationInfo(context.packageName, 0)
         assertEquals(0, appInfo.flags and ApplicationInfo.FLAG_ALLOW_BACKUP)
     }
+
+    @Test
+    fun deviceActionRequiresItsOwnExplicitUserAuthorization() {
+        var granted = false
+        val checker = AndroidPluginAccessChecker(
+            context,
+            deviceAuthorization = DeviceToolAuthorization {
+                it == DeviceToolCapability.DEVICE_INFO && granted
+            }
+        )
+        val action = PluginActionSpec(
+            id = "device_info",
+            capability = PluginCapability.DEVICE_INFORMATION
+        )
+
+        assertTrue(checker.inspect("device_plugin", action) is PluginAccessDecision.UserAuthorizationRequired)
+        granted = true
+        assertEquals(PluginAccessDecision.Granted, checker.inspect("device_plugin", action))
+    }
+
 }
