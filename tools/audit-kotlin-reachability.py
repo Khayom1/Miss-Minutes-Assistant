@@ -140,34 +140,11 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     json_file = out / "kotlin-reachability.json"
-    md_file = out / "kotlin-reachability-summary.md"
-    json_file.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    lines = [
-        "# Kotlin declaration/reference triage", "",
-        "> Heuristic scan only. Zero textual references are review candidates, NOT proof of dead code.", "",
-        f"- Kotlin files scanned: **{len(texts)}**",
-        f"- Tracked text files searched: **{len(searchable)}**",
-        f"- Declarations detected: **{len(declarations)}**",
-        f"- Production declarations: **{report['production_declarations']}**",
-        f"- Test declarations: **{report['test_declarations']}**", "", "## Triage totals", ""
-    ]
-    lines.extend(f"- {key}: **{value}**" for key, value in counts.items())
-    lines += ["", "## No textual reference candidates", ""]
-    candidates = [d for d in declarations if d["triage"] == "no_textual_reference_candidate"]
-    lines.extend((f"- {d['path']}:{d['line']} — {d['kind']} {d['name']} ({d['source_set']})"
-                  for d in candidates) if candidates else ["None detected."])
-    lines += ["", "## Framework/annotation candidates", "",
-              "Review these for indirect Android/framework invocation before drawing conclusions."]
-    lines.extend(f"- {d['path']}:{d['line']} — {d['kind']} {d['name']}"
-                 for d in declarations if d["triage"] == "framework_or_annotation_entrypoint_review")
-    lines += ["", "## Full evidence", "", f"- JSON: {json_file}", f"- Summary: {md_file}", ""]
-    md_file.write_text("\n".join(lines), encoding="utf-8")
     print("Kotlin files scanned:", len(texts))
     print("Tracked text files searched:", len(searchable))
     print("Declarations detected:", len(declarations))
     print("Triage counts:", json.dumps(counts, ensure_ascii=False))
     print("JSON report:", json_file)
-    print("Summary:", md_file)
     print("WARNING: manually verify candidates; this heuristic cannot prove dead code.")
 
 if __name__ == "__main__":

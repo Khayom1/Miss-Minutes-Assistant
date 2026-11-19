@@ -54,7 +54,6 @@ jobs:
         run: |
           python3 tools/audit-kotlin-reachability.py --out build/kotlin-reachability
           test -s build/kotlin-reachability/kotlin-reachability.json
-          test -s build/kotlin-reachability/kotlin-reachability-summary.md
 
       - name: Build app-local bytecode reachability graph
         run: |
