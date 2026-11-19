@@ -1,6 +1,7 @@
 package com.khayom1.missminutes.plugins
 
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Future
 import java.util.concurrent.RejectedExecutionException
@@ -29,6 +30,7 @@ class PluginRegistry(
     private val manifests = linkedMapOf<String, PluginManifest>()
     private val globalCallTimes = ArrayDeque<Long>()
     private val pluginCallTimes = mutableMapOf<String, ArrayDeque<Long>>()
+    private val activeExecutions = mutableMapOf<String, MutableSet<Future<PluginActionOutput>>>()
 
     init {
         require(handlersById.size == handlers.size) { "Duplicate compiled plugin action handler." }
@@ -41,7 +43,7 @@ class PluginRegistry(
     fun install(manifest: PluginManifest): Boolean {
         validateManifest(manifest)
         if (manifests.containsKey(manifest.id)) return false
-        manifests[manifest.id] = manifest
+        manifests[manifest.id] = snapshotManifest(manifest)
         return true
     }
 
@@ -55,6 +57,7 @@ class PluginRegistry(
         val mutableStore = consentStore as? MutablePluginConsentStore ?: return false
         return try {
             mutableStore.setGranted(pluginId, false)
+            cancelExecutionsLocked(pluginId)
             record(PluginAuditEntry(clockMillis(), pluginId, "consent", "consent_revoked"))
             true
         } catch (_: Exception) {
@@ -69,7 +72,9 @@ class PluginRegistry(
         val mutableStore = consentStore as? MutablePluginConsentStore ?: return false
         return try {
             mutableStore.setGranted(pluginId, false)
+            cancelExecutionsLocked(pluginId)
             manifests.remove(pluginId)
+            pluginCallTimes.remove(pluginId)
             record(PluginAuditEntry(clockMillis(), pluginId, "uninstall", "uninstalled"))
             true
         } catch (_: Exception) {
@@ -85,7 +90,11 @@ class PluginRegistry(
     fun connect(pluginId: String): Boolean {
         val manifest = manifests[pluginId] ?: return false
         val mutableStore = consentStore as? MutablePluginConsentStore ?: return false
-        if (mutableStore.isGranted(manifest.id)) return true
+        when (consentState(manifest.id)) {
+            true -> return true
+            false -> Unit
+            null -> return false
+        }
         val now = clockMillis()
         if (!record(PluginAuditEntry(now, manifest.id, "connection", "connect_requested"))) return false
         return try {
@@ -104,11 +113,11 @@ class PluginRegistry(
 
     @Synchronized
     fun isConnected(pluginId: String): Boolean =
-        manifests.containsKey(pluginId) && consentStore.isGranted(pluginId)
+        manifests.containsKey(pluginId) && consentState(pluginId) == true
 
     @Synchronized
     fun connectedPlugins(): List<PluginManifest> =
-        manifests.values.filter { consentStore.isGranted(it.id) }.sortedBy { it.id }
+        manifests.values.filter { consentState(it.id) == true }.sortedBy { it.id }
 
     /**
      * Full local catalog for the assistant and settings UI. It describes only
@@ -122,8 +131,7 @@ class PluginRegistry(
                 val handler = handlersById[action.id]
                     ?.takeIf { it.capability == action.capability }
                     ?: return@mapNotNull null
-                val access = runCatching { accessChecker.inspect(manifest.id, action) }
-                    .getOrElse { PluginAccessDecision.Unavailable("Access could not be verified safely.") }
+                val access = inspectAccess(manifest.id, action)
                 PluginToolDescriptor(
                     toolName = stableToolName(manifest.id, action.id),
                     pluginId = manifest.id,
@@ -133,7 +141,7 @@ class PluginRegistry(
                     capability = handler.capability,
                     arguments = handler.argumentSchema.toMap(),
                     requiresConfirmation = action.requiresConfirmation || handler.requiresConfirmation || action.capability.requiresConfirmation,
-                    connected = consentStore.isGranted(manifest.id),
+                    connected = consentState(manifest.id) == true,
                     access = access,
                     sideEffect = action.requiresConfirmation || handler.requiresConfirmation ||
                         action.capability.requiresConfirmation || handler.sideEffect
@@ -151,56 +159,67 @@ class PluginRegistry(
     fun readyTools(): List<PluginToolDescriptor> =
         connectedTools().filter { it.access is PluginAccessDecision.Granted }
 
-    @Synchronized
+    /**
+     * Validates and schedules while holding the registry lock, then waits without
+     * holding it. Revocation and uninstall can therefore cancel in-flight calls
+     * instead of waiting for the plugin timeout to expire.
+     */
     fun execute(request: PluginExecutionRequest): PluginExecutionResult {
         val now = clockMillis()
-        val manifest = manifests[request.pluginId]
-            ?: return denied(
-                now, request, null, "Plugin is not installed.",
-                PluginExecutionStatus.PLUGIN_NOT_INSTALLED
-            )
-        val action = manifest.actions.firstOrNull { it.id == request.actionId }
-            ?: return denied(
-                now, request, null, "Plugin action is not allowlisted.",
-                PluginExecutionStatus.ACTION_NOT_ALLOWED
-            )
-        val handler = handlersById[action.id]
-            ?: return denied(
-                now, request, action, "Plugin action handler is unavailable.",
-                PluginExecutionStatus.HANDLER_UNAVAILABLE
-            )
+        val selected = synchronized(this) {
+            val manifest = manifests[request.pluginId]
+                ?: return denied(
+                    now, request, null, "Plugin is not installed.",
+                    PluginExecutionStatus.PLUGIN_NOT_INSTALLED
+                )
+            val action = manifest.actions.firstOrNull { it.id == request.actionId }
+                ?: return denied(
+                    now, request, null, "Plugin action is not allowlisted.",
+                    PluginExecutionStatus.ACTION_NOT_ALLOWED
+                )
+            val handler = handlersById[action.id]
+                ?: return denied(
+                    now, request, action, "Plugin action handler is unavailable.",
+                    PluginExecutionStatus.HANDLER_UNAVAILABLE
+                )
 
-        if (!consentStore.isGranted(manifest.id)) {
-            return denied(
-                now, request, action, "Plugin is installed but not connected. Connect it once in Plugin settings.",
-                PluginExecutionStatus.PLUGIN_NOT_CONNECTED
-            )
-        }
-
-        val access = runCatching { accessChecker.inspect(manifest.id, action) }
-            .getOrElse {
-                PluginAccessDecision.Unavailable("Access could not be verified safely.")
+            when (consentState(manifest.id)) {
+                true -> Unit
+                false -> return denied(
+                    now, request, action,
+                    "Plugin is installed but not connected. Connect it once in Plugin settings.",
+                    PluginExecutionStatus.PLUGIN_NOT_CONNECTED
+                )
+                null -> return denied(
+                    now, request, action,
+                    "Plugin consent could not be verified safely.",
+                    PluginExecutionStatus.ACCESS_UNAVAILABLE
+                )
             }
+            Triple(manifest, action, handler)
+        }
+        val (manifest, action, handler) = selected
+
+        val access = inspectAccess(manifest.id, action)
         when (access) {
             PluginAccessDecision.Granted -> Unit
             is PluginAccessDecision.PermissionRequired -> return denied(
                 now, request, action, access.explanation,
-                PluginExecutionStatus.PERMISSION_REQUIRED,
-                access
+                PluginExecutionStatus.PERMISSION_REQUIRED, access
             )
             is PluginAccessDecision.CredentialRequired -> return denied(
                 now, request, action, access.explanation,
-                PluginExecutionStatus.CREDENTIAL_REQUIRED,
-                access
+                PluginExecutionStatus.CREDENTIAL_REQUIRED, access
             )
             is PluginAccessDecision.Unavailable -> return denied(
                 now, request, action, access.explanation,
-                PluginExecutionStatus.ACCESS_UNAVAILABLE,
-                access
+                PluginExecutionStatus.ACCESS_UNAVAILABLE, access
             )
         }
 
-        if ((action.requiresConfirmation || handler.requiresConfirmation || action.capability.requiresConfirmation) && !request.userConfirmed) {
+        val confirmationRequired = action.requiresConfirmation ||
+            handler.requiresConfirmation || action.capability.requiresConfirmation
+        if (confirmationRequired && !request.userConfirmed) {
             return denied(
                 now, request, action, "This action requires explicit confirmation.",
                 PluginExecutionStatus.CONFIRMATION_REQUIRED
@@ -217,36 +236,83 @@ class PluginRegistry(
             )
         }
 
-        prune(globalCallTimes, now)
-        val localTimes = pluginCallTimes.getOrPut(manifest.id) { ArrayDeque() }
-        prune(localTimes, now)
-        if (globalCallTimes.size >= globalCallsPerMinute ||
-            localTimes.size >= manifest.maxCallsPerMinute
-        ) {
-            return denied(
-                now, request, action, "Plugin rate limit reached.",
-                PluginExecutionStatus.RATE_LIMITED
-            )
+        val task = synchronized(this) {
+            val currentManifest = manifests[request.pluginId]
+                ?: return denied(
+                    now, request, null, "Plugin was uninstalled before execution.",
+                    PluginExecutionStatus.PLUGIN_NOT_INSTALLED
+                )
+            if (currentManifest != manifest) {
+                return denied(
+                    now, request, action, "Plugin registration changed before execution.",
+                    PluginExecutionStatus.ACTION_NOT_ALLOWED
+                )
+            }
+            when (consentState(manifest.id)) {
+                true -> Unit
+                false -> return denied(
+                    now, request, action, "Plugin connection was revoked before execution.",
+                    PluginExecutionStatus.PLUGIN_NOT_CONNECTED
+                )
+                null -> return denied(
+                    now, request, action, "Plugin consent could not be verified safely.",
+                    PluginExecutionStatus.ACCESS_UNAVAILABLE
+                )
+            }
+
+            // Check again immediately before dispatch, after any time spent validating input.
+            when (val currentAccess = inspectAccess(manifest.id, action)) {
+                PluginAccessDecision.Granted -> Unit
+                is PluginAccessDecision.PermissionRequired -> return denied(
+                    now, request, action, currentAccess.explanation,
+                    PluginExecutionStatus.PERMISSION_REQUIRED, currentAccess
+                )
+                is PluginAccessDecision.CredentialRequired -> return denied(
+                    now, request, action, currentAccess.explanation,
+                    PluginExecutionStatus.CREDENTIAL_REQUIRED, currentAccess
+                )
+                is PluginAccessDecision.Unavailable -> return denied(
+                    now, request, action, currentAccess.explanation,
+                    PluginExecutionStatus.ACCESS_UNAVAILABLE, currentAccess
+                )
+            }
+
+            prune(globalCallTimes, now)
+            val localTimes = pluginCallTimes.getOrPut(manifest.id) { ArrayDeque() }
+            prune(localTimes, now)
+            if (globalCallTimes.size >= globalCallsPerMinute ||
+                localTimes.size >= manifest.maxCallsPerMinute
+            ) {
+                return denied(
+                    now, request, action, "Plugin rate limit reached.",
+                    PluginExecutionStatus.RATE_LIMITED
+                )
+            }
+
+            if (!record(PluginAuditEntry(now, manifest.id, action.id, "requested"))) {
+                return PluginExecutionResult(
+                    false, "Plugin audit is unavailable; execution was blocked.", action.capability,
+                    PluginExecutionStatus.AUDIT_UNAVAILABLE
+                )
+            }
+            globalCallTimes.addLast(now)
+            localTimes.addLast(now)
+
+            try {
+                EXECUTOR.submit<PluginActionOutput> {
+                    handler.execute(request.arguments.toMap())
+                }.also { submitted ->
+                    activeExecutions.getOrPut(manifest.id) { linkedSetOf() }.add(submitted)
+                }
+            } catch (_: RejectedExecutionException) {
+                record(PluginAuditEntry(now, manifest.id, action.id, "capacity_exceeded"))
+                return PluginExecutionResult(
+                    false, "Plugin execution capacity is full.", action.capability,
+                    PluginExecutionStatus.EXECUTION_CAPACITY_EXCEEDED
+                )
+            }
         }
 
-        if (!record(PluginAuditEntry(now, manifest.id, action.id, "requested"))) {
-            return PluginExecutionResult(
-                false, "Plugin audit is unavailable; execution was blocked.", action.capability,
-                PluginExecutionStatus.AUDIT_UNAVAILABLE
-            )
-        }
-        globalCallTimes.addLast(now)
-        localTimes.addLast(now)
-
-        val task: Future<PluginActionOutput> = try {
-            EXECUTOR.submit<PluginActionOutput> { handler.execute(request.arguments) }
-        } catch (_: RejectedExecutionException) {
-            record(PluginAuditEntry(now, manifest.id, action.id, "capacity_exceeded"))
-            return PluginExecutionResult(
-                false, "Plugin execution capacity is full.", action.capability,
-                PluginExecutionStatus.EXECUTION_CAPACITY_EXCEEDED
-            )
-        }
         return try {
             val output = task.get(manifest.maxExecutionMillis, TimeUnit.MILLISECONDS)
             if (output.message.length > maxOutputCharacters) {
@@ -257,7 +323,12 @@ class PluginRegistry(
                 )
             } else {
                 record(PluginAuditEntry(now, manifest.id, action.id, if (output.success) "success" else "failed"))
-                PluginExecutionResult(output.success, output.message, action.capability)
+                PluginExecutionResult(
+                    output.success,
+                    output.message,
+                    action.capability,
+                    if (output.success) PluginExecutionStatus.SUCCEEDED else PluginExecutionStatus.FAILED
+                )
             }
         } catch (_: TimeoutException) {
             task.cancel(true)
@@ -266,6 +337,12 @@ class PluginRegistry(
                 false, "Plugin exceeded its execution budget.", action.capability,
                 PluginExecutionStatus.TIMED_OUT
             )
+        } catch (_: CancellationException) {
+            record(PluginAuditEntry(now, manifest.id, action.id, "cancelled"))
+            PluginExecutionResult(
+                false, "Plugin operation was cancelled.", action.capability,
+                PluginExecutionStatus.CANCELLED
+            )
         } catch (error: ExecutionException) {
             val cause = error.cause
             val outcome = if (cause is SecurityException) "permission_denied" else "failed"
@@ -273,7 +350,8 @@ class PluginRegistry(
             PluginExecutionResult(
                 false,
                 if (cause is SecurityException) "Android denied this plugin operation." else "Plugin operation failed safely.",
-                action.capability
+                action.capability,
+                PluginExecutionStatus.FAILED
             )
         } catch (_: InterruptedException) {
             task.cancel(true)
@@ -283,6 +361,13 @@ class PluginRegistry(
                 false, "Plugin operation was cancelled.", action.capability,
                 PluginExecutionStatus.CANCELLED
             )
+        } finally {
+            synchronized(this) {
+                activeExecutions[manifest.id]?.let { executions ->
+                    executions.remove(task)
+                    if (executions.isEmpty()) activeExecutions.remove(manifest.id)
+                }
+            }
         }
     }
 
@@ -312,6 +397,40 @@ class PluginRegistry(
             accessDecision
         )
     }
+
+    /** Returns null when consent storage cannot be trusted; callers always fail closed. */
+    private fun consentState(pluginId: String): Boolean? = try {
+        consentStore.isGranted(pluginId)
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun inspectAccess(pluginId: String, action: PluginActionSpec): PluginAccessDecision =
+        try {
+            accessChecker.inspect(pluginId, action)
+        } catch (_: Exception) {
+            PluginAccessDecision.Unavailable("Access could not be verified safely.")
+        }
+
+    /** Called with the registry monitor held. */
+    private fun cancelExecutionsLocked(pluginId: String) {
+        activeExecutions[pluginId]?.toList()?.forEach { task ->
+            task.cancel(true)
+            if (task is Runnable) EXECUTOR.remove(task)
+        }
+        EXECUTOR.purge()
+    }
+
+    private fun snapshotManifest(manifest: PluginManifest): PluginManifest = manifest.copy(
+        capabilities = manifest.capabilities.toSet(),
+        actions = manifest.actions.map { action ->
+            action.copy(
+                arguments = action.arguments.mapValues { (_, field) ->
+                    field.copy(allowedValues = field.allowedValues.toSet())
+                }
+            )
+        }
+    )
 
     private fun stableToolName(pluginId: String, actionId: String): String {
         val stableId = java.util.UUID.nameUUIDFromBytes(
