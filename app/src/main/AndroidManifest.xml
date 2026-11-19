@@ -76,7 +76,6 @@
         <service
             android:name=".assistant.MissMinutesRecognitionService"
             android:label="@string/miss_minutes_assistant_label"
-            android:permission="android.permission.BIND_SPEECH_RECOGNITION_SERVICE"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.speech.RecognitionService" />
