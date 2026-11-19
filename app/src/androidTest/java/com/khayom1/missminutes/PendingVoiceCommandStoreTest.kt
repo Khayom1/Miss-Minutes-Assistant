@@ -40,5 +40,20 @@ class PendingVoiceCommandStoreTest {
         PendingVoiceCommandStore.save(context, "   ")
         assertNull(PendingVoiceCommandStore.peek(context))
     }
+    @Test
+    fun legacyPlaintextCommandIsDeletedInsteadOfReadAfterUpgrade() {
+        context.getSharedPreferences("miss_minutes_pending_voice", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putString("command", "private voice command")
+            .putLong("created_at", System.currentTimeMillis())
+            .commit()
+
+        assertNull(PendingVoiceCommandStore.peek(context))
+        assertNull(
+            context.getSharedPreferences("miss_minutes_pending_voice", android.content.Context.MODE_PRIVATE)
+                .getString("command", null)
+        )
+    }
+
 }
 
