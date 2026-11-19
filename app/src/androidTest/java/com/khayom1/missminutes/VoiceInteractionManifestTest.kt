@@ -43,6 +43,7 @@ class VoiceInteractionManifestTest {
             PackageManager.GET_META_DATA
         )
         assertTrue(recognition.exported)
+        assertEquals("android.permission.BIND_SPEECH_RECOGNITION_SERVICE", recognition.permission)
         assertNotNull(recognition.metaData)
         assertTrue(
             packageManager.queryIntentServices(
