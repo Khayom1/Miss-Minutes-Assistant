@@ -5,6 +5,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.khayom1.missminutes.voice.PendingVoiceCommandStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,6 +27,9 @@ class PendingVoiceCommandStoreTest {
 
         assertEquals("open settings", PendingVoiceCommandStore.peek(context))
         assertEquals("open settings", PendingVoiceCommandStore.peek(context))
+        val stored = context.getSharedPreferences("miss_minutes_pending_voice", android.content.Context.MODE_PRIVATE)
+            .getString("command_ciphertext", null)
+        assertFalse(stored.orEmpty().contains("open settings"))
 
         PendingVoiceCommandStore.acknowledge(context)
         assertNull(PendingVoiceCommandStore.peek(context))
@@ -37,3 +41,4 @@ class PendingVoiceCommandStoreTest {
         assertNull(PendingVoiceCommandStore.peek(context))
     }
 }
+
