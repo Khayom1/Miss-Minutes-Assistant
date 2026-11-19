@@ -50,4 +50,18 @@ class AccessibilityAutomationPolicyTest {
             )
         )
     }
+    @Test
+    fun authenticationAndCredentialFieldsAreIdentifiedAcrossSupportedLanguages() {
+        assertTrue(AccessibilityAutomationPolicy.isSensitiveFieldLabel("Verification code"))
+        assertTrue(AccessibilityAutomationPolicy.isSensitiveFieldLabel("Password"))
+        assertTrue(AccessibilityAutomationPolicy.isSensitiveFieldLabel("CVV"))
+        assertTrue(AccessibilityAutomationPolicy.isSensitiveFieldLabel("PIN"))
+        assertTrue(AccessibilityAutomationPolicy.isSensitiveFieldLabel("Recovery code"))
+        assertTrue(AccessibilityAutomationPolicy.isSensitiveFieldLabel("Код подтверждения"))
+        assertTrue(AccessibilityAutomationPolicy.isSensitiveFieldLabel("Рамзи тасдиқ"))
+        assertTrue(AccessibilityAutomationPolicy.isSensitiveFieldLabel("Код восстановления"))
+        assertTrue(AccessibilityAutomationPolicy.isSensitiveFieldLabel("Калиди API"))
+        assertFalse(AccessibilityAutomationPolicy.isSensitiveFieldLabel("Code editor"))
+        assertFalse(AccessibilityAutomationPolicy.isSensitiveFieldLabel("Search"))
+    }
 }

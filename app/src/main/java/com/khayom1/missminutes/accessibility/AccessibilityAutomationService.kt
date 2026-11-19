@@ -47,9 +47,10 @@ class AccessibilityAutomationService : AccessibilityService() {
         for (node in collectNodes(root)) {
             if (included >= MAX_OUTPUT_NODES) break
             val type = node.className?.toString()?.substringAfterLast('.') ?: "View"
-            val text = if (node.isPassword) "[redacted]" else redactSensitiveScreenText(node.text?.toString()?.trim().orEmpty())
-            val description = if (node.isPassword) "" else redactSensitiveScreenText(node.contentDescription?.toString()?.trim().orEmpty())
-            val hint = if (node.isPassword) "" else redactSensitiveScreenText(node.hintText?.toString()?.trim().orEmpty())
+            val sensitiveField = isSensitiveField(node)
+            val text = if (sensitiveField) "[authentication field redacted]" else redactSensitiveScreenText(node.text?.toString()?.trim().orEmpty())
+            val description = if (sensitiveField) "" else redactSensitiveScreenText(node.contentDescription?.toString()?.trim().orEmpty())
+            val hint = if (sensitiveField) "" else redactSensitiveScreenText(node.hintText?.toString()?.trim().orEmpty())
             if (text.isBlank() && description.isBlank() && hint.isBlank() &&
                 !node.isEditable && !node.isClickable && !node.isScrollable
             ) continue
@@ -151,7 +152,7 @@ class AccessibilityAutomationService : AccessibilityService() {
         if (editable.isEmpty()) return failure("No matching focused or labeled text field is available.")
         if (editable.size != 1) return failure("More than one editable field matched. Specify the field label.")
         val field = editable.single()
-        if (field.isPassword) return failure("Password fields are not accessible to the assistant.")
+        if (isSensitiveField(field)) return failure("Authentication and credential fields are blocked from assistant inspection and text entry.")
         field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
@@ -183,6 +184,17 @@ class AccessibilityAutomationService : AccessibilityService() {
         return cardNumber.replace(labeledCode.replace(value) { match ->
             match.groupValues[1] + match.groupValues[2] + "[redacted]"
         }, "[payment number redacted]")
+    }
+
+    private fun isSensitiveField(node: AccessibilityNodeInfo): Boolean {
+        if (node.isPassword || nodeLabels(node).any(AccessibilityAutomationPolicy::isSensitiveFieldLabel)) {
+            return true
+        }
+        val parent = node.parent ?: return false
+        return (0 until parent.childCount).any { index ->
+            val sibling = parent.getChild(index) ?: return@any false
+            nodeLabels(sibling).any(AccessibilityAutomationPolicy::isSensitiveFieldLabel)
+        }
     }
 
     private fun activeRoot(): AccessibilityNodeInfo? =
@@ -303,17 +315,43 @@ class AccessibilityAutomationService : AccessibilityService() {
             }
             val result = AtomicReference<String?>()
             val latch = CountDownLatch(1)
+            val gate = AccessibilityInvocationGate()
             val posted = mainHandler.post {
-                result.set(
-                    runCatching { action(service) }.getOrElse {
-                        failure("The foreground app could not be controlled safely.")
+                try {
+                    if (gate.tryStart()) {
+                        result.set(
+                            runCatching { action(service) }.getOrElse {
+                                failure("The foreground app could not be controlled safely.")
+                            }
+                        )
                     }
-                )
-                latch.countDown()
+                } finally {
+                    gate.finish()
+                    latch.countDown()
+                }
             }
-            if (!posted) return failure("Android's UI automation thread is unavailable.")
-            if (!latch.await(SERVICE_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                return failure("The foreground app did not respond before the automation timeout.")
+            if (!posted) {
+                gate.abandonIfPending()
+                return failure("Android's UI automation thread is unavailable.")
+            }
+            val completed = try {
+                latch.await(SERVICE_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
+                val abandonedBeforeStart = gate.abandonIfPending()
+                Thread.currentThread().interrupt()
+                return if (abandonedBeforeStart) {
+                    failure("The accessibility action was cancelled before it started.")
+                } else {
+                    failure("The accessibility action had already started when interrupted. Its outcome is uncertain; verify the screen before retrying.")
+                }
+            }
+            if (!completed) {
+                val abandonedBeforeStart = gate.abandonIfPending()
+                if (abandonedBeforeStart) {
+                    return failure("The accessibility action timed out before it started and was cancelled.")
+                }
+                return result.get()
+                    ?: failure("The accessibility action started but did not finish before the timeout. Its outcome is uncertain; verify the screen before retrying.")
             }
             return result.get() ?: failure("The accessibility action returned no result.")
         }
@@ -362,6 +400,28 @@ object AccessibilityAutomationPolicy {
             "подтвердить", "продолжить", "да", "ок", "подтверждаю", "разрешить", "предоставить", "принять",
             "тасдиқ", "идома", "ҳа", "иҷозат", "розӣ"
         )
+
+    private val sensitiveFieldLabels = listOf(
+        "password", "passcode", "passphrase", "pin", "pin code", "security pin",
+        "one time code", "one-time code", "one time password", "one-time password",
+        "verification code", "security code", "authentication code", "recovery code",
+        "backup code", "otp", "cvv", "cvc", "card number", "bank account number",
+        "api key", "secret key", "private key", "access token", "seed phrase",
+        "пароль", "код подтверждения", "одноразовый код", "код безопасности",
+        "код восстановления", "резервный код", "пин", "пин код", "номер карты",
+        "номер банковского счета", "ключ api", "секретный ключ", "закрытый ключ",
+        "токен доступа", "рамзи тасдиқ", "рамзи тасдик", "рамзи якдафъаина",
+        "рамзи амният", "рамзи барқарорсозӣ", "рамзи баркарорсози",
+        "рақами корт", "раками корт", "калиди api", "калиди махфӣ",
+        "калиди махфи", "калиди хусусӣ", "калимаи махфӣ", "токени дастрасӣ"
+    )
+
+    fun isSensitiveFieldLabel(label: String): Boolean {
+        val normalized = normalize(label)
+        return normalized.isNotBlank() && sensitiveFieldLabels.any { sensitive ->
+            normalized == normalize(sensitive) || normalized.contains(normalize(sensitive))
+        }
+    }
 
     fun isExplicitDangerousActionConfirmation(command: String, pendingReason: String): Boolean {
         val normalizedCommand = normalize(command)
