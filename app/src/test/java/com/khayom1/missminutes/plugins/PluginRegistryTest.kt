@@ -808,7 +808,7 @@ class PluginRegistryTest {
         assertTrue(registry.install(manifest))
 
         val exposed = registry.installedPlugins().single()
-        (exposed.capabilities as MutableSet<PluginCapability>).clear()
+        (exposed.actions.single().arguments.getValue("locale").allowedValues as MutableSet<String>).clear()
         (exposed.actions as MutableList<PluginActionSpec>).clear()
 
         val stored = registry.installedPlugins().single()
