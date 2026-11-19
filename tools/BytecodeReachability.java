@@ -67,6 +67,7 @@ public final class BytecodeReachability {
     Element app=(Element)d.getElementsByTagName("application").item(0);
     if(app==null)return;
     String pkg=d.getDocumentElement().getAttribute("package");
+    if(pkg.isBlank()) pkg="com.khayom1.missminutes";
     String[] tags={"activity","activity-alias","service","receiver","provider"};
     for(String tag:tags) {
       NodeList ns=app.getElementsByTagName(tag);
