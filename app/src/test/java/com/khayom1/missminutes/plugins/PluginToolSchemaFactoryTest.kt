@@ -27,7 +27,8 @@ class PluginToolSchemaFactoryTest {
         ),
         requiresConfirmation = requiresConfirmation,
         connected = connected,
-        access = PluginAccessDecision.Granted
+        access = PluginAccessDecision.Granted,
+        sideEffect = requiresConfirmation
     )
 
     @Test
