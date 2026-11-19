@@ -12,13 +12,16 @@ import android.speech.SpeechRecognizer
 
 /**
  * Speech adapter for the Android Assistant role.
- * Delegates only to Android's on-device recognizer; there is no cloud fallback.
+ *
+ * Every platform recognizer belongs to one generation-scoped session. Android may
+ * deliver cancellation callbacks after a recognizer is replaced, so callbacks
+ * from an old session must never reach the old client or destroy a newer delegate.
  */
 class MissMinutesRecognitionService : RecognitionService() {
-    private var activeRecognizer: SpeechRecognizer? = null
+    private val sessions = RecognitionSession<SpeechRecognizer>()
 
     override fun onStartListening(recognizerIntent: Intent?, callback: Callback) {
-        releaseActiveRecognizer()
+        destroyActiveRecognizer()
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             callback.error(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
@@ -33,17 +36,19 @@ class MissMinutesRecognitionService : RecognitionService() {
             return
         }
 
+        val delegate = try {
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+        } catch (_: SecurityException) {
+            callback.error(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
+            return
+        } catch (_: RuntimeException) {
+            callback.error(SpeechRecognizer.ERROR_CLIENT)
+            return
+        }
+
+        val sessionId = sessions.begin(delegate)
         try {
-            val delegate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-            } else {
-                null
-            } ?: run {
-                callback.error(SpeechRecognizer.ERROR_CLIENT)
-                return
-            }
-            activeRecognizer = delegate
-            delegate.setRecognitionListener(forwardingListener(callback))
+            delegate.setRecognitionListener(forwardingListener(sessionId, delegate, callback))
             val request = Intent(
                 recognizerIntent ?: Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             ).apply {
@@ -52,74 +57,116 @@ class MissMinutesRecognitionService : RecognitionService() {
             }
             delegate.startListening(request)
         } catch (_: SecurityException) {
-            releaseActiveRecognizer()
-            callback.error(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
+            failSession(sessionId, delegate, callback, SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
         } catch (_: RuntimeException) {
-            releaseActiveRecognizer()
-            callback.error(SpeechRecognizer.ERROR_CLIENT)
+            failSession(sessionId, delegate, callback, SpeechRecognizer.ERROR_CLIENT)
         }
     }
 
     override fun onStopListening(callback: Callback) {
-        val recognizer = activeRecognizer
+        val recognizer = sessions.current()
         if (recognizer == null) {
             callback.error(SpeechRecognizer.ERROR_CLIENT)
             return
         }
         runCatching { recognizer.stopListening() }
-            .onFailure { callback.error(SpeechRecognizer.ERROR_CLIENT) }
+            .onFailure {
+                callback.error(SpeechRecognizer.ERROR_CLIENT)
+            }
     }
 
     override fun onCancel(callback: Callback) {
-        releaseActiveRecognizer()
+        destroyActiveRecognizer()
     }
 
     override fun onDestroy() {
-        releaseActiveRecognizer()
+        destroyActiveRecognizer()
         super.onDestroy()
     }
 
-    private fun forwardingListener(callback: Callback) = object : RecognitionListener {
+    private fun forwardingListener(
+        sessionId: Long,
+        delegate: SpeechRecognizer,
+        callback: Callback
+    ) = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
-            runCatching { callback.readyForSpeech(params ?: Bundle()) }
-        }
-        override fun onBeginningOfSpeech() {
-            runCatching { callback.beginningOfSpeech() }
-        }
-        override fun onRmsChanged(rmsdB: Float) {
-            runCatching { callback.rmsChanged(rmsdB) }
-        }
-        override fun onBufferReceived(buffer: ByteArray?) {
-            if (buffer != null) runCatching { callback.bufferReceived(buffer) }
-        }
-        override fun onEndOfSpeech() {
-            runCatching { callback.endOfSpeech() }
-        }
-        override fun onError(error: Int) {
-            runCatching { callback.error(error) }
-            releaseActiveRecognizer()
-        }
-        override fun onResults(results: Bundle?) {
-            if (results == null) {
-                runCatching { callback.error(SpeechRecognizer.ERROR_NO_MATCH) }
-            } else {
-                runCatching { callback.results(results) }
+            deliverIfCurrent(sessionId, delegate) {
+                callback.readyForSpeech(params ?: Bundle())
             }
-            releaseActiveRecognizer()
         }
+
+        override fun onBeginningOfSpeech() {
+            deliverIfCurrent(sessionId, delegate) { callback.beginningOfSpeech() }
+        }
+
+        override fun onRmsChanged(rmsdB: Float) {
+            deliverIfCurrent(sessionId, delegate) { callback.rmsChanged(rmsdB) }
+        }
+
+        override fun onBufferReceived(buffer: ByteArray?) {
+            if (buffer != null) {
+                deliverIfCurrent(sessionId, delegate) { callback.bufferReceived(buffer) }
+            }
+        }
+
+        override fun onEndOfSpeech() {
+            deliverIfCurrent(sessionId, delegate) { callback.endOfSpeech() }
+        }
+
+        override fun onError(error: Int) {
+            finishSession(sessionId, delegate) { callback.error(error) }
+        }
+
+        override fun onResults(results: Bundle?) {
+            finishSession(sessionId, delegate) {
+                if (results == null) callback.error(SpeechRecognizer.ERROR_NO_MATCH)
+                else callback.results(results)
+            }
+        }
+
         override fun onPartialResults(partialResults: Bundle?) {
             if (partialResults != null) {
-                runCatching { callback.partialResults(partialResults) }
+                deliverIfCurrent(sessionId, delegate) { callback.partialResults(partialResults) }
             }
         }
+
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
     }
 
-    private fun releaseActiveRecognizer() {
-        activeRecognizer?.let { recognizer ->
-            runCatching { recognizer.cancel() }
-            runCatching { recognizer.destroy() }
-        }
-        activeRecognizer = null
+    private inline fun deliverIfCurrent(
+        sessionId: Long,
+        delegate: SpeechRecognizer,
+        deliver: () -> Unit
+    ) {
+        if (sessions.isCurrent(sessionId, delegate)) runCatching(deliver)
+    }
+
+    private inline fun finishSession(
+        sessionId: Long,
+        delegate: SpeechRecognizer,
+        deliver: () -> Unit
+    ) {
+        if (!sessions.finish(sessionId, delegate)) return
+        destroyRecognizer(delegate)
+        runCatching(deliver)
+    }
+
+    private fun failSession(
+        sessionId: Long,
+        delegate: SpeechRecognizer,
+        callback: Callback,
+        error: Int
+    ) {
+        finishSession(sessionId, delegate) { callback.error(error) }
+    }
+
+    private fun destroyActiveRecognizer() {
+        sessions.cancel()?.let(::destroyRecognizer)
+    }
+
+    /** Destroys only the exact delegate owned by the completed/cancelled session. */
+    private fun destroyRecognizer(recognizer: SpeechRecognizer) {
+        runCatching { recognizer.cancel() }
+        runCatching { recognizer.destroy() }
     }
 }
