@@ -19,7 +19,7 @@ private data class DeepSeekRequest(
     val model: String,
     val messages: List<DeepSeekWireMessage>,
     @SerialName("max_tokens") val maxTokens: Int,
-    val stream: Boolean = false,
+    val stream: Boolean,
     val tools: List<DeepSeekTool>? = null,
     @SerialName("tool_choice") val toolChoice: String? = null
 )
@@ -107,6 +107,7 @@ class DirectDeepSeekProvider(
                         )
                     },
                     maxTokens = request.maxOutputTokens,
+                    stream = false,
                     tools = request.tools.takeIf { it.isNotEmpty() }?.map { tool ->
                         DeepSeekTool(
                             type = "function",
