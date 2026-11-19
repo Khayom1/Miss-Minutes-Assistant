@@ -60,6 +60,7 @@ jobs:
           mkdir -p build/bytecode-audit
           curl --fail --silent --show-error --location https://repo1.maven.org/maven2/org/ow2/asm/asm/9.8/asm-9.8.jar --output build/bytecode-audit/asm.jar
           javac -cp build/bytecode-audit/asm.jar -d build/bytecode-audit tools/BytecodeReachability.java
+          python3 tools/test-bytecode-reachability.py build/bytecode-audit build/bytecode-audit/asm.jar
           gradle --no-daemon :app:assembleDebug
           java -cp build/bytecode-audit:build/bytecode-audit/asm.jar BytecodeReachability app/src/main/AndroidManifest.xml build/bytecode-audit/bytecode-reachability.json app/build/tmp/kotlin-classes/debug app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes
           test -s build/bytecode-audit/bytecode-reachability.json
