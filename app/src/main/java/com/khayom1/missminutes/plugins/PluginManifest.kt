@@ -100,9 +100,9 @@ data class PluginExecutionResult(
 )
 
 /**
- * Access is checked at execution time. It is deliberately separate from the
- * persistent plugin connection grant: connection is one-time, OS permissions
- * and provider credentials can expire or be revoked independently.
+ * Access is checked during discovery and again immediately before execution.
+ * It is separate from plugin connection: per-action app grants, Android
+ * permissions, accessibility access, and credentials can change independently.
  */
 sealed interface PluginAccessDecision {
     data object Granted : PluginAccessDecision
