@@ -157,3 +157,55 @@ class AiToolExecutionLoopTest {
         assertTrue(error is AiProviderException.InvalidResponse)
     }
 }
+
+    @Test
+    fun duplicateSideEffectCallsWithDifferentIdsAreRejectedBeforeExecution() = runBlocking {
+        val provider = ScriptedProvider(
+            AiCompletion(
+                "",
+                "deepseek-chat",
+                listOf(
+                    AiToolCall("call_1", "plugin_status", "{}"),
+                    AiToolCall("call_2", "plugin_status", "{}")
+                )
+            )
+        )
+        var executions = 0
+        val error = runCatching {
+            AiToolExecutionLoop(provider, AiToolExecutor {
+                executions++
+                AiToolExecutionResult("ok")
+            }).complete(
+                AiRequest(
+                    messages = listOf(AiMessage(AiRole.USER, "Do the action once")),
+                    tools = listOf(tool)
+                )
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is AiProviderException.InvalidResponse)
+        assertEquals(0, executions)
+    }
+
+    @Test
+    fun duplicateSideEffectCallsAcrossRoundsAreRejectedEvenWithNewCallIds() = runBlocking {
+        val provider = ScriptedProvider(
+            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_1", "plugin_status", "{}"))),
+            AiCompletion("", "deepseek-chat", listOf(AiToolCall("call_2", "plugin_status", "{}")))
+        )
+        var executions = 0
+        val error = runCatching {
+            AiToolExecutionLoop(provider, AiToolExecutor {
+                executions++
+                AiToolExecutionResult("ok")
+            }).complete(
+                AiRequest(
+                    messages = listOf(AiMessage(AiRole.USER, "Do the action once")),
+                    tools = listOf(tool)
+                )
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is AiProviderException.InvalidResponse)
+        assertEquals(1, executions)
+    }
