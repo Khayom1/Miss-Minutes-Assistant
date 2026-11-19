@@ -148,3 +148,28 @@ The audit-only commit `dc00d41687a6bed476174cb135ff1b48604c5eed` triggered Andro
 This confirms the audit commit itself did not introduce a new compile, lint, or dependency-scan failure; however, the branch's CI status remains red. The failure is a pre-existing product/test behavior issue captured as a finding, not a condition that this read-only baseline step is authorized to fix.
 
 **Scope completion:** The remote repository inventory, baseline evidence, CI failure capture, and audit artifact commit are complete. Device-local Git state and detailed branch-protection configuration remain outside the accessible evidence boundary and are explicitly not certified.
+
+## 10. Final local-checkout and latest-CI verification
+
+The user supplied the following Termux output from the local checkout:
+
+- `git status --short --branch` → `## main...origin/main`
+- `git branch --show-current` → `main`
+- `git log -1 --oneline` → `30ac04d (HEAD -> main, origin/main, origin/HEAD) docs(audit): record post-commit baseline validation`
+
+This is consistent with the GitHub `main` HEAD `30ac04df2ee92626ec72363fa16a3913fb89e95c`. The short status output contains no modified/untracked paths, and local `main` is aligned with `origin/main` at the displayed commit. This local-state evidence is user-provided terminal output, not a direct read of the device filesystem by the audit environment.
+
+**Latest validation:** [Android CI #712](https://github.com/Khayom1/Miss-Minutes-Assistant/actions/runs/44517128689), for commit `30ac04df2ee92626ec72363fa16a3913fb89e95c`, completed with **FAILURE**. The workflow passed setup, formatting, secret scan, JVM tests, debug/release builds, lint, dependency-lock generation, and OSV scan. API 35 instrumentation ran 85 tests and failed the same two assertions:
+
+1. `AgentTaskWorkerTest.workerExecutesPersistedTaskAndFailsClosedWithoutPluginConsent` — expected `FAILED`, actual `WAITING_APPROVAL`.
+2. `AgentTaskWorkerTest.workerReloadsImportedManifestAndStillRequiresExplicitConsent` — expected `FAILED`, actual `WAITING_APPROVAL`.
+
+APK checksum generation and evidence upload were skipped after the instrumentation failure.
+
+### Final Step 01 disposition
+
+The baseline audit deliverable is complete: remote inventory, Android/CI configuration review, PR/branch hygiene snapshot, CI failure evidence through run #712, audit report commit, and user-provided local checkout synchronization/clean-status evidence are recorded. The application and CI workflow remain unchanged, as required by this baseline-only step.
+
+Detailed branch-protection settings remain unverified because GitHub's detailed protection endpoint returns HTTP 403 to the connected integration. The branch listing reports `main` as `protected: false`, and the repository rulesets endpoint returned an empty list; this is recorded as an access limitation, not silently treated as a successful detailed protection audit.
+
+**Step 01 completion:** Baseline audit scope complete. **Repository CI is not green**; the two confirmed instrumentation failures are handed off to the next bug-fix step. They must be corrected without weakening explicit plugin-consent enforcement.
