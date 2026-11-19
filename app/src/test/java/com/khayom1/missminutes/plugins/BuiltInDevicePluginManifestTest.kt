@@ -17,7 +17,7 @@ class BuiltInDevicePluginManifestTest {
             auditLog = DeviceToolAuditLog {}
         )
         return PluginRegistry(
-            handlers = AndroidDeviceStatusPlugin.handlers(engine),
+            handlers = AndroidDeviceStatusPlugin.handlers(engine) + AndroidAccessibilityAutomationPlugin.handlers(),
             consentStore = PluginConsentStore { false },
             auditLog = PluginAuditLog {},
             accessChecker = PluginAccessChecker { _, _ -> PluginAccessDecision.Granted }
@@ -30,7 +30,11 @@ class BuiltInDevicePluginManifestTest {
         val manifest = AndroidDeviceStatusPlugin.manifest()
 
         assertTrue(registry.install(manifest))
-        assertEquals(listOf(AndroidDeviceStatusPlugin.PLUGIN_ID), registry.installedPlugins().map { it.id })
+        assertTrue(registry.install(AndroidAccessibilityAutomationPlugin.manifest()))
+        assertEquals(
+            setOf(AndroidDeviceStatusPlugin.PLUGIN_ID, AndroidAccessibilityAutomationPlugin.PLUGIN_ID),
+            registry.installedPlugins().map { it.id }.toSet()
+        )
         assertEquals(
             manifest.actions.map { it.id }.toSet(),
             registry.toolCatalog().map { it.actionId }.toSet()
