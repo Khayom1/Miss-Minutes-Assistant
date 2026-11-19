@@ -2237,6 +2237,9 @@ private fun SettingsScreen(
     memoryContextEnabled: Boolean,
     deviceGrants: Map<DeviceToolCapability, Boolean>,
     pluginConsent: Boolean,
+    pluginTools: List<PluginToolDescriptor>,
+    pluginAccessMessage: String?,
+    onOpenPluginAccess: (PluginAccessDecision.PermissionRequired) -> Unit,
     onPluginConsentChange: (Boolean) -> Unit,
     onRunPluginAction: (String) -> PluginExecutionResult,
     agentOrchestrator: AgentOrchestrator,
@@ -2677,6 +2680,55 @@ private fun SettingsScreen(
                         modifier = Modifier.testTag("device_capability_${capability.name.lowercase()}")
                     )
                 }
+            }
+            val permissionRequiredTools = pluginTools.filter {
+                it.connected && it.access is PluginAccessDecision.PermissionRequired
+            }
+            if (permissionRequiredTools.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        when (language) {
+                            AppLanguage.Tajik -> "Иҷозатҳои Android барои плагинҳо"
+                            AppLanguage.Russian -> "Разрешения Android для плагинов"
+                            AppLanguage.English -> "Android permissions for plugins"
+                        },
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    permissionRequiredTools.forEach { tool ->
+                        val access = tool.access as PluginAccessDecision.PermissionRequired
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "${tool.pluginName} · ${tool.actionId}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                access.explanation,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            TextButton(
+                                onClick = { onOpenPluginAccess(access) },
+                                modifier = Modifier.testTag("plugin_access_${tool.pluginId}_${tool.actionId}")
+                            ) {
+                                Text(
+                                    when (language) {
+                                        AppLanguage.Tajik -> "Додани иҷозат"
+                                        AppLanguage.Russian -> "Предоставить разрешение"
+                                        AppLanguage.English -> "Grant permission"
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            pluginAccessMessage?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
