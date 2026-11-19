@@ -38,7 +38,7 @@ object PluginToolSchemaFactory {
                         tool.description
                     ).take(512),
                 parameters = parametersSchema(tool.arguments),
-                sideEffect = tool.requiresConfirmation
+                sideEffect = tool.sideEffect
             )
         }
     }
