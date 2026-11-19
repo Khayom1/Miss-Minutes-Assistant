@@ -793,13 +793,19 @@ class PluginRegistryTest {
 
 
     @Test
-    fun compiledActionIdentityCannotBeClaimedByTwoPluginIds() {
+    fun aliasedManifestHasItsOwnStableToolIdentity() {
         val registry = registry(consented = true) { PluginActionOutput(true, "ok") }
         assertTrue(registry.install(manifest))
+        val alias = manifest.copy(id = "another_plugin", displayName = "Alias")
+        assertTrue(registry.install(alias))
 
-        val alias = manifest.copy(id = "another_plugin")
-        assertTrue(runCatching { registry.install(alias) }.isFailure)
-        assertEquals(listOf("test_plugin"), registry.installedPlugins().map { it.id })
+        val tools = registry.toolCatalog()
+        val original = tools.single { it.pluginId == "test_plugin" }
+        val aliased = tools.single { it.pluginId == "another_plugin" }
+
+        assertEquals(original.actionId, aliased.actionId)
+        assertTrue(original.toolName != aliased.toolName)
+        assertEquals(original.toolName, registry.toolCatalog().single { it.pluginId == "test_plugin" }.toolName)
     }
 
     @Test
