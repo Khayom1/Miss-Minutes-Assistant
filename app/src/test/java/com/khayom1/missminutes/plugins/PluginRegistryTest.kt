@@ -4,6 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class PluginRegistryTest {
     private val testAccessChecker = PluginAccessChecker { _, _ -> PluginAccessDecision.Granted }
@@ -576,5 +579,171 @@ class PluginRegistryTest {
         val approved = registry.execute(request.copy(userConfirmed = true))
         assertEquals(PluginExecutionStatus.SUCCEEDED, approved.status)
         assertEquals(1, calls)
+    }
+
+    @Test
+    fun duplicatePluginIdentityCannotReplaceAnInstalledManifest() {
+        val registry = registry(consented = true) { PluginActionOutput(true, "ok") }
+        assertTrue(registry.install(manifest))
+
+        val replacement = manifest.copy(
+            displayName = "Untrusted replacement",
+            description = "This metadata must not replace the installed identity."
+        )
+
+        assertFalse(registry.install(replacement))
+        assertEquals(manifest, registry.installedPlugins().single())
+    }
+
+    @Test
+    fun uninstallClearsOnlyTheRemovedPluginsRateLimitState() {
+        var now = 1_000L
+        var granted = true
+        val consent = object : MutablePluginConsentStore {
+            override fun isGranted(pluginId: String) = granted
+            override fun setGranted(pluginId: String, value: Boolean) {
+                granted = value
+            }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(handler { PluginActionOutput(true, "ok") }),
+            consentStore = consent,
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker,
+            clockMillis = { now },
+            globalCallsPerMinute = 12
+        )
+        val limitedManifest = manifest.copy(maxCallsPerMinute = 1)
+        val request = PluginExecutionRequest(
+            "test_plugin",
+            "read_info",
+            mapOf("locale" to PluginValue.Text("en"))
+        )
+
+        assertTrue(registry.install(limitedManifest))
+        assertEquals(PluginExecutionStatus.SUCCEEDED, registry.execute(request).status)
+        assertEquals(PluginExecutionStatus.RATE_LIMITED, registry.execute(request).status)
+
+        assertTrue(registry.uninstall("test_plugin"))
+        assertTrue(registry.install(limitedManifest))
+        assertTrue(registry.connect("test_plugin"))
+        assertEquals(PluginExecutionStatus.SUCCEEDED, registry.execute(request).status)
+    }
+
+    @Test
+    fun handlerExceptionsAreIsolatedAndDoNotPreventOtherActions() {
+        val healthyAction = PluginActionSpec(
+            id = "read_secondary",
+            capability = PluginCapability.DEVICE_INFORMATION
+        )
+        val healthyHandler = object : PluginActionHandler {
+            override val actionId = "read_secondary"
+            override val capability = PluginCapability.DEVICE_INFORMATION
+            override fun execute(arguments: Map<String, PluginValue>) =
+                PluginActionOutput(true, "healthy action completed")
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(
+                handler { throw IllegalStateException("private handler detail") },
+                healthyHandler
+            ),
+            consentStore = PluginConsentStore { true },
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker
+        )
+        assertTrue(registry.install(manifest.copy(actions = manifest.actions + healthyAction)))
+
+        val failed = registry.execute(
+            PluginExecutionRequest(
+                "test_plugin",
+                "read_info",
+                mapOf("locale" to PluginValue.Text("en"))
+            )
+        )
+        assertEquals(PluginExecutionStatus.FAILED, failed.status)
+        assertFalse(failed.message.contains("private handler detail"))
+
+        val succeeded = registry.execute(
+            PluginExecutionRequest("test_plugin", "read_secondary")
+        )
+        assertEquals(PluginExecutionStatus.SUCCEEDED, succeeded.status)
+        assertEquals("healthy action completed", succeeded.message)
+    }
+
+    @Test
+    fun consentStorageFailureFailsClosedWithoutCrashingCatalogOrExecution() {
+        var calls = 0
+        val registry = PluginRegistry(
+            handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
+            consentStore = PluginConsentStore { throw IllegalStateException("storage unavailable") },
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker
+        )
+        assertTrue(registry.install(manifest))
+
+        assertFalse(registry.isConnected("test_plugin"))
+        assertFalse(registry.toolCatalog().single().connected)
+        val result = registry.execute(
+            PluginExecutionRequest(
+                "test_plugin",
+                "read_info",
+                mapOf("locale" to PluginValue.Text("en"))
+            )
+        )
+        assertEquals(PluginExecutionStatus.ACCESS_UNAVAILABLE, result.status)
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun revokingConsentCancelsInflightHandlerAndReturnsTypedCancellation() {
+        val started = CountDownLatch(1)
+        val interrupted = CountDownLatch(1)
+        var granted = true
+        val consent = object : MutablePluginConsentStore {
+            override fun isGranted(pluginId: String) = granted
+            override fun setGranted(pluginId: String, value: Boolean) {
+                granted = value
+            }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(handler {
+                started.countDown()
+                try {
+                    CountDownLatch(1).await()
+                    PluginActionOutput(true, "unexpected completion")
+                } catch (error: InterruptedException) {
+                    interrupted.countDown()
+                    throw error
+                }
+            }),
+            consentStore = consent,
+            auditLog = PluginAuditLog {},
+            accessChecker = testAccessChecker
+        )
+        assertTrue(registry.install(manifest.copy(maxExecutionMillis = 5_000L)))
+        val result = AtomicReference<PluginExecutionResult?>()
+        val worker = Thread {
+            result.set(
+                registry.execute(
+                    PluginExecutionRequest(
+                        "test_plugin",
+                        "read_info",
+                        mapOf("locale" to PluginValue.Text("en"))
+                    )
+                )
+            )
+        }.apply {
+            isDaemon = true
+            start()
+        }
+
+        assertTrue(started.await(2, TimeUnit.SECONDS))
+        assertTrue(registry.revokeConsent("test_plugin"))
+        assertTrue(interrupted.await(2, TimeUnit.SECONDS))
+        worker.join(2_000L)
+
+        assertFalse(worker.isAlive)
+        assertEquals(PluginExecutionStatus.CANCELLED, result.get()?.status)
+        assertFalse(consent.isGranted("test_plugin"))
     }
 }
