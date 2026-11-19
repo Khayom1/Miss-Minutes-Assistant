@@ -14,9 +14,9 @@ fun interface PluginCredentialChecker {
 }
 
 /**
- * Re-checks Android grants and connected credentials immediately before each
- * tool execution. This does not request permissions itself; the UI receives a
- * typed PermissionRequired result and opens the correct Android permission flow.
+ * Re-checks app-level device grants, Android permissions, accessibility access,
+ * and connected credentials immediately before each tool execution. The UI
+ * receives typed decisions and requests only the missing user-approved access.
  */
 class AndroidPluginAccessChecker(
     context: Context,
