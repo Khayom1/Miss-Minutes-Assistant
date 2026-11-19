@@ -542,6 +542,7 @@ object WakeWordServiceState {
 object PendingVoiceCommandStore {
     private const val PREFERENCES = "miss_minutes_pending_voice"
     private const val COMMAND = "command_ciphertext"
+    private const val LEGACY_COMMAND = "command"
     private const val CREATED_AT = "created_at"
     private const val MAX_AGE_MS = 10 * 60 * 1000L
     private const val CIPHER_OWNER = "pending_voice_command_v1"
@@ -559,6 +560,7 @@ object PendingVoiceCommandStore {
             val encrypted = cipher.encrypt(CIPHER_OWNER, safeCommand)
             context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
                 .edit()
+                .remove(LEGACY_COMMAND)
                 .putString(COMMAND, encrypted)
                 .putLong(CREATED_AT, System.currentTimeMillis())
                 .commit()
@@ -568,6 +570,10 @@ object PendingVoiceCommandStore {
     @Synchronized
     fun peek(context: Context): String? {
         val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+        if (preferences.contains(LEGACY_COMMAND)) {
+            preferences.edit().remove(LEGACY_COMMAND).remove(CREATED_AT).commit()
+            return null
+        }
         val encrypted = preferences.getString(COMMAND, null)
         val createdAt = preferences.getLong(CREATED_AT, 0L)
         if (encrypted.isNullOrBlank() || createdAt <= 0L ||
@@ -590,6 +596,7 @@ object PendingVoiceCommandStore {
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .edit()
             .remove(COMMAND)
+            .remove(LEGACY_COMMAND)
             .remove(CREATED_AT)
             .commit()
     }
