@@ -472,11 +472,6 @@ class PluginRegistry(
             require(action.arguments == handler.argumentSchema) {
                 "Manifest argument schema does not match the compiled handler schema."
             }
-            require(manifests.values.none { existing ->
-                existing.id != manifest.id && existing.actions.any { it.id == action.id }
-            }) {
-                "Compiled action identity is already registered to another plugin."
-            }
             require(action.arguments.size <= 8)
             action.arguments.forEach { (key, field) ->
                 require(key == field.name && FIELD_ID.matches(key))
