@@ -39,10 +39,11 @@ jobs:
       - name: Install Android platform
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.13"
 
       - name: Verify Kotlin source formatting basics
         run: |
@@ -61,7 +62,7 @@ jobs:
           curl --fail --silent --show-error --location https://repo1.maven.org/maven2/org/ow2/asm/asm/9.8/asm-9.8.jar --output build/bytecode-audit/asm.jar
           javac -cp build/bytecode-audit/asm.jar -d build/bytecode-audit tools/BytecodeReachability.java
           python3 tools/test-bytecode-reachability.py build/bytecode-audit build/bytecode-audit/asm.jar
-          gradle --no-daemon :app:assembleDebug
+          ./gradlew --no-daemon :app:assembleDebug
           java -cp build/bytecode-audit:build/bytecode-audit/asm.jar BytecodeReachability app/src/main/AndroidManifest.xml build/bytecode-audit/bytecode-reachability.json app/build/tmp/kotlin-classes/debug app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes
           test -s build/bytecode-audit/bytecode-reachability.json
 
@@ -69,13 +70,13 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --no-banner /repo
 
       - name: Run JVM tests, debug and release builds, and lint
-        run: gradle --no-daemon clean testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
+        run: ./gradlew --no-daemon clean testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
 
 
       - name: Record resolved Android runtime dependencies
         run: |
           mkdir -p app/build/release-evidence
-          gradle --no-daemon -p app dependencies --configuration debugRuntimeClasspath --write-locks > app/build/release-evidence/debug-runtime-dependencies.txt
+          ./gradlew --no-daemon -p app dependencies --write-locks > app/build/release-evidence/resolved-dependencies.txt
           test -s app/gradle.lockfile
 
       - name: Scan resolved dependencies for known vulnerabilities (OSV)
@@ -105,7 +106,7 @@ jobs:
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          script: gradle --no-daemon connectedDebugAndroidTest
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
 
       - name: Generate APK checksums
         run: |
