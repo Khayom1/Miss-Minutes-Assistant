@@ -58,7 +58,7 @@ class AgentTaskWorkerTest {
     }
 
     @Test
-    fun workerExecutesPersistedTaskAndFailsClosedWithoutPluginConsent() = runBlocking {
+    fun workerWaitsForApprovalAndDoesNotExecuteWithoutPluginConsent() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         AndroidPluginConsentStore(context).revokeAll()
         val orchestrator = AgentTaskRuntime.get(context)
@@ -83,9 +83,13 @@ class AgentTaskWorkerTest {
             .setInputData(workDataOf(AgentTaskWorker.KEY_TASK_ID to taskId))
             .build()
         val result = worker.doWork()
+        val state = orchestrator.state(taskId)
 
         assertTrue(result is ListenableWorker.Result.Success)
-        assertEquals(AgentTaskStatus.FAILED, orchestrator.state(taskId)?.status)
+        assertEquals(AgentTaskStatus.WAITING_APPROVAL, state?.status)
+        assertEquals(AgentNodeStatus.WAITING_APPROVAL, state?.nodes?.get("device_info")?.status)
+        assertEquals(0, state?.completedSteps)
+        assertFalse(AndroidPluginConsentStore(context).isGranted(AndroidDeviceStatusPlugin.PLUGIN_ID))
         assertNotNull(orchestrator.latestTask())
     }
 
@@ -124,9 +128,15 @@ class AgentTaskWorkerTest {
                 .setInputData(workDataOf(AgentTaskWorker.KEY_TASK_ID to taskId))
                 .build()
             val result = worker.doWork()
+            val state = orchestrator.state(taskId)
 
             assertTrue(result is ListenableWorker.Result.Success)
-            assertEquals(AgentTaskStatus.FAILED, orchestrator.state(taskId)?.status)
+            assertEquals(AgentTaskStatus.WAITING_APPROVAL, state?.status)
+            assertEquals(
+                AgentNodeStatus.WAITING_APPROVAL,
+                state?.nodes?.get("imported_device_info")?.status
+            )
+            assertEquals(0, state?.completedSteps)
             assertFalse(consents.isGranted(imported.id))
         } finally {
             manifests.replace(emptyList())
