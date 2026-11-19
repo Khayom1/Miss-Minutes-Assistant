@@ -59,6 +59,18 @@ public final class BytecodeReachability {
     if(!name.contains(".")) return pkg+"."+name;
     return name;
   }
+  static boolean isFrameworkEntry(Method m) {
+    if (m.name().equals("<init>")) return true;
+    return Set.of("onCreate","onStart","onResume","onPause","onStop","onDestroy",
+      "onNewIntent","onActivityResult","onRequestPermissionsResult","onReceive",
+      "onBind","onUnbind","onRebind","onStartCommand","onTaskRemoved",
+      "onAccessibilityEvent","onInterrupt","onServiceConnected","onServiceDisconnected",
+      "doWork","onWorkFinished","onHandleIntent","onTrimMemory","onLowMemory",
+      "onConfigurationChanged","onSaveInstanceState","onRestoreInstanceState",
+      "onProvideAssistData","onGetRoot","onLoadChildren","onGetLayout",
+      "onCreateSession","onReady","onShutdown","onStartListening","onStopListening")
+      .contains(m.name());
+  }
   static void manifestRoots(Path manifest) throws Exception {
     if(!Files.exists(manifest)) return;
     DocumentBuilderFactory f=DocumentBuilderFactory.newInstance();
@@ -77,7 +89,7 @@ public final class BytecodeReachability {
         if(n.isBlank()) n=e.getAttribute("android:name");
         if(n.isBlank())continue;
         String cls=normalize(n,pkg).replace('.','/');
-        for(Method m:methodsByOwner.getOrDefault(cls,Set.of())) roots.add(m);
+        for(Method m:methodsByOwner.getOrDefault(cls,Set.of())) if(isFrameworkEntry(m)) roots.add(m);
       }
     }
   }
@@ -99,7 +111,7 @@ public final class BytecodeReachability {
     for(int i=2;i<a.length;i++) scan(Path.of(a[i]));
     manifestRoots(Path.of(a[0]));
     // MainActivity is an app entry root even if a manifest merger changes its declaration.
-    for(Method m:methods) if(m.owner().equals("com/khayom1/missminutes/MainActivity")) roots.add(m);
+    for(Method m:methods) if(m.owner().equals("com/khayom1/missminutes/MainActivity") && isFrameworkEntry(m)) roots.add(m);
     Set<Method> reachable=new TreeSet<>(Comparator.comparing(Method::key)); walk(reachable);
     List<String> unreachable=new ArrayList<>();
     for(Method m:methods) if(!reachable.contains(m)) unreachable.add(m.key());
