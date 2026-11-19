@@ -140,6 +140,7 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     json_file = out / "kotlin-reachability.json"
+    json_file.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("Kotlin files scanned:", len(texts))
     print("Tracked text files searched:", len(searchable))
     print("Declarations detected:", len(declarations))
