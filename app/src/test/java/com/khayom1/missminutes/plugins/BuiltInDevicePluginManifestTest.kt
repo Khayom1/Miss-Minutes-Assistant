@@ -44,6 +44,7 @@ class BuiltInDevicePluginManifestTest {
         assertFalse(requireNotNull(tools["device_info"]).sideEffect)
         assertTrue(requireNotNull(tools["create_reminder"]).sideEffect)
         assertTrue(requireNotNull(tools["set_alarm"]).sideEffect)
+        assertEquals(PluginCapability.ALARM_SCHEDULE, requireNotNull(tools["set_alarm"]).capability)
         assertTrue(requireNotNull(tools["open_app"]).sideEffect)
         assertFalse(requireNotNull(tools["inspect_screen"]).sideEffect)
         assertTrue(requireNotNull(tools["click_text"]).sideEffect)
