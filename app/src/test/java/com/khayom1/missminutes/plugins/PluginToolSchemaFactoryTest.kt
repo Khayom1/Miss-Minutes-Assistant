@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PluginToolSchemaFactoryTest {
-    private fun descriptor(connected: Boolean, requiresConfirmation: Boolean = false) = PluginToolDescriptor(
+    private fun descriptor(connected: Boolean, requiresConfirmation: Boolean = false, sideEffect: Boolean = requiresConfirmation) = PluginToolDescriptor(
         toolName = "plugin_test",
         pluginId = "test_plugin",
         actionId = "read_info",
@@ -28,7 +28,7 @@ class PluginToolSchemaFactoryTest {
         requiresConfirmation = requiresConfirmation,
         connected = connected,
         access = PluginAccessDecision.Granted,
-        sideEffect = requiresConfirmation
+        sideEffect = sideEffect
     )
 
     @Test
@@ -51,6 +51,16 @@ class PluginToolSchemaFactoryTest {
         ).single()
 
         assertTrue(definition.description.contains("Requires explicit user confirmation before execution."))
+        assertTrue(definition.sideEffect)
+    }
+
+    @Test
+    fun nonConfirmingSideEffectsRemainMarkedForAgentDuplicateSuppression() {
+        val definition = PluginToolSchemaFactory.toAiToolDefinitions(
+            listOf(descriptor(connected = true, requiresConfirmation = false, sideEffect = true))
+        ).single()
+
+        assertFalse(definition.description.contains("Requires explicit user confirmation before execution."))
         assertTrue(definition.sideEffect)
     }
 
