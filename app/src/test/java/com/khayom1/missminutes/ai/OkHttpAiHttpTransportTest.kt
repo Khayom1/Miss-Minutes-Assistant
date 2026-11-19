@@ -17,6 +17,11 @@ import org.junit.Test
 
 class OkHttpAiHttpTransportTest {
     @Test
+    fun productionTransportDoesNotReplayCompletionRequestsAutomatically() {
+        assertTrue(!OkHttpAiHttpTransport().client.retryOnConnectionFailure)
+    }
+
+    @Test
     fun callTimeoutIsReportedAsTimeout() = runBlocking {
         val server = BlockingHttpServer()
         val client = OkHttpClient.Builder()

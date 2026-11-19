@@ -148,7 +148,8 @@ object LocalInferenceStatus {
  * asynchronous dispatcher and cancel the underlying call with the coroutine.
  */
 class OkHttpAiHttpTransport(
-    private val client: OkHttpClient = OkHttpClient.Builder()
+    internal val client: OkHttpClient = OkHttpClient.Builder()
+        .retryOnConnectionFailure(false)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .callTimeout(50, TimeUnit.SECONDS)
