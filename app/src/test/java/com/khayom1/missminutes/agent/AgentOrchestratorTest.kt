@@ -52,7 +52,8 @@ class AgentOrchestratorTest {
                 arguments = emptyMap(),
                 requiresConfirmation = true,
                 connected = true,
-                access = PluginAccessDecision.Granted
+                access = PluginAccessDecision.Granted,
+                sideEffect = true
             )
         )
 
