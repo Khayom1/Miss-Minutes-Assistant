@@ -822,4 +822,56 @@ class PluginRegistryTest {
         assertEquals(1, stored.actions.size)
     }
 
+
+    @Test
+    fun perActionUserAuthorizationGatesToolDiscoveryAndExecution() {
+        var authorized = false
+        var connected = false
+        var calls = 0
+        val consent = object : MutablePluginConsentStore {
+            override fun isGranted(pluginId: String) = connected
+            override fun setGranted(pluginId: String, granted: Boolean) {
+                connected = granted
+            }
+        }
+        val registry = PluginRegistry(
+            handlers = listOf(handler { calls++; PluginActionOutput(true, "ok") }),
+            consentStore = consent,
+            auditLog = PluginAuditLog {},
+            accessChecker = PluginAccessChecker { _, _ ->
+                if (authorized) PluginAccessDecision.Granted
+                else PluginAccessDecision.UserAuthorizationRequired(
+                    "DEVICE_INFO",
+                    "Enable device information in settings."
+                )
+            }
+        )
+        assertTrue(registry.install(manifest))
+        assertTrue(registry.connect("test_plugin"))
+        assertTrue(registry.readyTools().isEmpty())
+
+        val denied = registry.execute(
+            PluginExecutionRequest(
+                "test_plugin",
+                "read_info",
+                mapOf("locale" to PluginValue.Text("en"))
+            )
+        )
+        assertEquals(PluginExecutionStatus.USER_AUTHORIZATION_REQUIRED, denied.status)
+        assertEquals(0, calls)
+
+        authorized = true
+        assertEquals(1, registry.readyTools().size)
+        assertTrue(
+            registry.execute(
+                PluginExecutionRequest(
+                    "test_plugin",
+                    "read_info",
+                    mapOf("locale" to PluginValue.Text("en"))
+                )
+            ).success
+        )
+        assertEquals(1, calls)
+    }
+
 }
