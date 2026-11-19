@@ -410,10 +410,7 @@ fun MissMinutesApp(
                 if (intent?.action == MissMinutesWakeWordService.ACTION_STATE_CHANGED) {
                     wakeEnabled = intent.getBooleanExtra(MissMinutesWakeWordService.EXTRA_ENABLED, false)
                     wakeMessage = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_MESSAGE)
-                    val capturedCommand = intent.getStringExtra(MissMinutesWakeWordService.EXTRA_COMMAND)
-                    if (!capturedCommand.isNullOrBlank()) {
-                        pendingVoiceCommand = PendingVoiceCommandStore.peek(context) ?: capturedCommand
-                    }
+                    pendingVoiceCommand = PendingVoiceCommandStore.peek(context)
                 }
             }
         }
