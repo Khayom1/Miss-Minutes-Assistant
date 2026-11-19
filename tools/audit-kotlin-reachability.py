@@ -81,18 +81,39 @@ def main():
     for name, items in grouped.items():
         token = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])")
         hits, occurrences = [], 0
-        for path, text in searchable.items():
-            for number, line in enumerate(text.splitlines(), 1):
-                if path.endswith(".kt") and number in declaration_lines.get((path, name), set()):
+        production_occurrences, test_occurrences, other_occurrences = 0, 0, 0
+        production_locations, test_locations, other_locations = [], [], []
+        for source_path, source_text in searchable.items():
+            for number, line in enumerate(source_text.splitlines(), 1):
+                if source_path.endswith(".kt") and number in declaration_lines.get((source_path, name), set()):
                     continue
                 count = len(token.findall(line))
-                if count:
-                    occurrences += count
-                    if len(hits) < 40:
-                        hits.append({"path": path, "line": number, "text": line.strip()[:220]})
+                if not count:
+                    continue
+                occurrences += count
+                source_set = ("production" if "/src/main/" in source_path else
+                              "test" if "/src/test/" in source_path or "/src/androidTest/" in source_path
+                              else "other")
+                location = {"path": source_path, "line": number, "text": line.strip()[:220]}
+                if source_set == "production":
+                    production_occurrences += count
+                    if len(production_locations) < 40: production_locations.append(location)
+                elif source_set == "test":
+                    test_occurrences += count
+                    if len(test_locations) < 40: test_locations.append(location)
+                else:
+                    other_occurrences += count
+                    if len(other_locations) < 40: other_locations.append(location)
+                if len(hits) < 40: hits.append(location)
         for item in items:
             item["reference_occurrences_outside_declaration_lines"] = occurrences
+            item["production_reference_occurrences"] = production_occurrences
+            item["test_reference_occurrences"] = test_occurrences
+            item["other_reference_occurrences"] = other_occurrences
             item["reference_locations"] = hits
+            item["production_reference_locations"] = production_locations
+            item["test_reference_locations"] = test_locations
+            item["other_reference_locations"] = other_locations
             source_lines = texts.get(item["path"], "").splitlines()
             context = "\n".join(source_lines[max(0, item["line"]-4):item["line"]+2])
             framework = any(marker in context for marker in FRAMEWORK_MARKERS)
