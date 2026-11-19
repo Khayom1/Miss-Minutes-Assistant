@@ -521,3 +521,66 @@ The Android CI run for this current commit completed successfully: run `44523328
 - [ ] Local Android build/test execution on the user's device (not required for CI correctness, but not performed by this remote audit).
 
 **Step 02 status at this revision:** the exhaustive tracked-tree inventory, classification, feature/package map, manifest entry-point reconciliation, and CI verification are complete. The stronger claim that every Kotlin declaration has been semantically proven reachable or dead is **not** complete; no unsupported 100% reachability claim is made. No production code was changed as part of this inventory/reachability audit.
+
+
+## 15. Day 1 / Step 02 — live source-level reachability pass (2026-11-19)
+
+**Verified source revision:** `1200590dc0ac373703456730b63afcdf32be060e`  
+**Recursive Git tree:** `truncated: false`; 70 production Kotlin source files confirmed from the tree. The complete production source set was traversed in 7 batches by immutable blob SHA. This pass enumerated declarations across all 70 files and directly inspected the critical composition, worker, plugin-registry, Android manifest, and service paths.
+
+### 15.1 Verified root-to-feature paths
+
+| Root / trigger | Verified source path | Reachability class |
+|---|---|---|
+| Android launcher | Manifest `MainActivity` → `MainActivity.onCreate` → Compose `MissMinutesApp` | Android manifest + direct call |
+| UI plugin runtime | `MissMinutesApp` → `PluginRegistry` with Android device/accessibility handlers → `AgentTaskRuntime.get(context, pluginRegistry)` | Compose composition + direct calls |
+| Background agent runtime | WorkManager `AgentTaskWorker.doWork` → `AgentTaskRuntime.get(applicationContext)` → `createPluginRegistry` → `AgentOrchestrator` → `PluginRegistryAgentActionExecutor` | WorkManager framework + direct calls |
+| Plugin dispatch | `PluginRegistry.execute` → registered `PluginActionHandler.execute` implementation | Runtime registry dispatch |
+| Wake-word capture | Manifest service declaration → `MissMinutesWakeWordService` lifecycle → recognition listener → `WakePhraseMatcher` → command handoff | Android service + listener callbacks |
+| Accessibility automation | Manifest accessibility-service declaration → `AccessibilityAutomationService` framework callbacks/static invocation bridge → action methods | Android framework + static bridge |
+| Incoming SMS | Manifest SMS receiver declaration → `IncomingSmsReceiver.onReceive` → SMS processing queue | Android broadcast |
+| Voice assistant | Manifest voice interaction / recognition service declarations → framework lifecycle and recognition callbacks | Android framework |
+| Overlay | Manifest service declaration → explicit UI/service intents → `MissMinutesOverlayService` lifecycle | Explicit Android service intents |
+
+The rows establish real entry paths for the listed feature roots; they do not imply that every private helper or every overload inside those files has been individually proven reachable.
+
+### 15.2 Confirmed architecture observation: duplicated plugin-registry assembly
+
+Two source locations assemble the Android plugin registry:
+
+- `ui/MissMinutesApp.kt` builds the UI-owned registry and passes it to `AgentTaskRuntime.get(context, pluginRegistry)`.
+- `agent/AgentTaskRuntime.kt` exposes `createPluginRegistry(context)` and uses it through `get(context)`, which is the background worker path.
+
+Both currently register `AndroidDeviceStatusPlugin` and `AndroidAccessibilityAutomationPlugin`, and wire consent, audit, and access-check dependencies. This is not proven dead code: the two factories serve distinct UI-injected and background-worker entry paths. It is, however, a maintenance-drift risk because future handler or policy additions must be mirrored in both factories. No refactor was made during this audit step.
+
+### 15.3 Current build configuration verified directly
+
+The live `main` Gradle files report:
+
+- Android Gradle Plugin: `8.13.2`
+- Kotlin Android / Compose / Serialization plugins: `2.4.21`
+- Gradle wrapper setup in CI: `8.13`
+- `compileSdk = 36`
+- `targetSdk = 36`
+- `minSdk = 26`
+- Java and Kotlin bytecode target: JVM 17
+- Single application module: `:app`
+
+This supersedes older target-SDK and Kotlin-version values in historical audit snapshots.
+
+### 15.4 Evidence correction
+
+The previous Section 14.3 says the user ran the heuristic scanner in Termux and that terminal output was captured. That statement is not independently supported by the evidence available in this audit session and must not be treated as verified. The scanner's committed existence is verified; its execution in the user's Termux environment is **unverified**. This correction replaces that earlier assertion.
+
+### 15.5 Scope boundary and remaining work
+
+- [x] Enumerated declarations in the complete 70-file production Kotlin source set by file and line.
+- [x] Reconciled the Android manifest component roots against the implementation classes.
+- [x] Traced the primary UI, WorkManager, plugin dispatch, wake-word, accessibility, SMS, voice-assistant and overlay entry paths.
+- [x] Identified the duplicated plugin-registry assembly as a maintenance-drift risk, without misclassifying either path as dead.
+- [x] Re-verified current Gradle and Android SDK configuration.
+- [ ] Resolve every Kotlin declaration and call edge with compiler/PSI semantic information.
+- [ ] Manually disposition all zero-reference candidates from a complete declaration/reference output, excluding test-only, framework and dynamic-dispatch false positives.
+- [ ] Run and archive the final audit tool output against the exact current-main checkout.
+
+**Status:** This is a substantive source-level reachability pass, not a complete semantic call-graph proof. The remaining unchecked items are real blockers to a defensible 100% Step 02 declaration-reachability claim.
