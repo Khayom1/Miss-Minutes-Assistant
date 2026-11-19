@@ -185,6 +185,7 @@ class PluginRegistryTest {
     fun writeCapabilitiesRequireConfirmationEvenWhenManifestOmitsIt() {
         listOf(
             PluginCapability.CALENDAR_WRITE,
+            PluginCapability.ALARM_SCHEDULE,
             PluginCapability.GITHUB_REPOSITORY_WRITE
         ).forEachIndexed { index, writeCapability ->
             val pluginId = "write_plugin_$index"
