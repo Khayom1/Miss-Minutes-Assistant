@@ -2697,14 +2697,62 @@ private fun SettingsScreen(
                     )
                     userAuthorizationTools.forEach { tool ->
                         val authorization = tool.access as PluginAccessDecision.UserAuthorizationRequired
+                        val capabilityLabel = when (authorization.authorizationId) {
+                            "DEVICE_INFO" -> when (language) {
+                                AppLanguage.Tajik -> "Маълумоти дастгоҳ"
+                                AppLanguage.Russian -> "Сведения об устройстве"
+                                AppLanguage.English -> "Device information"
+                            }
+                            "BATTERY_STATUS" -> when (language) {
+                                AppLanguage.Tajik -> "Ҳолати батарея"
+                                AppLanguage.Russian -> "Состояние батареи"
+                                AppLanguage.English -> "Battery status"
+                            }
+                            "CURRENT_TIME" -> when (language) {
+                                AppLanguage.Tajik -> "Вақти ҷорӣ"
+                                AppLanguage.Russian -> "Текущее время"
+                                AppLanguage.English -> "Current time"
+                            }
+                            "READ_CALENDAR" -> when (language) {
+                                AppLanguage.Tajik -> "Хондани тақвим"
+                                AppLanguage.Russian -> "Чтение календаря"
+                                AppLanguage.English -> "Read calendar"
+                            }
+                            "CREATE_REMINDER" -> when (language) {
+                                AppLanguage.Tajik -> "Эҷоди ёдрас"
+                                AppLanguage.Russian -> "Создание напоминания"
+                                AppLanguage.English -> "Create reminder"
+                            }
+                            "READ_CONTACTS_SUMMARY" -> when (language) {
+                                AppLanguage.Tajik -> "Хондани мухтасари мухотибон"
+                                AppLanguage.Russian -> "Чтение сводки контактов"
+                                AppLanguage.English -> "Read contacts summary"
+                            }
+                            "SET_ALARM" -> when (language) {
+                                AppLanguage.Tajik -> "Танзими зангдор"
+                                AppLanguage.Russian -> "Установка будильника"
+                                AppLanguage.English -> "Set alarm"
+                            }
+                            "OPEN_APP_BY_PACKAGE" -> when (language) {
+                                AppLanguage.Tajik -> "Кушодани барнома"
+                                AppLanguage.Russian -> "Открытие приложения"
+                                AppLanguage.English -> "Open application"
+                            }
+                            else -> authorization.authorizationId
+                        }
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
                                 "${tool.pluginName} · ${tool.actionId}",
+                                modifier = Modifier.testTag("plugin_authorization_${tool.pluginId}_${tool.actionId}"),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                authorization.explanation,
+                                when (language) {
+                                    AppLanguage.Tajik -> "Барои иҷозатдиҳӣ гузариши «$capabilityLabel»-ро дар танзимоти амалҳои дастгоҳ фаъол кунед."
+                                    AppLanguage.Russian -> "Чтобы разрешить действие, включите переключатель «$capabilityLabel» в настройках действий устройства."
+                                    AppLanguage.English -> "Enable the "$capabilityLabel" switch in Device tools settings to authorize this action."
+                                },
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodySmall
                             )
