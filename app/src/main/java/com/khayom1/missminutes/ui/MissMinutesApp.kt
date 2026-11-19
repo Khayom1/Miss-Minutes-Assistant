@@ -1445,13 +1445,12 @@ fun MissMinutesApp(
     val exportLocalData: () -> Unit = {
         currentOwnerId?.let { owner ->
             scope.launch {
-                val result = runCatching {
-                    withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
-                }
-                result.onSuccess {
-                    exportPayload = it
+                try {
+                    exportPayload = withContext(Dispatchers.IO) { conversationStore.exportAll(owner) }
                     exportError = null
-                }.onFailure {
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
                     exportPayload = null
                     exportError = when (language) {
                         AppLanguage.English -> "Export is larger than the 2 MB safety limit. Delete older records and retry."
@@ -1484,13 +1483,14 @@ fun MissMinutesApp(
         val value = memoryDraft.trim()
         if (owner != null && value.isNotEmpty()) {
             scope.launch {
-                runCatching {
+                try {
                     withContext(Dispatchers.IO) { conversationStore.addMemory(owner, value) }
-                }.onSuccess {
                     memoryDraft = ""
                     memoryMessage = null
                     memoryItems = withContext(Dispatchers.IO) { conversationStore.listMemory(owner) }
-                }.onFailure {
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
                     memoryMessage = when (language) {
                         AppLanguage.English -> "Memory could not be saved. Keep it under 2,000 characters."
                         AppLanguage.Russian -> "Не удалось сохранить память. Ограничение — 2 000 символов."
