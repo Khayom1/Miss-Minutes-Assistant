@@ -1,5 +1,6 @@
 package com.khayom1.missminutes.ai
 
+import java.net.SocketTimeoutException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -11,10 +12,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DirectDeepSeekProviderTest {
-    private class FakeTransport(private val response: AiHttpResponse = AiHttpResponse(
-        200,
-        """{"model":"deepseek-chat","choices":[{"message":{"content":"Hello from DeepSeek"}}]}"""
-    )) : AiHttpTransport {
+    private class FakeTransport(
+        private val response: AiHttpResponse = AiHttpResponse(
+            200,
+            """{"model":"deepseek-chat","choices":[{"message":{"content":"Hello from DeepSeek"}}]}"""
+        ),
+        private val failure: Throwable? = null
+    ) : AiHttpTransport {
         var calls = 0
         var url: String? = null
         var headers: Map<String, String> = emptyMap()
@@ -25,6 +29,7 @@ class DirectDeepSeekProviderTest {
             this.url = url
             this.headers = headers
             this.body = body
+            failure?.let { throw it }
             return response
         }
     }
@@ -45,6 +50,7 @@ class DirectDeepSeekProviderTest {
         assertFalse(transport.headers.values.any { it.contains("supabase") })
         val payload = Json.parseToJsonElement(transport.body!!).jsonObject
         assertEquals("deepseek-chat", payload["model"]!!.jsonPrimitive.content)
+        assertEquals("false", payload["stream"]!!.jsonPrimitive.content)
         assertEquals("user", payload["messages"]!!.jsonArray.single().jsonObject["role"]!!.jsonPrimitive.content)
     }
 
@@ -107,6 +113,44 @@ class DirectDeepSeekProviderTest {
             ).complete(request)
         }.exceptionOrNull()
         assertTrue(error is AiProviderException.InvalidResponse)
+    }
+
+    @Test
+    fun mapsTransportTimeoutToTypedTimeoutWithoutLeakingCredentials() = runBlocking {
+        val apiKey = "sk-secret-test-credential-123456"
+        val transport = FakeTransport(failure = SocketTimeoutException("timeout"))
+        val error = runCatching {
+            DirectDeepSeekProvider(DeepSeekApiKeySource { apiKey }, transport).complete(request)
+        }.exceptionOrNull()
+        assertTrue(error is AiProviderException.Timeout)
+        assertFalse(error?.message.orEmpty().contains(apiKey))
+        assertEquals(1, transport.calls)
+    }
+
+    @Test
+    fun mapsUnexpectedClientErrorsToSanitizedProviderRejection() = runBlocking {
+        val apiKey = "sk-secret-test-credential-123456"
+        val error = runCatching {
+            DirectDeepSeekProvider(
+                DeepSeekApiKeySource { apiKey },
+                FakeTransport(AiHttpResponse(400, """{"error":"$apiKey private detail"}"""))
+            ).complete(request)
+        }.exceptionOrNull()
+        assertTrue(error is AiProviderException.ProviderRejected)
+        assertFalse(error?.message.orEmpty().contains(apiKey))
+    }
+
+    @Test
+    fun mapsRequestTimeoutStatusAndDoesNotRetryProviderCalls() = runBlocking {
+        val transport = FakeTransport(AiHttpResponse(408, """{"error":"timeout"}"""))
+        val error = runCatching {
+            DirectDeepSeekProvider(
+                DeepSeekApiKeySource { "sk-user-owned-test-key-123456" },
+                transport
+            ).complete(request)
+        }.exceptionOrNull()
+        assertTrue(error is AiProviderException.Timeout)
+        assertEquals(1, transport.calls)
     }
 
     @Test
