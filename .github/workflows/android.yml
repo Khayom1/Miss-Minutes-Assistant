@@ -45,6 +45,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Scan before build/audit jobs generate dependency and bytecode reports.
+      - name: Scan tracked working tree for secrets
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --verbose --no-banner /repo
+
       - name: Verify Kotlin source formatting basics
         run: |
           test -f app/src/main/java/com/khayom1/missminutes/MainActivity.kt
@@ -65,8 +69,6 @@ jobs:
           java -cp build/bytecode-audit:build/bytecode-audit/asm.jar BytecodeReachability app/src/main/AndroidManifest.xml build/bytecode-audit/bytecode-reachability.json app/build/tmp/kotlin-classes/debug app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes
           test -s build/bytecode-audit/bytecode-reachability.json
 
-      - name: Scan tracked working tree for secrets
-        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 dir --redact --verbose --no-banner /repo
 
       - name: Run JVM tests, debug and release builds, and lint
         run: ./gradlew --no-daemon clean testDebugUnitTest assembleDebug lintDebug assembleRelease lintRelease
