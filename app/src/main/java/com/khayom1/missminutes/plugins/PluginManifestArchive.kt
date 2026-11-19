@@ -79,19 +79,42 @@ object PluginManifestArchive {
                         require(spec.allowedValues.all { value -> value.length <= spec.maxLength })
                     }
                 }
+                val actionId = action.requiredString("id")
+                val encodedCapability = enumValue<PluginCapability>(action.requiredString("capability"))
+                // Older manifests mislabeled set_alarm as CALENDAR_WRITE. Migrate
+                // only this known built-in action to its dedicated capability.
+                val capability = if (
+                    actionId == "set_alarm" && encodedCapability == PluginCapability.CALENDAR_WRITE
+                ) PluginCapability.ALARM_SCHEDULE else encodedCapability
                 PluginActionSpec(
-                    id = action.requiredString("id"),
-                    capability = enumValue(action.requiredString("capability")),
+                    id = actionId,
+                    capability = capability,
                     arguments = arguments,
                     requiresConfirmation = action.requiredBoolean("requiresConfirmation")
                 )
             }
             val rawCapabilities = item["capabilities"]?.jsonArray
                 ?: throw IllegalArgumentException("Plugin capabilities are missing.")
-            val capabilities = rawCapabilities.map {
+            val declaredCapabilities = rawCapabilities.map {
                 enumValue<PluginCapability>(it.jsonPrimitive.also { primitive -> require(primitive.isString) }.content)
             }.toSet()
-            require(capabilities.isNotEmpty() && capabilities.size == rawCapabilities.size)
+            require(declaredCapabilities.isNotEmpty() && declaredCapabilities.size == rawCapabilities.size)
+            val hasLegacyAlarmCapability =
+                PluginCapability.ALARM_SCHEDULE !in declaredCapabilities &&
+                    PluginCapability.CALENDAR_WRITE in declaredCapabilities &&
+                    parsedActions.any {
+                        it.id == "set_alarm" && it.capability == PluginCapability.ALARM_SCHEDULE
+                    }
+            val capabilities = if (hasLegacyAlarmCapability) {
+                declaredCapabilities.toMutableSet().apply {
+                    if (parsedActions.none { it.capability == PluginCapability.CALENDAR_WRITE }) {
+                        remove(PluginCapability.CALENDAR_WRITE)
+                    }
+                    add(PluginCapability.ALARM_SCHEDULE)
+                }.toSet()
+            } else {
+                declaredCapabilities
+            }
             val manifest = PluginManifest(
                 id = item.requiredString("id"),
                 version = item.requiredString("version"),
