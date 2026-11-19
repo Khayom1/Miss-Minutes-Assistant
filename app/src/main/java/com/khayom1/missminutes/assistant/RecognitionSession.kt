@@ -14,6 +14,7 @@ internal class RecognitionSession<T : Any> {
 
     @Synchronized
     fun begin(resource: T): Long {
+        check(activeResource == null) { "Cancel or finish the current recognition session first." }
         generation += 1
         activeId = generation
         activeResource = resource

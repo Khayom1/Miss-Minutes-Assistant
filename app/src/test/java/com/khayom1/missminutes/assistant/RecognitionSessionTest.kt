@@ -14,6 +14,7 @@ class RecognitionSessionTest {
         val currentRecognizer = Any()
 
         val oldId = sessions.begin(oldRecognizer)
+        assertSame(oldRecognizer, sessions.cancel())
         val currentId = sessions.begin(currentRecognizer)
 
         assertFalse(sessions.isCurrent(oldId, oldRecognizer))
@@ -27,6 +28,7 @@ class RecognitionSessionTest {
         val currentRecognizer = Any()
 
         val oldId = sessions.begin(oldRecognizer)
+        sessions.cancel()
         val currentId = sessions.begin(currentRecognizer)
 
         assertFalse(sessions.finish(oldId, oldRecognizer))
@@ -91,5 +93,13 @@ class RecognitionSessionTest {
         assertTrue(second > first)
         assertSame(currentRecognizer, sessions.current())
         assertTrue(sessions.isCurrent(second, currentRecognizer))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun aSecondRecognizerCannotReplaceTheActiveSessionWithoutCancellation() {
+        val sessions = RecognitionSession<Any>()
+        sessions.begin(Any())
+
+        sessions.begin(Any())
     }
 }
