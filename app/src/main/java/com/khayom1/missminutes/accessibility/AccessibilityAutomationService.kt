@@ -402,15 +402,18 @@ object AccessibilityAutomationPolicy {
         )
 
     private val sensitiveFieldLabels = listOf(
-        "password", "passcode", "pin code", "one time code", "one-time code",
-        "verification code", "security code", "authentication code", "otp",
-        "cvv", "cvc", "card number", "bank account number", "api key",
-        "secret key", "access token", "пароль", "код подтверждения",
-        "одноразовый код", "код безопасности", "пин код", "номер карты",
-        "номер банковского счета", "ключ api", "секретный ключ", "токен доступа",
-        "рамзи тасдиқ", "рамзи тасдик", "рамзи якдафъаина", "рамзи амният",
+        "password", "passcode", "passphrase", "pin", "pin code", "security pin",
+        "one time code", "one-time code", "one time password", "one-time password",
+        "verification code", "security code", "authentication code", "recovery code",
+        "backup code", "otp", "cvv", "cvc", "card number", "bank account number",
+        "api key", "secret key", "private key", "access token", "seed phrase",
+        "пароль", "код подтверждения", "одноразовый код", "код безопасности",
+        "код восстановления", "резервный код", "пин", "пин код", "номер карты",
+        "номер банковского счета", "ключ api", "секретный ключ", "закрытый ключ",
+        "токен доступа", "рамзи тасдиқ", "рамзи тасдик", "рамзи якдафъаина",
+        "рамзи амният", "рамзи барқарорсозӣ", "рамзи баркарорсози",
         "рақами корт", "раками корт", "калиди api", "калиди махфӣ",
-        "калиди махфи", "токени дастрасӣ", "токени дастрасӣ"
+        "калиди махфи", "калиди хусусӣ", "калимаи махфӣ", "токени дастрасӣ"
     )
 
     fun isSensitiveFieldLabel(label: String): Boolean {
