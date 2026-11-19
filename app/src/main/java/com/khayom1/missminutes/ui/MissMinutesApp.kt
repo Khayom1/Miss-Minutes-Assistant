@@ -2475,6 +2475,7 @@ private fun SettingsScreen(
                 }
                 PluginCapability.CALENDAR_READ,
                 PluginCapability.CALENDAR_WRITE,
+                PluginCapability.ALARM_SCHEDULE,
                 PluginCapability.CONTACTS_READ,
                 PluginCapability.LOCATION_APPROXIMATE,
                 PluginCapability.LOCATION_PRECISE,
