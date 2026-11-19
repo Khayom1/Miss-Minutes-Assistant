@@ -52,12 +52,14 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // Let ComponentActivity dispatch ON_DESTROY and dispose the Compose
+        // composition before closing resources still used by its coroutines.
+        super.onDestroy()
         ttsProvider?.close()
         ttsProvider = null
         speechInputProvider?.close()
         speechInputProvider = null
         conversationStore?.close()
         conversationStore = null
-        super.onDestroy()
     }
 }
