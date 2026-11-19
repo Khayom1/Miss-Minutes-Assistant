@@ -11,7 +11,7 @@ class AiToolExecutionLoopTest {
     private val schema = Json.parseToJsonElement(
         """{"type":"object","properties":{},"required":[],"additionalProperties":false}"""
     ).jsonObject
-    private val tool = AiToolDefinition("plugin_status", "Read device status", schema)
+    private val tool = AiToolDefinition("plugin_status", "Read device status", schema, sideEffect = true)
 
     private class ScriptedProvider(vararg scripted: AiCompletion) : AiProvider {
         val requests = mutableListOf<AiRequest>()
@@ -235,6 +235,35 @@ class AiToolExecutionLoopTest {
 
         assertTrue(error is AiProviderException.InvalidResponse)
         assertEquals(0, executions)
+    }
+
+
+    @Test
+    fun duplicateReadOnlyCallsAreNotRejectedAsSideEffects() = runBlocking {
+        val provider = ScriptedProvider(
+            AiCompletion(
+                "",
+                "deepseek-chat",
+                listOf(
+                    AiToolCall("call_1", "plugin_status", "{}"),
+                    AiToolCall("call_2", "plugin_status", "{}")
+                )
+            ),
+            AiCompletion("Status checked twice.", "deepseek-chat")
+        )
+        var executions = 0
+        val result = AiToolExecutionLoop(provider, AiToolExecutor {
+            executions++
+            AiToolExecutionResult("ok")
+        }).complete(
+            AiRequest(
+                messages = listOf(AiMessage(AiRole.USER, "Read status")),
+                tools = listOf(tool.copy(sideEffect = false))
+            )
+        )
+
+        assertEquals("Status checked twice.", result.content)
+        assertEquals(2, executions)
     }
 
 }
