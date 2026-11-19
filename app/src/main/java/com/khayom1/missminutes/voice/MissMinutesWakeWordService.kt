@@ -555,15 +555,20 @@ object PendingVoiceCommandStore {
     @Synchronized
     fun save(context: Context, command: String): Boolean {
         val safeCommand = command.trim().take(8_000)
-        if (safeCommand.isEmpty()) return false
+        if (safeCommand.isEmpty()) {
+            acknowledge(context)
+            return false
+        }
         val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
         return try {
             val encrypted = cipher.encrypt(CIPHER_OWNER, safeCommand)
-            preferences.edit()
+            val committed = preferences.edit()
                 .remove(LEGACY_COMMAND)
                 .putString(COMMAND, encrypted)
                 .putLong(CREATED_AT, System.currentTimeMillis())
                 .commit()
+            if (!committed) acknowledge(context)
+            committed
         } catch (_: Exception) {
             preferences.edit()
                 .remove(COMMAND)
