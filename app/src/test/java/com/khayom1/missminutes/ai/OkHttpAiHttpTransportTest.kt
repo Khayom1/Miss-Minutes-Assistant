@@ -45,12 +45,14 @@ class OkHttpAiHttpTransportTest {
     @Test
     fun coroutineCancellationCancelsTheUnderlyingOkHttpCall() = runBlocking {
         val server = BlockingHttpServer()
-        val callFailed = CountDownLatch(1)
+        val callStarted = CountDownLatch(1)
+        val underlyingCall = java.util.concurrent.atomic.AtomicReference<okhttp3.Call?>()
         val client = OkHttpClient.Builder()
             .callTimeout(10, TimeUnit.SECONDS)
             .eventListener(object : EventListener() {
-                override fun callFailed(call: okhttp3.Call, ioe: IOException) {
-                    callFailed.countDown()
+                override fun callStart(call: okhttp3.Call) {
+                    underlyingCall.set(call)
+                    callStarted.countDown()
                 }
             })
             .build()
@@ -62,9 +64,10 @@ class OkHttpAiHttpTransportTest {
                     """{"prompt":"cancel me"}"""
                 )
             }
+            assertTrue(callStarted.await(2, TimeUnit.SECONDS))
             assertTrue(server.requestReceived.await(2, TimeUnit.SECONDS))
             request.cancelAndJoin()
-            assertTrue(callFailed.await(2, TimeUnit.SECONDS))
+            assertTrue("Coroutine cancellation must cancel the active OkHttp Call.", underlyingCall.get()?.isCanceled == true)
         } finally {
             server.close()
         }
