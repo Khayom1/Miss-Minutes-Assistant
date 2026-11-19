@@ -556,22 +556,29 @@ object PendingVoiceCommandStore {
     fun save(context: Context, command: String): Boolean {
         val safeCommand = command.trim().take(8_000)
         if (safeCommand.isEmpty()) return false
-        return runCatching {
+        val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+        return try {
             val encrypted = cipher.encrypt(CIPHER_OWNER, safeCommand)
-            context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-                .edit()
+            preferences.edit()
                 .remove(LEGACY_COMMAND)
                 .putString(COMMAND, encrypted)
                 .putLong(CREATED_AT, System.currentTimeMillis())
                 .commit()
-        }.getOrDefault(false)
+        } catch (_: Exception) {
+            preferences.edit()
+                .remove(COMMAND)
+                .remove(LEGACY_COMMAND)
+                .remove(CREATED_AT)
+                .commit()
+            false
+        }
     }
 
     @Synchronized
     fun peek(context: Context): String? {
         val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
         if (preferences.contains(LEGACY_COMMAND)) {
-            preferences.edit().remove(LEGACY_COMMAND).remove(CREATED_AT).commit()
+            preferences.edit().remove(COMMAND).remove(LEGACY_COMMAND).remove(CREATED_AT).commit()
             return null
         }
         val encrypted = preferences.getString(COMMAND, null)
