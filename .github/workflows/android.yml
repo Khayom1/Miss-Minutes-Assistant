@@ -121,5 +121,6 @@ jobs:
             app/build/release-evidence/
             app/gradle.lockfile
             build/kotlin-reachability/
+            build/bytecode-audit/bytecode-reachability.json
           if-no-files-found: error
           retention-days: 14
