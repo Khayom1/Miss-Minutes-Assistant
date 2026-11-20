@@ -64,10 +64,10 @@ class OkHttpAiHttpTransportTest {
                     """{"prompt":"cancel me"}"""
                 )
             }
-            awaitSignal(callStarted, "OkHttp call did not start.")
+            awaitCallStarted(callStarted)
             val call = checkNotNull(underlyingCall.get()) { "EventListener did not capture the active call." }
-            awaitSignal(server.requestReceived, "The local server did not receive the request.")
-            awaitSignal(server.responseWithheld, "The test server did not withhold its response.")
+            awaitRequestReceived(server.requestReceived)
+            awaitResponseWithheld(server.responseWithheld)
             request.cancelAndJoin()
             assertCallWasCancelled(call)
         } finally {
@@ -75,8 +75,16 @@ class OkHttpAiHttpTransportTest {
         }
     }
 
-    private fun awaitSignal(signal: CountDownLatch, message: String) {
-        assertTrue(message, signal.await(5, TimeUnit.SECONDS))
+    private fun awaitCallStarted(signal: CountDownLatch) {
+        assertTrue("OkHttp call did not start.", signal.await(5, TimeUnit.SECONDS))
+    }
+
+    private fun awaitRequestReceived(signal: CountDownLatch) {
+        assertTrue("The local server did not receive the request.", signal.await(5, TimeUnit.SECONDS))
+    }
+
+    private fun awaitResponseWithheld(signal: CountDownLatch) {
+        assertTrue("The test server did not withhold its response.", signal.await(5, TimeUnit.SECONDS))
     }
 
     private fun assertCallWasCancelled(call: okhttp3.Call) {
