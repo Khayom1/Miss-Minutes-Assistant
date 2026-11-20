@@ -10,7 +10,6 @@ import com.khayom1.missminutes.assistant.MissMinutesVoiceInteractionService
 import com.khayom1.missminutes.assistant.MissMinutesVoiceInteractionSessionService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,7 +43,7 @@ class VoiceInteractionManifestTest {
             PackageManager.GET_META_DATA
         )
         assertTrue(recognition.exported)
-        assertNull(recognition.permission)
+        assertEquals("android.permission.BIND_SPEECH_RECOGNITION_SERVICE", recognition.permission)
         assertNotNull(recognition.metaData)
         assertTrue(
             packageManager.queryIntentServices(
