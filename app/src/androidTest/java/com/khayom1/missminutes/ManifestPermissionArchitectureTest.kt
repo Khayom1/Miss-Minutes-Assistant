@@ -66,6 +66,18 @@ class ManifestPermissionArchitectureTest {
     }
 
     @Test
+    fun recognitionServiceIsProtectedByThePlatformBindingPermission() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val info = context.packageManager.getServiceInfo(
+            ComponentName(context, com.khayom1.missminutes.assistant.MissMinutesRecognitionService::class.java),
+            0
+        )
+
+        assertTrue(info.exported)
+        assertEquals("android.permission.BIND_SPEECH_RECOGNITION_SERVICE", info.permission)
+    }
+
+    @Test
     fun accessibilityServiceIsExportedOnlyForTheProtectedSystemBindingContract() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val info = context.packageManager.getServiceInfo(
