@@ -48,7 +48,7 @@ class OkHttpAiHttpTransportTest {
         val callStarted = CountDownLatch(1)
         val underlyingCall = java.util.concurrent.atomic.AtomicReference<okhttp3.Call?>()
         val client = OkHttpClient.Builder()
-            .callTimeout(10, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
             .eventListener(object : EventListener() {
                 override fun callStart(call: okhttp3.Call) {
                     underlyingCall.set(call)
@@ -64,19 +64,30 @@ class OkHttpAiHttpTransportTest {
                     """{"prompt":"cancel me"}"""
                 )
             }
-            assertTrue("OkHttp call did not start.", callStarted.await(5, TimeUnit.SECONDS))
-            assertTrue("The local server did not receive the request.", server.requestReceived.await(5, TimeUnit.SECONDS))
+            awaitSignal(callStarted, "OkHttp call did not start.")
+            val call = checkNotNull(underlyingCall.get()) { "EventListener did not capture the active call." }
+            awaitSignal(server.requestReceived, "The local server did not receive the request.")
+            awaitSignal(server.responseWithheld, "The test server did not withhold its response.")
             request.cancelAndJoin()
-            assertTrue("Coroutine cancellation must cancel the active OkHttp Call.", underlyingCall.get()?.isCanceled() == true)
+            assertCallWasCancelled(call)
         } finally {
             server.close()
         }
+    }
+
+    private fun awaitSignal(signal: CountDownLatch, message: String) {
+        assertTrue(message, signal.await(5, TimeUnit.SECONDS))
+    }
+
+    private fun assertCallWasCancelled(call: okhttp3.Call) {
+        assertTrue("Coroutine cancellation must cancel the active OkHttp Call.", call.isCanceled())
     }
 
     private class BlockingHttpServer : AutoCloseable {
         private val server = ServerSocket(0)
         @Volatile private var acceptedSocket: Socket? = null
         val requestReceived = CountDownLatch(1)
+        val responseWithheld = CountDownLatch(1)
         private val releaseResponse = CountDownLatch(1)
         val url: String = "http://127.0.0.1:${server.localPort}/chat"
 
@@ -107,7 +118,8 @@ class OkHttpAiHttpTransportTest {
                     // Hold the connection open deterministically: relying on a blocking
                     // socket read here can observe a client half-close and complete the
                     // request before the cancellation assertion runs.
-                    releaseResponse.await(10, TimeUnit.SECONDS)
+                    responseWithheld.countDown()
+                    releaseResponse.await(30, TimeUnit.SECONDS)
                 }
             } catch (_: Exception) {
                 // Disconnects are expected in these tests.
