@@ -8,6 +8,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import okhttp3.EventListener
@@ -57,7 +58,7 @@ class OkHttpAiHttpTransportTest {
             })
             .build()
         try {
-            val request = async {
+            val request = async(Dispatchers.IO) {
                 OkHttpAiHttpTransport(client).post(
                     server.url,
                     mapOf("Content-Type" to "application/json"),
