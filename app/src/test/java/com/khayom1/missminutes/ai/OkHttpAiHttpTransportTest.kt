@@ -67,7 +67,7 @@ class OkHttpAiHttpTransportTest {
             assertTrue(callStarted.await(2, TimeUnit.SECONDS))
             assertTrue(server.requestReceived.await(2, TimeUnit.SECONDS))
             request.cancelAndJoin()
-            assertTrue("Coroutine cancellation must cancel the active OkHttp Call.", underlyingCall.get()?.isCanceled == true)
+            assertTrue("Coroutine cancellation must cancel the active OkHttp Call.", underlyingCall.get()?.isCanceled() == true)
         } finally {
             server.close()
         }
