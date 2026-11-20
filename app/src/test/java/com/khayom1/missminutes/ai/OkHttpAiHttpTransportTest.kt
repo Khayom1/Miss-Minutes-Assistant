@@ -77,6 +77,7 @@ class OkHttpAiHttpTransportTest {
         private val server = ServerSocket(0)
         @Volatile private var acceptedSocket: Socket? = null
         val requestReceived = CountDownLatch(1)
+        private val releaseResponse = CountDownLatch(1)
         val url: String = "http://127.0.0.1:${server.localPort}/chat"
 
         private val worker = thread(name = "ai-provider-test-server", isDaemon = true) {
@@ -103,8 +104,10 @@ class OkHttpAiHttpTransportTest {
                         if (input.read() < 0) return@use
                     }
                     requestReceived.countDown()
-                    // Withhold the response until OkHttp times out or the coroutine is cancelled.
-                    input.read()
+                    // Hold the connection open deterministically: relying on a blocking
+                    // socket read here can observe a client half-close and complete the
+                    // request before the cancellation assertion runs.
+                    releaseResponse.await(10, TimeUnit.SECONDS)
                 }
             } catch (_: Exception) {
                 // Disconnects are expected in these tests.
@@ -112,6 +115,7 @@ class OkHttpAiHttpTransportTest {
         }
 
         override fun close() {
+            releaseResponse.countDown()
             runCatching { server.close() }
             runCatching { acceptedSocket?.close() }
             worker.join(1_000)
