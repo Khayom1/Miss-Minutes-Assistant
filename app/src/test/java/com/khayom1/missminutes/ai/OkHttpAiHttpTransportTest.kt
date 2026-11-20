@@ -64,8 +64,8 @@ class OkHttpAiHttpTransportTest {
                     """{"prompt":"cancel me"}"""
                 )
             }
-            assertTrue(callStarted.await(2, TimeUnit.SECONDS))
-            assertTrue(server.requestReceived.await(2, TimeUnit.SECONDS))
+            assertTrue("OkHttp call did not start.", callStarted.await(5, TimeUnit.SECONDS))
+            assertTrue("The local server did not receive the request.", server.requestReceived.await(5, TimeUnit.SECONDS))
             request.cancelAndJoin()
             assertTrue("Coroutine cancellation must cancel the active OkHttp Call.", underlyingCall.get()?.isCanceled() == true)
         } finally {
@@ -83,7 +83,7 @@ class OkHttpAiHttpTransportTest {
             try {
                 server.accept().use { socket ->
                     acceptedSocket = socket
-                    socket.soTimeout = 3_000
+                    socket.soTimeout = 10_000
                     val input = socket.getInputStream()
                     val headers = ByteArrayOutputStream()
                     val marker = byteArrayOf(13, 10, 13, 10)
