@@ -60,6 +60,29 @@ class AndroidPluginAccessCheckerTest {
     }
 
     @Test
+    fun notificationReadingIsUnavailableWithoutARegisteredNotificationListener() {
+        val checker = AndroidPluginAccessChecker(context)
+        val action = PluginActionSpec(
+            id = "read_notifications",
+            capability = PluginCapability.NOTIFICATION_READ
+        )
+
+        assertTrue(checker.inspect("notifications_plugin", action) is PluginAccessDecision.Unavailable)
+    }
+
+    @Test
+    fun locationCapabilitiesFailClosedInsteadOfRequestingUndeclaredPermissions() {
+        val checker = AndroidPluginAccessChecker(context)
+        listOf(
+            PluginCapability.LOCATION_APPROXIMATE,
+            PluginCapability.LOCATION_PRECISE
+        ).forEach { capability ->
+            val action = PluginActionSpec(id = "location", capability = capability)
+            assertTrue(checker.inspect("location_plugin", action) is PluginAccessDecision.Unavailable)
+        }
+    }
+
+    @Test
     fun appAutoBackupIsDisabledForLocalCredentialsAndConsent() {
         val appInfo = context.packageManager.getApplicationInfo(context.packageName, 0)
         assertEquals(0, appInfo.flags and ApplicationInfo.FLAG_ALLOW_BACKUP)

@@ -118,6 +118,7 @@ import com.khayom1.missminutes.plugins.PluginCapability
 import com.khayom1.missminutes.plugins.PluginAccessDecision
 import com.khayom1.missminutes.plugins.PluginToolDescriptor
 import com.khayom1.missminutes.voice.MissMinutesWakeWordService
+import com.khayom1.missminutes.voice.WakeWordPermissionPolicy
 import com.khayom1.missminutes.voice.WakeWordServiceState
 import com.khayom1.missminutes.voice.PendingVoiceCommandStore
 import com.khayom1.missminutes.memory.ConversationSummary
@@ -498,12 +499,7 @@ fun MissMinutesApp(
         }
     }
     val wakePermissions = remember {
-        buildList {
-            add(Manifest.permission.RECORD_AUDIO)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }.toTypedArray()
+        WakeWordPermissionPolicy.requiredRuntimePermissions.toTypedArray()
     }
     val startWakeListening = {
         try {
@@ -536,34 +532,36 @@ fun MissMinutesApp(
         } catch (_: SecurityException) {
             wakeEnabled = false
             wakeMessage = when (language) {
-                AppLanguage.English -> "Required microphone or notification permission is missing."
-                AppLanguage.Russian -> "Нет необходимого разрешения на микрофон или уведомления."
-                AppLanguage.Tajik -> "Иҷозати зарурии микрофон ё огоҳинома мавҷуд нест."
+                AppLanguage.English -> "Microphone permission is required."
+                AppLanguage.Russian -> "Требуется разрешение на микрофон."
+                AppLanguage.Tajik -> "Иҷозати микрофон лозим аст."
             }
         }
     }
     val wakePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
-        val allGranted = wakePermissions.all { permission ->
+        val grantedPermissions = wakePermissions.filter { permission ->
             grants[permission] == true ||
                 ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-        }
+        }.toSet()
+        val allGranted = WakeWordPermissionPolicy.hasAllRequired(grantedPermissions)
         if (allGranted) {
             startWakeListening()
         } else {
             wakeEnabled = false
             wakeMessage = when (language) {
-                AppLanguage.English -> "Listening was not started. Both microphone and notification permissions are required."
-                AppLanguage.Russian -> "Прослушивание не запущено. Нужны разрешения на микрофон и уведомления."
-                AppLanguage.Tajik -> "Гӯшкунӣ оғоз нашуд. Иҷозати микрофон ва огоҳинома зарур аст."
+                AppLanguage.English -> "Listening was not started. Microphone permission is required."
+                AppLanguage.Russian -> "Прослушивание не запущено. Требуется разрешение на микрофон."
+                AppLanguage.Tajik -> "Гӯшкунӣ оғоз нашуд. Иҷозати микрофон лозим аст."
             }
         }
     }
     val enableWakeListening = {
-        val allGranted = wakePermissions.all {
+        val grantedPermissions = wakePermissions.filter {
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
-        }
+        }.toSet()
+        val allGranted = WakeWordPermissionPolicy.hasAllRequired(grantedPermissions)
         if (allGranted) startWakeListening() else wakePermissionLauncher.launch(wakePermissions)
     }
     val disableWakeListening = {

@@ -115,6 +115,10 @@ class MissMinutesWakeWordService : Service() {
             stopWakeWordService()
             return START_NOT_STICKY
         }
+        if (!WakeWordServicePolicy.shouldStart(intent?.action)) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         if (active) return START_NOT_STICKY
         recognitionLanguageTag = intent
             ?.getStringExtra(EXTRA_RECOGNITION_LANGUAGE)
@@ -139,8 +143,8 @@ class MissMinutesWakeWordService : Service() {
         }
 
         if (!hasRequiredPermissions()) {
-            publishState(false, "Microphone and notification permissions are required.")
-            postStatusNotification("Microphone and notification permissions are required.")
+            publishState(false, "Microphone permission is required.")
+            postStatusNotification("Microphone permission is required.")
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -185,20 +189,13 @@ class MissMinutesWakeWordService : Service() {
     }
 
     private fun hasRequiredPermissions(): Boolean {
-        val microphoneGranted = ContextCompat.checkSelfPermission(
+        // Android 13+ does not require POST_NOTIFICATIONS to start a foreground
+        // service. The foreground notification is still supplied to startForeground;
+        // the system may show it only in Task Manager when drawer notifications are denied.
+        return ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
-        val notificationsGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        val notificationsEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
-        val channelEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
-            getSystemService(NotificationManager::class.java)
-                .getNotificationChannel(CHANNEL_ID)?.importance != NotificationManager.IMPORTANCE_NONE
-        return microphoneGranted && notificationsGranted && notificationsEnabled && channelEnabled
     }
 
     private fun startForegroundCompat(notification: Notification = buildForegroundNotification()) {

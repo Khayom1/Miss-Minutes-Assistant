@@ -39,16 +39,9 @@ class AndroidPluginAccessChecker(
                     )
                 }
             }
-            PluginCapability.NOTIFICATION_READ -> {
-                if (!hasNotificationAccess()) {
-                    return PluginAccessDecision.PermissionRequired(
-                        id = "android.notification_access",
-                        label = "Notification access",
-                        explanation = "Miss Minutes needs Notification Access to read notifications you choose to share.",
-                        settingsAction = Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
-                    )
-                }
-            }
+            PluginCapability.NOTIFICATION_READ -> return PluginAccessDecision.Unavailable(
+                "Notification reading is not implemented in this build; no notification-listener service is registered."
+            )
             PluginCapability.ACCESSIBILITY_AUTOMATION -> {
                 if (!AccessibilityAutomationService.isServiceEnabled(appContext)) {
                     return PluginAccessDecision.PermissionRequired(
@@ -64,14 +57,16 @@ class AndroidPluginAccessChecker(
                     )
                 }
             }
+            PluginCapability.LOCATION_APPROXIMATE,
+            PluginCapability.LOCATION_PRECISE -> return PluginAccessDecision.Unavailable(
+                "Location access is not implemented in this build."
+            )
             PluginCapability.DEVICE_INFORMATION,
             PluginCapability.BATTERY_STATUS,
             PluginCapability.CALENDAR_READ,
             PluginCapability.CALENDAR_WRITE,
             PluginCapability.ALARM_SCHEDULE,
-            PluginCapability.CONTACTS_READ,
-            PluginCapability.LOCATION_APPROXIMATE,
-            PluginCapability.LOCATION_PRECISE -> Unit
+            PluginCapability.CONTACTS_READ -> Unit
         }
 
         val requiredDeviceCapability = requiredDeviceCapability(action.id)
@@ -106,15 +101,6 @@ class AndroidPluginAccessChecker(
         else -> null
     }
 
-    private fun hasNotificationAccess(): Boolean {
-        val enabled = Settings.Secure.getString(
-            appContext.contentResolver,
-            "enabled_notification_listeners"
-        ).orEmpty()
-        val componentPrefix = appContext.packageName + "/"
-        return enabled.split(':').any { it.startsWith(componentPrefix) }
-    }
-
     private fun requiredPermissions(capability: PluginCapability): List<String> = when (capability) {
         PluginCapability.CALENDAR_READ -> listOf(Manifest.permission.READ_CALENDAR)
         PluginCapability.CALENDAR_WRITE -> listOf(
@@ -123,15 +109,12 @@ class AndroidPluginAccessChecker(
         )
         PluginCapability.ALARM_SCHEDULE -> listOf("com.android.alarm.permission.SET_ALARM")
         PluginCapability.CONTACTS_READ -> listOf(Manifest.permission.READ_CONTACTS)
-        PluginCapability.LOCATION_APPROXIMATE -> listOf(Manifest.permission.ACCESS_COARSE_LOCATION)
-        PluginCapability.LOCATION_PRECISE -> listOf(
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        )
         PluginCapability.DEVICE_INFORMATION,
         PluginCapability.BATTERY_STATUS,
         PluginCapability.NOTIFICATION_READ,
         PluginCapability.ACCESSIBILITY_AUTOMATION,
+        PluginCapability.LOCATION_APPROXIMATE,
+        PluginCapability.LOCATION_PRECISE,
         PluginCapability.GITHUB_REPOSITORY_READ,
         PluginCapability.GITHUB_REPOSITORY_WRITE -> emptyList()
     }
@@ -140,8 +123,6 @@ class AndroidPluginAccessChecker(
         "com.android.alarm.permission.SET_ALARM" -> "Alarm scheduling"
         Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR -> "Calendar access"
         Manifest.permission.READ_CONTACTS -> "Contacts access"
-        Manifest.permission.ACCESS_COARSE_LOCATION,
-        Manifest.permission.ACCESS_FINE_LOCATION -> "Location access"
         else -> "Android permission"
     }
 }
