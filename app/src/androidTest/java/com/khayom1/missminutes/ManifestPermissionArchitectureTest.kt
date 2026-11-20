@@ -91,6 +91,50 @@ class ManifestPermissionArchitectureTest {
     }
 
     @Test
+    fun exportedComponentsUseOnlyTheirRequiredSystemBindingPermissions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val packageManager = context.packageManager
+        val smsReceiver = packageManager.getReceiverInfo(
+            ComponentName(context, com.khayom1.missminutes.communication.sms.IncomingSmsReceiver::class.java),
+            0
+        )
+        assertTrue(smsReceiver.exported)
+        assertEquals("android.permission.BROADCAST_SMS", smsReceiver.permission)
+
+        val voiceService = packageManager.getServiceInfo(
+            ComponentName(context, com.khayom1.missminutes.assistant.MissMinutesVoiceInteractionService::class.java),
+            0
+        )
+        assertTrue(voiceService.exported)
+        assertEquals("android.permission.BIND_VOICE_INTERACTION", voiceService.permission)
+
+        val sessionService = packageManager.getServiceInfo(
+            ComponentName(context, com.khayom1.missminutes.assistant.MissMinutesVoiceInteractionSessionService::class.java),
+            0
+        )
+        assertTrue(sessionService.exported)
+        assertEquals("android.permission.BIND_VOICE_INTERACTION", sessionService.permission)
+
+        val wakeService = packageManager.getServiceInfo(
+            ComponentName(context, com.khayom1.missminutes.voice.MissMinutesWakeWordService::class.java),
+            0
+        )
+        assertFalse(wakeService.exported)
+        assertTrue(
+            wakeService.foregroundServiceType and android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE != 0
+        )
+
+        val overlayService = packageManager.getServiceInfo(
+            ComponentName(context, com.khayom1.missminutes.overlay.MissMinutesOverlayService::class.java),
+            0
+        )
+        assertFalse(overlayService.exported)
+        assertTrue(
+            overlayService.foregroundServiceType and android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE != 0
+        )
+    }
+
+    @Test
     fun appDoesNotDeclareAnUnimplementedNotificationListenerService() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val packageInfo = context.packageManager.getPackageInfo(
