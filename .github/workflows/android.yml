@@ -62,7 +62,7 @@ jobs:
       - name: Build app-local bytecode reachability graph
         run: |
           mkdir -p build/bytecode-audit
-          curl --fail --silent --show-error --location https://repo1.maven.org/maven2/org/ow2/asm/asm/9.8/asm-9.8.jar --output build/bytecode-audit/asm.jar
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.8/asm-9.8.jar --output build/bytecode-audit/asm.jar
           javac -cp build/bytecode-audit/asm.jar -d build/bytecode-audit tools/BytecodeReachability.java
           python3 tools/test-bytecode-reachability.py build/bytecode-audit build/bytecode-audit/asm.jar
           ./gradlew --no-daemon :app:assembleDebug
